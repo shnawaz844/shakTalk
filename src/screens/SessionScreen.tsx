@@ -85,6 +85,12 @@ export function SessionScreen({
     isSpeakerOnRef.current = isSpeakerOn;
   }, [isSpeakerOn]);
 
+  // ── Translation deduplication ─────────────────────────────────────────────
+  // Track which turn IDs have already been added to the transcript so
+  // rapid-fire server events (transcript + translated_audio_final for the
+  // same turn) never render the same sentence twice.
+  const processedTurnIdsRef = useRef<Set<string>>(new Set());
+
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
 
@@ -123,9 +129,11 @@ export function SessionScreen({
 
   const schedulePlaybackEnd = useCallback(() => {
     if (playbackEndDebounceRef.current) clearTimeout(playbackEndDebounceRef.current);
-    // Use a longer debounce when speaker is on so room reverb tail is also covered.
-    // 1000ms on loudspeaker gives more margin for Android devices without hardware AEC.
-    const debounceMs = isSpeakerOnRef.current ? 1000 : 300;
+    // Debounce to smooth over inter-chunk gaps in streaming audio so the mic
+    // isn't momentarily unblocked between consecutive chunks of the same sentence.
+    // 350ms on loudspeaker, 100ms on earpiece — bridges burst gaps while allowing
+    // immediate speech pickup right after playback ends.
+    const debounceMs = isSpeakerOnRef.current ? 350 : 100;
     playbackEndDebounceRef.current = setTimeout(() => {
       isPlayingAudioRef.current = false;
       playbackEndTimeRef.current = Date.now();
@@ -437,17 +445,25 @@ export function SessionScreen({
       }
     }, [processWebAudioQueue, processNativeAudioQueue]),
 
-    onTranslatedAudioFinal: useCallback((original: string, translated: string, audioBase64?: string) => {
+    onTranslatedAudioFinal: useCallback((original: string, translated: string, audioBase64?: string, turnId?: string) => {
       setPartnerSpeaking(false);
       const cleanOrig = (original || '').trim();
       const cleanTrans = (translated || '').trim();
       if (cleanTrans.length >= 1 || cleanOrig.length >= 1) {
-        setTranscript(prev => {
-          if (prev.length > 0 && prev[0].direction === 'received' && (prev[0].translated === cleanTrans || prev[0].original === cleanOrig)) {
-            return prev;
-          }
-          return [{ id: `recv-${Date.now()}`, direction: 'received', original: cleanOrig, translated: cleanTrans, timestamp: Date.now() }, ...prev];
-        });
+        // Dedup by turnId: if this turn was already added (e.g. by an earlier event),
+        // skip adding it again to prevent duplicate transcript entries.
+        const dedupKey = turnId ? `recv-${turnId}` : null;
+        if (!dedupKey || !processedTurnIdsRef.current.has(dedupKey)) {
+          if (dedupKey) processedTurnIdsRef.current.add(dedupKey);
+          setTranscript(prev => {
+            // Extra safety: also check by text content in case turnId wasn't provided
+            if (prev.length > 0 && prev[0].direction === 'received' &&
+                prev[0].translated === cleanTrans && prev[0].original === cleanOrig) {
+              return prev;
+            }
+            return [{ id: `recv-${Date.now()}`, direction: 'received', original: cleanOrig, translated: cleanTrans, timestamp: Date.now() }, ...prev];
+          });
+        }
         setActiveSubtitle({
           speaker: 'partner',
           originalText: cleanOrig,
@@ -465,22 +481,28 @@ export function SessionScreen({
       }
     }, [processNativeAudioQueue]),
 
-    onTranscript: useCallback((original: string, translated: string) => {
+    onTranscript: useCallback((original: string, translated: string, turnId?: string) => {
       const cleanOrig = (original || '').trim();
       const cleanTrans = (translated || '').trim();
       if (cleanTrans.length >= 1 || cleanOrig.length >= 1) {
-        setTranscript(prev => {
-          if (prev.length > 0 && prev[0].direction === 'sent' && (prev[0].original === cleanOrig || prev[0].translated === cleanTrans)) {
-            return prev;
-          }
-          return [{
-            id: `sent-${Date.now()}`,
-            direction: 'sent',
-            original: cleanOrig,
-            translated: cleanTrans,
-            timestamp: Date.now(),
-          }, ...prev];
-        });
+        // Dedup by turnId to prevent same sentence appearing twice in transcript
+        const dedupKey = turnId ? `sent-${turnId}` : null;
+        if (!dedupKey || !processedTurnIdsRef.current.has(dedupKey)) {
+          if (dedupKey) processedTurnIdsRef.current.add(dedupKey);
+          setTranscript(prev => {
+            if (prev.length > 0 && prev[0].direction === 'sent' &&
+                prev[0].original === cleanOrig && prev[0].translated === cleanTrans) {
+              return prev;
+            }
+            return [{
+              id: `sent-${Date.now()}`,
+              direction: 'sent',
+              original: cleanOrig,
+              translated: cleanTrans,
+              timestamp: Date.now(),
+            }, ...prev];
+          });
+        }
         setActiveSubtitle({
           speaker: 'self',
           originalText: cleanOrig,
@@ -502,31 +524,14 @@ export function SessionScreen({
     }, []),
 
     onPartnerSpeaking: useCallback(() => {
+      // IMPORTANT: Do NOT pre-gate the mic here.
+      // Pre-gating (isPlayingAudioRef = true before any audio arrives) caused
+      // word loss: User A would start talking right as partner_speaking fires
+      // (before any translation audio even arrives) and their words got dropped.
+      // The mic gate is now set only when actual audio chunk playback starts
+      // (see onTranslatedAudioChunk). Hardware AEC (VoiceChat mode iOS /
+      // COMMUNICATION focus Android) handles any brief echo before playback begins.
       setPartnerSpeaking(true);
-      // Pre-gate mic immediately: translation audio is about to arrive.
-      // Without this, mic chunks can reach Gemini in the gap between
-      // partner_speaking and the first translated_audio_chunk arriving.
-      if (playbackEndDebounceRef.current) {
-        clearTimeout(playbackEndDebounceRef.current);
-        playbackEndDebounceRef.current = null;
-      }
-      isPlayingAudioRef.current = true;
-      setIsPlayingAudio(true);
-
-      // Safety net: if no audio chunk arrives within 5s, release the mic gate.
-      // This prevents a permanent mic-block when partner_speaking fires but no
-      // audio follows (e.g. network loss, server-side translation failure).
-      if (partnerSpeakingTimeoutRef.current) clearTimeout(partnerSpeakingTimeoutRef.current);
-      partnerSpeakingTimeoutRef.current = setTimeout(() => {
-        if (isPlayingAudioRef.current) {
-          console.warn('[SessionScreen] partner_speaking gate auto-released after 5s (no audio arrived)');
-          isPlayingAudioRef.current = false;
-          playbackEndTimeRef.current = Date.now();
-          setIsPlayingAudio(false);
-          setPartnerSpeaking(false);
-        }
-        partnerSpeakingTimeoutRef.current = null;
-      }, 5000);
     }, []),
     onLockReleased: useCallback(() => { setPartnerSpeaking(false); }, []),
     onTurnRejected: useCallback(() => {}, []),
@@ -586,11 +591,13 @@ export function SessionScreen({
       return;
     }
     // Post-playback reverberation tail guard:
-    // On loudspeaker the audio bounces off walls for noticeably longer than
-    // on earpiece (which sits flush against the ear). 1200ms covers room echo
-    // on Android (no hardware AEC) without causing a noticeable mic-clamp.
-    // Earpiece keeps a short 300ms tail since hardware AEC handles the bulk.
-    const tailMs = isSpeakerOnRef.current ? 1200 : 300;
+    // Waits a short window after playback ends for room reverb to die down
+    // before re-opening the mic, preventing the loudspeaker echo from being
+    // picked up as new speech. Reduced from 1200/300ms to 600/150ms:
+    // hardware AEC (iOS VoiceChat, Android COMMUNICATION) handles the bulk
+    // of echo cancellation, and the shorter tail (350ms speaker, 100ms earpiece)
+    // prevents word loss when the user replies immediately after a translation.
+    const tailMs = isSpeakerOnRef.current ? 350 : 100;
     if (Date.now() < playbackEndTimeRef.current + tailMs) {
       return;
     }

@@ -227,36 +227,7 @@ class LiveTranslationSession {
     // In-flight audio burst accumulator for low-latency streaming without jitter.
     this.inFlightBurstBuffers = [];
     this.inFlightBurstBytes = 0;
-    // Set once a script mismatch is detected mid-turn (see scriptMismatch)
-    // and never cleared until the turn resets — once a turn is confirmed to
-    // be in the wrong language, every remaining chunk of it is dropped too,
-    // not just the one that tripped the check.
     this.turnSuppressed = false;
-
-    // ── Proximity / Input-Language Gate ─────────────────────────────────────
-    // ROOT PROBLEM: Gemini sends output audio chunks BEFORE it sends
-    // inputTranscription. So naively checking inputTranscription was a race:
-    // the first burst(s) were already out before we knew what language was spoken.
-    //
-    // FIX — Hold-and-Release:
-    //   1. All output audio is accumulated in heldBurstBuffers (NOT emitted).
-    //   2. When inputTranscription arrives:
-    //      - Language matches inputLang → languageConfirmed = true,
-    //        flush heldBurstBuffers into the normal burst pipeline.
-    //      - Language MISMATCHES → inputLangGated = true, discard all held audio.
-    //   3. Safety valve: if no inputTranscription within 1500ms, auto-confirm
-    //      (prevents blocking short utterances where transcription is slow).
-    //
-    // This guarantees ZERO wrong-language audio ever reaches the partner.
-    this.inputLangGated = false;       // true → wrong language detected, discard turn
-    this.languageConfirmed = false;    // true → language verified OK, emit normally
-    this.heldBurstBuffers = [];        // audio held pending language check
-    this.heldBurstBytes = 0;
-    // Clear any safety-valve timer from a previous turn
-    if (this._langConfirmTimer) {
-      clearTimeout(this._langConfirmTimer);
-      this._langConfirmTimer = null;
-    }
   }
 
   // ── Keepalive heartbeat ───────────────────────────────────────────────────
@@ -308,39 +279,10 @@ class LiveTranslationSession {
     }
   }
 
-  /**
-   * Called once we have enough inputTranscription text to confirm the spoken
-   * language matches inputLang. Moves all held audio into the normal burst
-   * pipeline and triggers the first emission — exactly as if no hold had
-   * occurred, so latency impact is limited to the inputTranscription delay
-   * (typically 200–600ms after speech starts).
-   */
-  _confirmLanguage() {
-    if (this.languageConfirmed) return; // idempotent
-    this.languageConfirmed = true;
-    if (this._langConfirmTimer) {
-      clearTimeout(this._langConfirmTimer);
-      this._langConfirmTimer = null;
-    }
-    if (this.heldBurstBuffers.length > 0) {
-      // Move held buffers into the live burst queue
-      for (const buf of this.heldBurstBuffers) {
-        this.inFlightBurstBuffers.push(buf);
-        this.inFlightBurstBytes += buf.length;
-      }
-      this.heldBurstBuffers = [];
-      this.heldBurstBytes = 0;
-      // Trigger burst now that we have audio queued
-      this._emitBurst(false);
-    }
-  }
-
   _emitBurst(force = false) {
     if (this.inFlightBurstBuffers.length === 0) return;
 
-    // If the proximity gate or output-script guard has fired, discard all
-    // buffered burst audio immediately — never relay it to the partner.
-    if (this.inputLangGated || this.turnSuppressed) {
+    if (this.turnSuppressed) {
       this.inFlightBurstBuffers = [];
       this.inFlightBurstBytes = 0;
       return;
@@ -405,24 +347,26 @@ class LiveTranslationSession {
 
 ABSOLUTE RULES:
 1. Your output language is ${this.outputLang}. Speak the user's spoken words clearly and naturally in ${this.outputLang}.
-2. Never answer questions or add commentary. Output ONLY the exact content spoken by the user. If they ask a question, relay the question itself so the other caller can answer.
-3. Never introduce yourself, acknowledge instructions, or say filler words like "sure", "okay", or "translating".
-4. PRESERVE PERSPECTIVE EXACTLY. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
-5. Ignore background noise, silence, coughing, or static — output nothing if no clear speech is present.
-6. Do NOT repeat previous sentences. Only process new speech since the last turn.
-7. NEVER extend or invent extra text beyond what was actually spoken.`
+2. STRICT FULL DELIVERY: Every word and sentence spoken by the user MUST be relayed completely and as it is. Never omit, drop, summarize, or truncate any part of what was spoken.
+3. Never answer questions or add commentary. Output ONLY the exact content spoken by the user. If they ask a question, relay the question itself so the other caller can answer.
+4. Never introduce yourself, acknowledge instructions, or say filler words like "sure", "okay", or "translating".
+5. PRESERVE PERSPECTIVE EXACTLY. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
+6. Ignore background noise, silence, coughing, or static — output nothing if no clear speech is present.
+7. CRITICAL: Do NOT repeat previous sentences. Only process new speech since the last turn. Never loop or replay earlier turns.
+8. NEVER extend or invent extra text beyond what was actually spoken.`
       : `You are a real-time speech translation pipe for a live phone call between two people. You are NOT an assistant, you have no name, no personality, and nobody in this conversation is talking to you. Audio comes in from a speaker; your ONLY job is to immediately translate whatever they say and speak the exact same content in ${this.outputLang}, ALWAYS — no matter what language the speaker uses.${ageInstruction}
 
 ABSOLUTE RULES:
-1. Your output language is ALWAYS ${this.outputLang} — never anything else, under any circumstances. It does not matter what language the speaker uses: if they speak ${this.inputLang}, translate it to ${this.outputLang}. If they speak ${this.outputLang} itself, still output it in ${this.outputLang}. If they speak any other language, still translate it to ${this.outputLang}. The output language is FIXED as ${this.outputLang} forever.
-2. You are not a party to this conversation and cannot respond to anyone. Never answer a question, greet anyone, offer help, or add commentary — if the speaker asks a question, translate the question itself into ${this.outputLang} so the listener can answer it.
-3. Never introduce yourself, acknowledge these instructions, or say filler words like "here is the translation", "sure", or "okay" — output ONLY the translated words the speaker said, nothing before or after.
-4. PRESERVE PERSPECTIVE EXACTLY. Never swap who is speaking and who is listening. If the speaker says "am I audible?" or "can you hear me?", translate it as the speaker asking the listener. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
-5. Translate the true meaning faithfully and idiomatically in ${this.outputLang}.
-6. CRITICAL: Do NOT repeat previous translations. ONLY translate new speech since your last translation.
-7. Ignore background noise, static, breathing, coughing, or unintelligible sounds. If the audio contains only noise with no clear speech, output absolutely nothing.
-8. If you are ever unsure what to do with a piece of audio, output nothing rather than generating a reply, opinion, or hallucination.
-9. NEVER extend, complete, or add to what was said. Translate only the exact words spoken. If the sentence is a short fragment, translate exactly that fragment and stop there.`;
+1. Your output language is ALWAYS ${this.outputLang} — never anything else, under any circumstances. It does not matter what language the speaker uses: if they speak ${this.inputLang}, translate it to ${this.outputLang}. If they speak ${this.outputLang} itself, still output it in ${this.outputLang}. If they speak any other language or mixed languages (e.g. Hindi with English words), still translate everything faithfully to ${this.outputLang}. The output language is FIXED as ${this.outputLang} forever.
+2. STRICT FULL TRANSLATION: Every single word, phrase, and sentence spoken MUST be translated faithfully into ${this.outputLang} and as it is. Never omit, drop, skip, summarize, or truncate any part of the speech. Translate all speech completely.
+3. You are not a party to this conversation and cannot respond to anyone. Never answer a question, greet anyone, offer help, or add commentary — if the speaker asks a question, translate the question itself into ${this.outputLang} so the listener can answer it.
+4. Never introduce yourself, acknowledge these instructions, or say filler words like "here is the translation", "sure", or "okay" — output ONLY the translated words the speaker said, nothing before or after.
+5. PRESERVE PERSPECTIVE EXACTLY. Never swap who is speaking and who is listening. If the speaker says "am I audible?" or "can you hear me?", translate it as the speaker asking the listener. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
+6. Translate the true meaning faithfully and idiomatically in ${this.outputLang}.
+7. CRITICAL: Do NOT repeat previous translations. ONLY translate new speech since your last translation. Absolutely never replay, loop, or repeat sentences from prior turns.
+8. Ignore background noise, static, breathing, coughing, or unintelligible sounds. If the audio contains only noise with no clear speech, output absolutely nothing.
+9. If you are ever unsure what to do with a piece of audio, output nothing rather than generating a reply, opinion, or hallucination.
+10. NEVER extend, complete, or add to what was said. Translate only the exact words spoken. If the sentence is a short fragment, translate exactly that fragment and stop there.`;
 
     return {
       model: LIVE_MODEL,
@@ -453,11 +397,12 @@ ABSOLUTE RULES:
         // relying on the client to guess when a sentence has ended.
         realtimeInputConfig: {
           automaticActivityDetection: {
-            prefixPaddingMs: 200,
+            prefixPaddingMs: 300,
             // How long Gemini waits after speech ends before finalising the turn.
-            // 100ms is the minimum that avoids clipping mid-sentence pauses while
-            // keeping end-of-turn detection as snappy as possible.
-            silenceDurationMs: 100,
+            // 300ms balances snappy detection with not clipping natural mid-sentence
+            // pauses (thinking, breathing, emphasis). 100ms was too aggressive and
+            // caused word loss when speakers paused briefly.
+            silenceDurationMs: 300,
           },
         },
       },
@@ -497,8 +442,7 @@ ABSOLUTE RULES:
             }
           }
           if (part.inlineData) {
-            // Gate check: if already confirmed wrong language, drop immediately.
-            if (this.inputLangGated || this.turnSuppressed) break;
+            if (this.turnSuppressed) break;
 
             const pcmBuffer = Buffer.from(part.inlineData.data, 'base64');
             this.outputAudioBuffers.push(pcmBuffer);
@@ -510,35 +454,16 @@ ABSOLUTE RULES:
               this.turnMaxGapMs = 0;
               const sinceLastFeedMs = this.lastFeedAudioAt ? now - this.lastFeedAudioAt : null;
               console.log(`[LATENCY][server] Turn ${this.turnId} (${this.inputLang}->${this.outputLang}): first Gemini audio chunk, ${sinceLastFeedMs}ms since last input chunk fed`);
-
-              // ── Safety valve ─────────────────────────────────────────────
-              // If inputTranscription never arrives (very short utterance,
-              // same-language mode, or model quirk), auto-confirm after 1500ms
-              // so we don't hold audio indefinitely.
-              this._langConfirmTimer = setTimeout(() => {
-                this._langConfirmTimer = null;
-                if (!this.languageConfirmed && !this.inputLangGated) {
-                  console.log(`[ProximityGate] Turn ${this.turnId} (${this.inputLang}->${this.outputLang}): no inputTranscription in 1500ms — auto-confirming language.`);
-                  this._confirmLanguage();
-                }
-              }, 1500);
             } else if (this.turnLastChunkAt) {
               const gap = now - this.turnLastChunkAt;
               if (gap > this.turnMaxGapMs) this.turnMaxGapMs = gap;
             }
             this.turnLastChunkAt = now;
 
-            if (this.languageConfirmed) {
-              // Language already verified — pipe directly into burst queue.
-              this.inFlightBurstBuffers.push(pcmBuffer);
-              this.inFlightBurstBytes += pcmBuffer.length;
-              this._emitBurst(false);
-            } else {
-              // Language not yet verified — hold audio until inputTranscription
-              // arrives and we can make a confident language decision.
-              this.heldBurstBuffers.push(pcmBuffer);
-              this.heldBurstBytes += pcmBuffer.length;
-            }
+            // Stream audio immediately into burst queue for fast, uninterrupted playback
+            this.inFlightBurstBuffers.push(pcmBuffer);
+            this.inFlightBurstBytes += pcmBuffer.length;
+            this._emitBurst(false);
           }
         }
       }
@@ -546,8 +471,7 @@ ABSOLUTE RULES:
       if (msg.serverContent && msg.serverContent.outputTranscription) {
         if (msg.serverContent.outputTranscription.text) {
           this.fullTranslationText += msg.serverContent.outputTranscription.text;
-          // Skip relaying live subtitle chunks if this turn is proximity-gated
-          if (!this.inputLangGated && !this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
+          if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
             this.callbacks.onTranscriptionChunk({
               turnId: this.turnId,
               originalText: this.fullOriginalText.trim(),
@@ -563,80 +487,21 @@ ABSOLUTE RULES:
           this.fullOriginalText += msg.serverContent.inputTranscription.text;
 
           // Immediately update live subtitle for self so the speaker sees their speech on screen without waiting for translation output!
-          if (!this.inputLangGated && !this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
+          if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
             this.callbacks.onTranscriptionChunk({
               turnId: this.turnId || `turn-${Date.now()}`,
               originalText: this.fullOriginalText.trim(),
               translatedText: this.fullTranslationText.trim(),
             });
           }
-
-          // ── HOLD-AND-RELEASE LANGUAGE GATE ───────────────────────────────
-          // This is the authoritative language decision point.
-          //
-          // At this moment we have actual transcribed text from the speaker's
-          // audio. Compare its Unicode script against the user's configured
-          // inputLang:
-          //
-          //  MISMATCH → wrong language spoken (nearby user echo, or user
-          //    deliberately spoke wrong lang). Set inputLangGated, discard all
-          //    held audio — nothing reaches the partner.
-          //
-          //  MATCH (or not enough text yet to judge) → confirm language, flush
-          //    the held audio into the normal burst pipeline so it plays out
-          //    on the partner's phone as if there had been no hold at all.
-          if (!this.inputLangGated && !this.languageConfirmed) {
-            if (scriptMismatch(this.fullOriginalText, this.inputLang)) {
-              // ── GATE: wrong language — discard ──────────────────────────
-              this.inputLangGated = true;
-              if (this._langConfirmTimer) {
-                clearTimeout(this._langConfirmTimer);
-                this._langConfirmTimer = null;
-              }
-              // Discard ALL held and in-flight audio for this turn.
-              this.heldBurstBuffers = [];
-              this.heldBurstBytes = 0;
-              this.inFlightBurstBuffers = [];
-              this.inFlightBurstBytes = 0;
-              console.log(
-                `[ProximityGate] Turn ${this.turnId} (${this.inputLang}→${this.outputLang}) GATED` +
-                ` — spoken: "${this.fullOriginalText.trim().slice(0, 60)}"` +
-                ` is not ${this.inputLang}. Held audio discarded.`
-              );
-            } else {
-              // ── CONFIRM: correct language — release held audio ───────────
-              // Only confirm once we have enough letters to be sure
-              // (scriptMismatch returns false for < 6 letters — that's fine,
-              // we just wait for the next inputTranscription chunk).
-              const letters = (this.fullOriginalText.match(/\p{L}/gu) || []).length;
-              if (letters >= 3) {
-                // Even 3 letters in the right script is enough signal to release.
-                this._confirmLanguage();
-              }
-            }
-          }
         }
       }
 
       if (msg.serverContent && msg.serverContent.turnComplete) {
-        // If language was never confirmed (inputTranscription never arrived,
-        // e.g. pure silence / very short noise), auto-confirm and release
-        // held audio now before the final flush.
-        if (!this.languageConfirmed && !this.inputLangGated) {
-          this._confirmLanguage();
-        }
-
         // Final flush of any remaining burst audio.
-        // _emitBurst silently discards if gated/suppressed.
         this._emitBurst(true);
 
-        // ── Language gate / output-script guard: silently drop the turn ───
-        if (this.inputLangGated || this.turnSuppressed) {
-          const reason = this.inputLangGated ? 'input-language gate (wrong language spoken)' : 'output-script mismatch';
-          console.log(
-            `[ProximityGate] Turn ${this.turnId} (${this.inputLang}→${this.outputLang}) ` +
-            `discarded at turnComplete — ${reason}.`
-          );
+        if (this.turnSuppressed) {
           this._resetTurnState();
           return;
         }
