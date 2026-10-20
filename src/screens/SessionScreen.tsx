@@ -619,14 +619,10 @@ export function SessionScreen({
     }, []),
 
     onPartnerSpeaking: useCallback(() => {
-      // IMPORTANT: Do NOT pre-gate the mic here.
-      // Pre-gating (isPlayingAudioRef = true before any audio arrives) caused
-      // word loss: User A would start talking right as partner_speaking fires
-      // (before any translation audio even arrives) and their words got dropped.
-      // The mic gate is now set only when actual audio chunk playback starts
-      // (see onTranslatedAudioChunk). Hardware AEC (VoiceChat mode iOS /
-      // COMMUNICATION focus Android) handles any brief echo before playback begins.
       setPartnerSpeaking(true);
+    }, []),
+    onPartnerStoppedSpeaking: useCallback(() => {
+      setPartnerSpeaking(false);
     }, []),
     onLockReleased: useCallback(() => { setPartnerSpeaking(false); }, []),
     onTurnRejected: useCallback(() => {}, []),
@@ -699,7 +695,7 @@ export function SessionScreen({
     sendAudioStreamChunk(audioBase64, mimeType, role, sessionId, Date.now());
   }, [sendAudioStreamChunk, role, sessionId]);
 
-  const { error: micError } = useAudioRecorder({
+  const { error: micError, isSpeaking: isSelfSpeaking } = useAudioRecorder({
     enabled: canRecord,
     onChunk: handleChunk,
   });
@@ -916,13 +912,29 @@ export function SessionScreen({
 
               <View style={styles.stageMid}>
                 <View style={styles.orbWrap}>
-                  <Animated.View style={[styles.ring, ringStyle, !isConnected && styles.ringIdle]} />
+                  <Animated.View style={[
+                    styles.ring,
+                    ringStyle,
+                    !isConnected && styles.ringIdle,
+                    isSelfSpeaking && styles.ringSpeakingSelf,
+                    partnerSpeaking && styles.ringSpeakingPartner,
+                  ]} />
                   <Animated.View style={[styles.orb, orbStyle, !isConnected && styles.orbIdle]}>
                     <Text style={styles.orbLetter}>{partnerInitial}</Text>
                   </Animated.View>
                 </View>
-                <Text style={styles.statusSub}>
-                  {partnerSpeaking ? 'Partner is speaking…' : isPlayingAudio ? 'Playing translation…' : statusLabel}
+                <Text style={[
+                  styles.statusSub,
+                  isSelfSpeaking && styles.statusSubSelfSpeaking,
+                  partnerSpeaking && styles.statusSubPartnerSpeaking,
+                ]}>
+                  {isSelfSpeaking
+                    ? '🎙️ You are speaking…'
+                    : partnerSpeaking
+                    ? '🗣️ Partner is speaking…'
+                    : isPlayingAudio
+                    ? '🔊 Playing translation…'
+                    : statusLabel}
                 </Text>
 
                 {/* ── LIVE TEXT TRANSLATION (Real-time in-call subtitles) ── */}
@@ -1087,6 +1099,10 @@ const styles = StyleSheet.create({
   orbIdle: { backgroundColor: colors.surface3, shadowOpacity: 0 },
   orbLetter: { fontSize: 30, fontWeight: '600', color: colors.signalOnDark },
   statusSub: { fontSize: 15, fontWeight: '600', color: colors.warm, textAlign: 'center' },
+  statusSubSelfSpeaking: { color: colors.signal },
+  statusSubPartnerSpeaking: { color: '#38bdf8' },
+  ringSpeakingSelf: { borderColor: colors.signal, borderWidth: 2 },
+  ringSpeakingPartner: { borderColor: '#38bdf8', borderWidth: 2 },
 
   errorState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, paddingHorizontal: 32 },
   errorTitle: { fontSize: 17, fontWeight: '600', color: colors.warm },

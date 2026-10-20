@@ -74,6 +74,7 @@ interface WebSocketCallbacks {
   onPartnerDisconnected?: () => void;
   onError?: (message: string) => void;
   onPartnerSpeaking?: () => void;
+  onPartnerStoppedSpeaking?: () => void;
   onTurnRejected?: () => void;
   onLockReleased?: () => void;
   onQueueResumed?: () => void;
@@ -211,6 +212,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (type === 'partner_speaking') {
         console.log(`[LATENCY][client] partner_speaking received (turnId=${message.turnId}) at ${Date.now()}`);
         callbacks.onPartnerSpeaking?.();
+      }
+
+      if (type === 'partner_stopped_speaking') {
+        console.log(`[LATENCY][client] partner_stopped_speaking received (turnId=${message.turnId}) at ${Date.now()}`);
+        callbacks.onPartnerStoppedSpeaking?.();
       }
 
       if (type === 'turn_rejected') {

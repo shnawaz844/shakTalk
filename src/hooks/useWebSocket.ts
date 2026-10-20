@@ -13,6 +13,7 @@ interface UseWebSocketOptions {
   onPartnerDisconnected?: () => void;
   onError?: (message: string) => void;
   onPartnerSpeaking?: () => void;
+  onPartnerStoppedSpeaking?: () => void;
   onTurnRejected?: () => void;
   onLockReleased?: () => void;
   onQueueResumed?: () => void;

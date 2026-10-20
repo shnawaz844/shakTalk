@@ -618,12 +618,15 @@ function makeSessionCallbacks(session, sessionId, role) {
 
     onTurnComplete(result) {
       if (!sessions.has(sessionId)) return;
-      rs.turnActive = false;
       const relayMs = rs.turnStartedAt ? Date.now() - rs.turnStartedAt : null;
       const totalTurnMs = rs.turnSpeechStartedAt ? Date.now() - rs.turnSpeechStartedAt : relayMs;
       console.log(`[LATENCY][VOICE_TO_PARTNER] Turn ${result.turnId} (${role}→partner): Complete turn processed in ${totalTurnMs}ms (Streaming relay duration: ${relayMs}ms)`);
+      rs.turnActive = false;
+      rs.turnSpeechStartedAt = null;
+      rs.turnStartedAt = null;
 
       send(senderSocket(), { type: 'processing_done', turnId: result.turnId });
+      send(partnerSocket(), { type: 'partner_stopped_speaking', turnId: result.turnId });
 
       if (rs.paused) {
         console.log(`[server] Turn ${result.turnId} (${role}) completed while muted — suppressing delivery.`);
@@ -894,6 +897,8 @@ wss.on('connection', (ws) => {
         rs.turnActive = true;
         rs.turnSpeechStartedAt = clientSentAt || Date.now();
         rs.turnStartedAt = Date.now();
+        const partner = getPartnerSocket(session, senderRole);
+        send(partner, { type: 'partner_speaking', role: senderRole });
       }
 
       // When sender is muted/paused, drop all audio chunks immediately — never feed into Gemini!

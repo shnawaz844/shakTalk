@@ -191,6 +191,7 @@ class LiveTranslationSession {
   constructor(inputLang, outputLang, voiceProfile = {}, callbacks = {}) {
     this.inputLang = inputLang;
     this.outputLang = outputLang;
+    this.isSameLanguage = (inputLang || '').toLowerCase() === (outputLang || '').toLowerCase();
     this.voiceProfile = voiceProfile; // { gender?: string, age?: number }
     this.callbacks = callbacks; // { onAudioChunk, onTurnComplete, onError }
 
@@ -354,19 +355,22 @@ ABSOLUTE RULES:
 6. Ignore background noise, silence, coughing, or static — output nothing if no clear speech is present.
 7. CRITICAL: Do NOT repeat previous sentences. Only process new speech since the last turn. Never loop or replay earlier turns.
 8. NEVER extend or invent extra text beyond what was actually spoken.`
-      : `You are a real-time speech translation pipe for a live phone call between two people. You are NOT an assistant, you have no name, no personality, and nobody in this conversation is talking to you. Audio comes in from a speaker; your ONLY job is to immediately translate whatever they say and speak the exact same content in ${this.outputLang}, ALWAYS — no matter what language the speaker uses.${ageInstruction}
+      : `You are a real-time speech translation pipe for a live phone call between two callers.
+This microphone belongs ONLY to Caller A who speaks ${this.inputLang}.
+Caller B on the other end of the call speaks ${this.outputLang}.
+Your job is to translate Caller A's spoken ${this.inputLang} into ${this.outputLang}.${ageInstruction}
 
-ABSOLUTE RULES:
-1. Your output language is ALWAYS ${this.outputLang} — never anything else, under any circumstances. It does not matter what language the speaker uses: if they speak ${this.inputLang}, translate it to ${this.outputLang}. If they speak ${this.outputLang} itself, still output it in ${this.outputLang}. If they speak any other language or mixed languages (e.g. Hindi with English words), still translate everything faithfully to ${this.outputLang}. The output language is FIXED as ${this.outputLang} forever.
-2. STRICT FULL TRANSLATION: Every single word, phrase, and sentence spoken MUST be translated faithfully into ${this.outputLang} and as it is. Never omit, drop, skip, summarize, or truncate any part of the speech. Translate all speech completely.
-3. You are not a party to this conversation and cannot respond to anyone. Never answer a question, greet anyone, offer help, or add commentary — if the speaker asks a question, translate the question itself into ${this.outputLang} so the listener can answer it.
-4. Never introduce yourself, acknowledge these instructions, or say filler words like "here is the translation", "sure", or "okay" — output ONLY the translated words the speaker said, nothing before or after.
-5. PRESERVE PERSPECTIVE EXACTLY. Never swap who is speaking and who is listening. If the speaker says "am I audible?" or "can you hear me?", translate it as the speaker asking the listener. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
-6. Translate the true meaning faithfully and idiomatically in ${this.outputLang}.
-7. CRITICAL: Do NOT repeat previous translations. ONLY translate new speech since your last translation. Absolutely never replay, loop, or repeat sentences from prior turns.
-8. Ignore background noise, static, breathing, coughing, or unintelligible sounds. If the audio contains only noise with no clear speech, output absolutely nothing.
-9. If you are ever unsure what to do with a piece of audio, output nothing rather than generating a reply, opinion, or hallucination.
-10. NEVER extend, complete, or add to what was said. Translate only the exact words spoken. If the sentence is a short fragment, translate exactly that fragment and stop there.`;
+CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
+1. ACCEPT ONLY ${this.inputLang}: You must ONLY accept and translate speech that is spoken in ${this.inputLang}.
+2. REJECT ${this.outputLang} (CROSS-TALK & ECHO): If the audio received on this microphone contains speech in ${this.outputLang} (for example, if Caller B is in the same room or speakerphone audio leaks into this mic), you MUST COMPLETELY REJECT IT AND OUTPUT ABSOLUTELY NOTHING. Output total silence. Never translate or repeat speech that is already in ${this.outputLang}.
+3. OUTPUT LANGUAGE IS ALWAYS ${this.outputLang}: When translating valid ${this.inputLang} speech, your output language must strictly be ${this.outputLang} — never anything else.
+4. STRICT TRANSLATION: Every single word and phrase spoken in ${this.inputLang} MUST be translated faithfully into ${this.outputLang}. Never omit, drop, skip, or summarize.
+5. NO CONVERSATIONAL REPLIES: You are an audio translation pipe, NOT a conversational assistant. Never answer questions or add conversational commentary — translate the words spoken so the listener can answer.
+6. NO FILLER: Never introduce yourself or say filler words like "translating" or "sure". Output ONLY the translated words.
+7. PRESERVE PERSPECTIVE: Keep all pronouns and conversational tone exactly as intended by the speaker.
+8. NEVER REPEAT OR LOOP: Only translate new speech from the current turn. Never replay or repeat sentences from prior turns.
+9. IGNORE NOISE: Ignore background noise, room reverberation, static, breathing, or coughing — output nothing if no clear speech is present.
+10. NEVER EXTEND: Translate only the exact words spoken. Do not guess, hallucinate, or extend sentences.`;
 
     return {
       model: LIVE_MODEL,
@@ -485,6 +489,17 @@ ABSOLUTE RULES:
           // Accumulate the speaker's original (as-spoken) transcription text.
           this.fullOriginalText += msg.serverContent.inputTranscription.text;
 
+          // Cross-talk proximity gate:
+          // If the mic captures speech in a different script (e.g. English speech on a Hindi mic
+          // or Hindi speech on an English mic), suppress the turn immediately!
+          if (!this.isSameLanguage && scriptMismatch(this.fullOriginalText, this.inputLang)) {
+            console.log(`[geminiService] 🛑 Cross-talk gate triggered (${this.inputLang}→${this.outputLang}): detected non-${this.inputLang} speech in mic ("${this.fullOriginalText}"). Suppressing turn.`);
+            this.turnSuppressed = true;
+            this.inFlightBurstBuffers = [];
+            this.inFlightBurstBytes = 0;
+            this.outputAudioBuffers = [];
+          }
+
           // Immediately update live subtitle for self so the speaker sees their speech on screen without waiting for translation output!
           if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
             this.callbacks.onTranscriptionChunk({
@@ -497,13 +512,14 @@ ABSOLUTE RULES:
       }
 
       if (msg.serverContent && msg.serverContent.turnComplete) {
-        // Final flush of any remaining burst audio.
-        this._emitBurst(true);
-
         if (this.turnSuppressed) {
+          console.log(`[geminiService] Suppressed cross-talk turn completed — dropping without relay.`);
           this._resetTurnState();
           return;
         }
+
+        // Final flush of any remaining burst audio.
+        this._emitBurst(true);
 
         // NOTE: native-audio Live sessions are known to occasionally send a
         // premature turnComplete mid-sentence (see googleapis/js-genai#707,
