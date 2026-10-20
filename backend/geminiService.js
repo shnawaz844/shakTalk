@@ -49,7 +49,7 @@ const ai = new GoogleGenAI({
 });
 
 // Overridable for A/B testing candidate models against the current one
-// without editing code each time — unset falls back to the model already
+// without editing code each time - unset falls back to the model already
 // proven in production.
 const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-live-2.5-flash-native-audio';
 
@@ -595,7 +595,7 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
     }
 
     console.log(`[LiveTranslationSession] Opening session (${this.inputLang}→${this.outputLang})...`);
-    
+
     // Connect with a 10s timeout to prevent hanging forever on high-latency international connections
     const connectWithTimeout = new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
