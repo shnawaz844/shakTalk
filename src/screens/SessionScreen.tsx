@@ -110,6 +110,20 @@ export function SessionScreen({
     }
   };
 
+  // Ensure audio mode is configured on call start so iOS silent switch is bypassed
+  // and speakerphone routing is active immediately without waiting for toggle.
+  useEffect(() => {
+    if (Platform.OS !== 'web') {
+      setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+        shouldPlayInBackground: true,
+        interruptionMode: 'duckOthers',
+        shouldRouteThroughEarpiece: false,
+      }).catch((e) => console.warn('[SessionScreen] initial setAudioModeAsync error:', e));
+    }
+  }, []);
+
   // ── Audio Playback ──────────────────────────────────────────────────────────
   const audioQueueRef = useRef<{ base64: string; index: number; text: string }[]>([]);
   const isPlayingQueueRef = useRef(false);
@@ -119,6 +133,19 @@ export function SessionScreen({
   const nativePlaylistRef = useRef<AudioPlaylist | null>(null);
   const nativeTempFilesRef = useRef<string[]>([]);
   const currentNativeTurnIdRef = useRef<string | null>(null);
+  // Sequential queue for native streaming chunks to ensure disk-writes and playlist.add
+  // execute strictly in index order without race conditions between chunks.
+  const nativeChunkQueueRef = useRef<{ turnId: string; index: number; audioBase64: string }[]>([]);
+  const isProcessingNativeChunksRef = useRef(false);
+  const loggedSelfSubtitleTurnsRef = useRef<Set<string>>(new Set());
+  // Tracks how many audio burst chunks have been queued vs. confirmed received.
+  // The playlist's didJustFinish event must not fire playback-end until all expected
+  // chunks have been written and added — otherwise inter-chunk gaps trigger premature
+  // mic reopening and speaker bleed gets fed back to Gemini.
+  const nativePendingChunksRef = useRef(0);
+  // True once translated_audio_final has arrived for the current turn —
+  // used to know we have received all chunks and the playlist truly finishing means done.
+  const nativeTurnFinalReceivedRef = useRef(false);
   // Safety: if partner_speaking pre-gates the mic but no audio ever arrives,
   // this timeout resets isPlayingAudioRef after 5s so the mic isn't stuck silent.
   const partnerSpeakingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,7 +175,12 @@ export function SessionScreen({
         const pl = createAudioPlaylist({ loop: 'none', updateInterval: 200 });
         nativePlaylistRef.current = pl;
         pl.addListener('playlistStatusUpdate', (status) => {
-          if (status.didJustFinish || (!status.playing && status.trackCount > 0 && status.currentIndex >= status.trackCount - 1)) {
+          // Only schedule playback-end when:
+          //  1. The final audio marker has been received (all chunks sent by server), AND
+          //  2. No chunks are still being written/queued (nativePendingChunksRef === 0), AND
+          //  3. The playlist has genuinely finished playing (didJustFinish, or stopped at last track)
+          const allChunksReceived = nativeTurnFinalReceivedRef.current && nativePendingChunksRef.current === 0;
+          if (allChunksReceived && (status.didJustFinish || (!status.playing && status.trackCount > 0 && status.currentIndex >= status.trackCount - 1))) {
             schedulePlaybackEnd();
           }
         });
@@ -342,6 +374,59 @@ export function SessionScreen({
     setIsPlayingAudio(false);
   }, []);
 
+  // Native streaming chunk processor — writes files and appends to AudioPlaylist strictly in order
+  const processNativeChunkQueue = useCallback(async () => {
+    if (isProcessingNativeChunksRef.current || Platform.OS === 'web') return;
+    isProcessingNativeChunksRef.current = true;
+
+    while (nativeChunkQueueRef.current.length > 0) {
+      nativeChunkQueueRef.current.sort((a, b) => a.index - b.index);
+      const chunk = nativeChunkQueueRef.current.shift();
+      if (!chunk) continue;
+
+      if (chunk.turnId !== currentNativeTurnIdRef.current) {
+        nativePendingChunksRef.current = Math.max(0, nativePendingChunksRef.current - 1);
+        continue;
+      }
+
+      const tempPath = `${FileSystem.cacheDirectory}turn_${chunk.turnId}_burst_${chunk.index}.wav`;
+      nativeTempFilesRef.current.push(tempPath);
+
+      try {
+        await FileSystem.writeAsStringAsync(tempPath, chunk.audioBase64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+
+        if (chunk.turnId === currentNativeTurnIdRef.current) {
+          const pl = nativePlaylistRef.current;
+          if (pl) {
+            pl.add({ uri: tempPath });
+            const status = pl.currentStatus;
+            if (!status?.playing) {
+              // If ExoPlayer/AVQueuePlayer stalled after finishing an earlier track,
+              // advance to the new track so it doesn't get stuck in STATE_ENDED
+              if (status && status.trackCount > 1 && status.currentIndex < status.trackCount - 1) {
+                try { pl.skipTo(status.trackCount - 1); } catch (_) {}
+              }
+              try { pl.play(); } catch (_) {}
+            }
+          } else {
+            nativeAudioQueueRef.current.push(chunk.audioBase64);
+            processNativeAudioQueue();
+          }
+        } else {
+          FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => {});
+        }
+      } catch (e) {
+        console.error('[SessionScreen] Native streaming playback error:', e);
+      } finally {
+        nativePendingChunksRef.current = Math.max(0, nativePendingChunksRef.current - 1);
+      }
+    }
+
+    isProcessingNativeChunksRef.current = false;
+  }, [processNativeAudioQueue]);
+
   const {
     status,
     isProcessing,
@@ -352,6 +437,12 @@ export function SessionScreen({
     onLiveSubtitle: useCallback((payload: any) => {
       if (payload.speaker === 'partner') {
         setPartnerSpeaking(!payload.isFinal);
+      } else if (payload.speaker === 'self' && payload.speechStartedAt && payload.turnId) {
+        if (!loggedSelfSubtitleTurnsRef.current.has(payload.turnId)) {
+          loggedSelfSubtitleTurnsRef.current.add(payload.turnId);
+          const elapsed = Date.now() - payload.speechStartedAt;
+          console.log(`[LATENCY][VOICE_TO_ME] Turn ${payload.turnId}: 📝 Self transcription displayed on my screen in ${elapsed}ms!`);
+        }
       }
       setActiveSubtitle(prev => {
         const orig = payload.originalText !== undefined ? payload.originalText : (prev && prev.speaker === payload.speaker ? prev.originalText : '');
@@ -376,6 +467,11 @@ export function SessionScreen({
         clearTimeout(partnerSpeakingTimeoutRef.current);
         partnerSpeakingTimeoutRef.current = null;
       }
+      if (payload.index === 0 && payload.speechStartedAt) {
+        const totalLatency = Date.now() - payload.speechStartedAt;
+        const relayTime = payload.serverRelayedAt ? Date.now() - payload.serverRelayedAt : null;
+        console.log(`[LATENCY][VOICE_TO_PARTNER] Turn ${payload.turnId}: 🔊 Partner voice translation reached my device in ${totalLatency}ms! (Server relay: ${relayTime}ms)`);
+      }
       if (payload.text?.trim()) {
         setActiveSubtitle(prev => ({
           speaker: 'partner',
@@ -391,13 +487,17 @@ export function SessionScreen({
         audioQueueRef.current.push({ base64: payload.audioBase64, index: payload.index, text: payload.text });
         processWebAudioQueue();
       } else {
-        // Native (iOS/Android): Stream audio bursts immediately into AudioPlaylist!
+        // Native (iOS/Android): Stream audio bursts sequentially into AudioPlaylist!
         // Audio playback starts on chunk #1 (~500-700ms) without waiting for the full sentence.
         if (!payload.audioBase64) return;
 
         const turnId = payload.turnId || `turn-${Date.now()}`;
         if (turnId !== currentNativeTurnIdRef.current) {
           currentNativeTurnIdRef.current = turnId;
+          // Reset per-turn tracking state
+          nativeChunkQueueRef.current = [];
+          nativePendingChunksRef.current = 0;
+          nativeTurnFinalReceivedRef.current = false;
           const pl = nativePlaylistRef.current;
           if (pl) {
             try { pl.clear(); } catch (_) {}
@@ -408,12 +508,11 @@ export function SessionScreen({
           oldFiles.forEach(f => FileSystem.deleteAsync(f, { idempotent: true }).catch(() => {}));
         }
 
-        const tempPath = `${FileSystem.cacheDirectory}turn_${turnId}_burst_${payload.index ?? 0}.wav`;
-        nativeTempFilesRef.current.push(tempPath);
+        // Increment pending count BEFORE queuing so the playlist status
+        // listener knows a chunk is still in-flight and won't fire playback-end early.
+        nativePendingChunksRef.current += 1;
 
-        // Gate the mic IMMEDIATELY before the async file write — any delay before
-        // setting isPlayingAudioRef=true lets mic chunks reach Gemini during the
-        // disk-write latency (~20-80ms), causing the speaker-echo / re-translation loop.
+        // Gate the mic IMMEDIATELY — prevents echo loop
         if (playbackEndDebounceRef.current) {
           clearTimeout(playbackEndDebounceRef.current);
           playbackEndDebounceRef.current = null;
@@ -421,29 +520,14 @@ export function SessionScreen({
         isPlayingAudioRef.current = true;
         setIsPlayingAudio(true);
 
-        void (async () => {
-          try {
-            await FileSystem.writeAsStringAsync(tempPath, payload.audioBase64, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-
-            const pl = nativePlaylistRef.current;
-            if (pl) {
-              pl.add({ uri: tempPath });
-              if (!pl.currentStatus?.playing) {
-                pl.play();
-              }
-            } else {
-              // Fallback to queue if playlist is unavailable
-              nativeAudioQueueRef.current.push(payload.audioBase64);
-              processNativeAudioQueue();
-            }
-          } catch (e) {
-            console.error('[SessionScreen] Native streaming playback error:', e);
-          }
-        })();
+        nativeChunkQueueRef.current.push({
+          turnId,
+          index: payload.index ?? 0,
+          audioBase64: payload.audioBase64,
+        });
+        processNativeChunkQueue();
       }
-    }, [processWebAudioQueue, processNativeAudioQueue]),
+    }, [processWebAudioQueue, processNativeAudioQueue, processNativeChunkQueue]),
 
     onTranslatedAudioFinal: useCallback((original: string, translated: string, audioBase64?: string, turnId?: string) => {
       setPartnerSpeaking(false);
@@ -473,15 +557,26 @@ export function SessionScreen({
         });
       }
 
+      // Mark that all streaming chunks for this turn have now been dispatched by the server.
+      // The playlist status listener will only allow playback-end once pending count reaches 0.
+      nativeTurnFinalReceivedRef.current = true;
+      console.log(`[LATENCY][VOICE_TO_PARTNER] Turn ${turnId || 'final'}: 🏁 All translated audio chunks received from partner.`);
+
       // If native playlist is active and already streamed chunks, do NOT re-play
-      // full audioBase64 to prevent double playback. Only fall back if no streaming chunks arrived.
-      if (Platform.OS !== 'web' && audioBase64 && (!nativePlaylistRef.current || nativeTempFilesRef.current.length === 0)) {
-        nativeAudioQueueRef.current.push(audioBase64);
-        processNativeAudioQueue();
+      // full audioBase64 to prevent double playback. Only fall back if streaming
+      // never started for this turn (no temp files AND current turn had no chunks).
+      if (Platform.OS !== 'web' && audioBase64) {
+        const hadStreamingChunks = turnId && currentNativeTurnIdRef.current === turnId && nativeTempFilesRef.current.length > 0;
+        if (!hadStreamingChunks) {
+          // No streaming chunks arrived — fall back to full audio playback.
+          nativeAudioQueueRef.current.push(audioBase64);
+          processNativeAudioQueue();
+        }
       }
     }, [processNativeAudioQueue]),
 
     onTranscript: useCallback((original: string, translated: string, turnId?: string) => {
+      console.log(`[LATENCY][VOICE_TO_ME] Turn ${turnId || 'final'}: ✅ Complete confirmed transcript received.`);
       const cleanOrig = (original || '').trim();
       const cleanTrans = (translated || '').trim();
       if (cleanTrans.length >= 1 || cleanOrig.length >= 1) {
@@ -601,7 +696,7 @@ export function SessionScreen({
     if (Date.now() < playbackEndTimeRef.current + tailMs) {
       return;
     }
-    sendAudioStreamChunk(audioBase64, mimeType, role, sessionId);
+    sendAudioStreamChunk(audioBase64, mimeType, role, sessionId, Date.now());
   }, [sendAudioStreamChunk, role, sessionId]);
 
   const { error: micError } = useAudioRecorder({
