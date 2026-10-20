@@ -47,7 +47,8 @@ interface WebSocketContextType {
     audioBase64: string,
     mimeType: string,
     role: string,
-    sid: string
+    sid: string,
+    clientSentAt?: number
   ) => void;
   sendPauseQueue: (role: string, sid: string) => void;
   sendResumeQueue: (role: string, sid: string) => void;
@@ -66,8 +67,8 @@ interface WebSocketContextType {
 interface WebSocketCallbacks {
   onTranslatedAudio?: (payload: TranslatedAudioPayload) => void;
   onTranslatedAudioChunk?: (payload: TranslatedAudioChunkPayload) => void;
-  onTranslatedAudioFinal?: (originalText: string, translatedText: string, audioBase64?: string) => void;
-  onTranscript?: (originalText: string, translatedText: string) => void;
+  onTranslatedAudioFinal?: (originalText: string, translatedText: string, audioBase64?: string, turnId?: string) => void;
+  onTranscript?: (originalText: string, translatedText: string, turnId?: string) => void;
   onLiveSubtitle?: (payload: LiveSubtitlePayload) => void;
   onLiveSubtitleClear?: () => void;
   onPartnerDisconnected?: () => void;
@@ -108,10 +109,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     callbacksMap.current.delete(id);
   }, []);
 
+  // Tracks when connection process started for calculating connection latency
+  const connectStartTimeRef = useRef<number>(0);
+
   const handleMessage = useCallback((message: Record<string, any>) => {
     const { type } = message;
 
     if (type === 'session_created') {
+      const elapsed = Date.now() - connectStartTimeRef.current;
+      console.log(`[LATENCY][CALL_CONNECT] Host session created in ${elapsed}ms (sessionId=${message.sessionId}). Waiting for partner...`);
       setSessionId(message.sessionId);
       setRole('host');
       setStatus('waiting');
@@ -119,6 +125,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     if (type === 'session_ready') {
+      const elapsed = Date.now() - connectStartTimeRef.current;
+      console.log(`[LATENCY][CALL_CONNECT] Partner joined & peer handshake ready in ${elapsed}ms (partnerLang=${message.partnerLang}). Waiting for Gemini AI warmup...`);
       setStatus('connected');
       setIsGeminiReady(false); // reset — gemini_ready will follow once both sessions are open
       if (message.role) {
@@ -131,12 +139,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     if (type === 'gemini_ready') {
+      const elapsed = Date.now() - connectStartTimeRef.current;
+      console.log(`[LATENCY][CALL_CONNECT] 🎉 Gemini AI speech engines READY in ${elapsed}ms! Call is fully established & audio unblocked.`);
       setIsGeminiReady(true);
     }
 
     if (type === 'processing_started') {
       setIsProcessing(true);
-      console.log(`[LATENCY][client] processing_started received (turnId=${message.turnId}) at ${Date.now()}`);
+      console.log(`[LATENCY][VOICE_TO_PARTNER] Server started processing speech turnId=${message.turnId} at ${Date.now()}`);
     }
 
     if (type === 'processing_done') {
@@ -172,11 +182,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (type === 'translated_audio_final') {
         console.log(`[LATENCY][client] translated_audio_final turnId=${message.turnId} received at ${Date.now()}`);
-        callbacks.onTranslatedAudioFinal?.(message.originalText, message.translatedText, message.audioBase64);
+        callbacks.onTranslatedAudioFinal?.(message.originalText, message.translatedText, message.audioBase64, message.turnId);
       }
 
       if (type === 'transcript') {
-        callbacks.onTranscript?.(message.originalText, message.translatedText);
+        callbacks.onTranscript?.(message.originalText, message.translatedText, message.turnId);
       }
 
       if (type === 'live_subtitle') {
@@ -239,6 +249,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const createSession = useCallback(async (lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => {
+    connectStartTimeRef.current = Date.now();
+    console.log(`[LATENCY][CALL_CONNECT] Creating session at ${connectStartTimeRef.current}...`);
     setStatus('connecting');
     try {
       websocketService.onMessage(handleMessage);
@@ -260,6 +272,8 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [handleMessage]);
 
   const joinSession = useCallback(async (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => {
+    connectStartTimeRef.current = Date.now();
+    console.log(`[LATENCY][CALL_CONNECT] Joining session ${sid} at ${connectStartTimeRef.current}...`);
     setStatus('connecting');
     try {
       websocketService.onMessage(handleMessage);
@@ -283,7 +297,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, [handleMessage]);
 
   const sendAudioStreamChunk = useCallback(
-    (audioBase64: string, mimeType: string, role: string, sid: string) => {
+    (audioBase64: string, mimeType: string, role: string, sid: string, clientSentAt?: number) => {
       // Fired continuously (~10x/sec) while the mic is live. Language and voice
       // profile are already known server-side from create_session/join_session,
       // so each chunk only carries what's needed to forward it to Gemini.
@@ -293,6 +307,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         role,
         audioBase64,
         mimeType,
+        clientSentAt: clientSentAt || Date.now(),
       });
     },
     []

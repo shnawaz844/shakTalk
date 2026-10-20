@@ -549,9 +549,13 @@ function makeSessionCallbacks(session, sessionId, role) {
       if (!rs.turnActive) {
         rs.turnActive = true;
         rs.turnStartedAt = Date.now();
-        console.log(`[LATENCY][server] Turn ${chunk.turnId} (${role}): relaying first chunk to partner at ${rs.turnStartedAt}`);
         send(partnerSocket(), { type: 'partner_speaking', turnId: chunk.turnId });
         send(senderSocket(), { type: 'processing_started', turnId: chunk.turnId });
+      }
+
+      if (chunk.index === 0) {
+        const fromSpeechMs = Date.now() - (rs.turnSpeechStartedAt || rs.turnStartedAt);
+        console.log(`[LATENCY][VOICE_TO_PARTNER] Turn ${chunk.turnId} (${role}→partner): First audio burst generated in ${fromSpeechMs}ms from speaker speech! Relaying to partner.`);
       }
 
       if (!rs.paused) {
@@ -562,6 +566,8 @@ function makeSessionCallbacks(session, sessionId, role) {
           index: chunk.index,
           text: chunk.text,
           turnId: chunk.turnId,
+          speechStartedAt: rs.turnSpeechStartedAt || rs.turnStartedAt,
+          serverRelayedAt: Date.now(),
         });
 
         if (chunk.text) {
@@ -571,6 +577,8 @@ function makeSessionCallbacks(session, sessionId, role) {
             translatedText: chunk.text,
             turnId: chunk.turnId,
             isFinal: false,
+            speechStartedAt: rs.turnSpeechStartedAt || rs.turnStartedAt,
+            serverRelayedAt: Date.now(),
           });
         }
       }
@@ -579,6 +587,12 @@ function makeSessionCallbacks(session, sessionId, role) {
     onTranscriptionChunk(data) {
       if (!sessions.has(sessionId) || rs.paused) return;
 
+      const speechStart = rs.turnSpeechStartedAt || rs.turnStartedAt;
+      if (speechStart) {
+        const fromSpeechMs = Date.now() - speechStart;
+        console.log(`[LATENCY][VOICE_TO_ME] Turn ${data.turnId} (${role}): Self transcription ready in ${fromSpeechMs}ms from speech capture.`);
+      }
+
       send(senderSocket(), {
         type: 'live_subtitle',
         speaker: 'self',
@@ -586,6 +600,8 @@ function makeSessionCallbacks(session, sessionId, role) {
         translatedText: data.translatedText,
         turnId: data.turnId,
         isFinal: false,
+        speechStartedAt: rs.turnSpeechStartedAt || rs.turnStartedAt,
+        serverRelayedAt: Date.now(),
       });
 
       send(partnerSocket(), {
@@ -595,6 +611,8 @@ function makeSessionCallbacks(session, sessionId, role) {
         translatedText: data.translatedText,
         turnId: data.turnId,
         isFinal: false,
+        speechStartedAt: rs.turnSpeechStartedAt || rs.turnStartedAt,
+        serverRelayedAt: Date.now(),
       });
     },
 
@@ -602,7 +620,8 @@ function makeSessionCallbacks(session, sessionId, role) {
       if (!sessions.has(sessionId)) return;
       rs.turnActive = false;
       const relayMs = rs.turnStartedAt ? Date.now() - rs.turnStartedAt : null;
-      console.log(`[LATENCY][server] Turn ${result.turnId} (${role}): fully relayed, ${relayMs}ms from first chunk relayed to turn complete`);
+      const totalTurnMs = rs.turnSpeechStartedAt ? Date.now() - rs.turnSpeechStartedAt : relayMs;
+      console.log(`[LATENCY][VOICE_TO_PARTNER] Turn ${result.turnId} (${role}→partner): Complete turn processed in ${totalTurnMs}ms (Streaming relay duration: ${relayMs}ms)`);
 
       send(senderSocket(), { type: 'processing_done', turnId: result.turnId });
 
@@ -738,7 +757,8 @@ wss.on('connection', (ws) => {
       });
       currentSessionId = sessionId;
       currentRole = 'host';
-      console.log(`[server] Session created: ${sessionId} (Host lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
+      session.createdAt = Date.now();
+      console.log(`[LATENCY][CALL_CONNECT] Host created session ${sessionId} at ${session.createdAt} (Host lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
       send(ws, { type: 'session_created', sessionId });
 
       if (userId) {
@@ -763,7 +783,9 @@ wss.on('connection', (ws) => {
       session.guestVoiceProfile = { gender: speakerGender, age: speakerAge };
       currentSessionId = sessionId;
       currentRole = 'guest';
-      console.log(`[server] Guest joined session: ${sessionId} (Guest lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
+      const guestJoinAt = Date.now();
+      const waitTime = session.createdAt ? guestJoinAt - session.createdAt : 0;
+      console.log(`[LATENCY][CALL_CONNECT] Guest joined session: ${sessionId} (${waitTime}ms after host creation)`);
 
       send(session.host, { type: 'session_ready', role: 'host', sessionId, partnerLang: session.guestLang });
       send(session.guest, { type: 'session_ready', role: 'guest', sessionId, partnerLang: session.hostLang });
@@ -786,8 +808,8 @@ wss.on('connection', (ws) => {
           ]),
           warmupTimeout,
         ]).then(() => {
-          // Gemini sessions are initialized (or fast timeout reached) — unblock recording on both clients
-          console.log(`[server] Gemini ready for ${sessionId} — sending gemini_ready`);
+          const warmupDuration = Date.now() - guestJoinAt;
+          console.log(`[LATENCY][CALL_CONNECT] 🎉 Session ${sessionId} FULLY CONNECTED! Gemini AI ready in ${warmupDuration}ms after guest joined.`);
           send(session.host, { type: 'gemini_ready' });
           send(session.guest, { type: 'gemini_ready' });
         }).catch((err) => {
@@ -856,7 +878,7 @@ wss.on('connection', (ws) => {
     // ── STREAMED AUDIO CHUNK (continuous, ~100-250ms of raw PCM) ────────────
     if (type === 'audio_stream_chunk') {
       if (!AI_TRANSLATION_ENABLED) return;
-      const { sessionId, role, audioBase64, mimeType } = message;
+      const { sessionId, role, audioBase64, mimeType, clientSentAt } = message;
       const session = sessions.get(sessionId);
 
       if (!session) { send(ws, { type: 'error', message: 'Session not found.' }); return; }
@@ -865,6 +887,13 @@ wss.on('connection', (ws) => {
       // Authoritative socket-based role resolution:
       const senderRole = ws === session.host ? 'host' : (ws === session.guest ? 'guest' : role);
       if (!senderRole) return;
+
+      const rs = session.roleState[senderRole];
+      if (rs && !rs.turnActive) {
+        rs.turnActive = true;
+        rs.turnSpeechStartedAt = clientSentAt || Date.now();
+        rs.turnStartedAt = Date.now();
+      }
 
       // When sender is muted/paused, drop all audio chunks immediately — never feed into Gemini!
       if (session.roleState[senderRole]?.paused) return;

@@ -289,9 +289,9 @@ class LiveTranslationSession {
     }
 
     // Minimum burst size:
-    // First burst: ~100ms (4,800 bytes @ 24kHz 16-bit mono) for ultra-fast startup (<700ms).
+    // First burst: ~200ms (9,600 bytes @ 24kHz 16-bit mono) for fast startup without audio buffer starvation.
     // Subsequent bursts: ~300ms (14,400 bytes) to maintain a healthy jitter buffer.
-    const minBytes = this.audioChunkIndex === 0 ? 4800 : 14400;
+    const minBytes = this.audioChunkIndex === 0 ? 9600 : 14400;
     if (!force && this.inFlightBurstBytes < minBytes) return;
 
     const burstPcm = Buffer.concat(this.inFlightBurstBuffers);
@@ -385,24 +385,23 @@ ABSOLUTE RULES:
           }
         },
         outputAudioTranscription: outputCode ? { languageCodes: [outputCode] } : {},
-        // inputAudioTranscription intentionally has NO languageCodes hint.
-        // Hinting it to the configured inputLang caused Gemini to mis-transcribe
-        // audio when the speaker used a different language (e.g. the "English"
-        // phone person speaking Hindi), which then produced wrong-language output.
-        // Without a hint, Gemini auto-detects the actual spoken language and
-        // the output-language lock in the system prompt (Rule 1) ensures the
-        // translation always comes out in outputLang regardless.
-        inputAudioTranscription: {},
+        // Providing a language hint for input transcription speeds up Gemini's
+        // speech recognition and reduces first-chunk latency significantly.
+        // Without a hint, Gemini must auto-detect the language before transcribing,
+        // which caused 1400ms+ first-chunk latency on the English (iOS) side in logs.
+        // The system prompt's absolute output-language lock (Rule 1) prevents
+        // wrong-language output regardless of what language the speaker actually uses.
+        inputAudioTranscription: inputCode ? { languageCodes: [inputCode] } : {},
         // Let Gemini's own server-side VAD decide turn boundaries instead of
         // relying on the client to guess when a sentence has ended.
         realtimeInputConfig: {
           automaticActivityDetection: {
             prefixPaddingMs: 300,
             // How long Gemini waits after speech ends before finalising the turn.
-            // 300ms balances snappy detection with not clipping natural mid-sentence
-            // pauses (thinking, breathing, emphasis). 100ms was too aggressive and
-            // caused word loss when speakers paused briefly.
-            silenceDurationMs: 300,
+            // 500ms balances snappy detection with not clipping natural mid-sentence
+            // pauses (thinking, breathing, emphasis). 300ms was too aggressive for
+            // Hindi speakers who frequently pause within sentences, causing word loss.
+            silenceDurationMs: 500,
           },
         },
       },
