@@ -55,24 +55,34 @@ interface AudioRecorderOptions {
   onChunk: (audioBase64: string, mimeType: string) => void;
 }
 
+// Reverse lookup table for base64 decoding (built once). The previous
+// decoder called String.indexOf per character and grew a JS array byte by
+// byte, on every 150ms chunk, on the same JS thread that handles playback.
+const B64_LOOKUP = (() => {
+  const table = new Int16Array(128).fill(-1);
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  for (let i = 0; i < chars.length; i++) table[chars.charCodeAt(i)] = i;
+  return table;
+})();
+
 /** Decodes a base64 string to raw bytes without relying on RN's global atob/Buffer shims. */
 function base64Decode(base64: string): Uint8Array {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  const clean = base64.replace(/[^A-Za-z0-9+/]/g, '');
-  const bytes: number[] = [];
+  const out = new Uint8Array(Math.floor((base64.length * 3) / 4));
   let buffer = 0;
   let bits = 0;
-  for (let i = 0; i < clean.length; i++) {
-    const val = chars.indexOf(clean[i]);
-    if (val === -1) continue;
-    buffer = (buffer << 6) | val;
+  let o = 0;
+  for (let i = 0; i < base64.length; i++) {
+    const code = base64.charCodeAt(i);
+    const val = code < 128 ? B64_LOOKUP[code] : -1;
+    if (val === -1) continue; // skips '=', whitespace
+    buffer = ((buffer << 6) | val) & 0xffffff;
     bits += 6;
     if (bits >= 8) {
       bits -= 8;
-      bytes.push((buffer >> bits) & 0xff);
+      out[o++] = (buffer >> bits) & 0xff;
     }
   }
-  return new Uint8Array(bytes);
+  return o === out.length ? out : out.subarray(0, o);
 }
 
 /** Encodes a Uint8Array to base64 without relying on RN's global atob/Buffer shims. */
@@ -125,6 +135,7 @@ export function useAudioRecorder({ enabled, onChunk }: AudioRecorderOptions) {
   const [isWebActive, setIsWebActive] = useState(false);
 
   const energyEmaRef = useRef(0);
+  const lastReportedLevelRef = useRef(0);
   const speakingRef = useRef(false);
   const onChunkRef = useRef(onChunk);
   const enabledRef = useRef(enabled);
@@ -139,7 +150,12 @@ export function useAudioRecorder({ enabled, onChunk }: AudioRecorderOptions) {
     const bytes = base64Decode(base64Data);
     const energy = computeEnergy(bytes);
     energyEmaRef.current = ENERGY_EMA_ALPHA * energy + (1 - ENERGY_EMA_ALPHA) * energyEmaRef.current;
-    setAudioLevel(energyEmaRef.current);
+    // Only re-render when the level visibly changes. Setting state on every
+    // 150ms chunk re-rendered the whole call screen ~7 times a second.
+    if (Math.abs(energyEmaRef.current - lastReportedLevelRef.current) > 0.05) {
+      lastReportedLevelRef.current = energyEmaRef.current;
+      setAudioLevel(energyEmaRef.current);
+    }
 
     if (!speakingRef.current && energyEmaRef.current > SPEAKING_ON_THRESHOLD) {
       speakingRef.current = true;

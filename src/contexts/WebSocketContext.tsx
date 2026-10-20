@@ -66,8 +66,8 @@ interface WebSocketContextType {
 interface WebSocketCallbacks {
   onTranslatedAudio?: (payload: TranslatedAudioPayload) => void;
   onTranslatedAudioChunk?: (payload: TranslatedAudioChunkPayload) => void;
-  onTranslatedAudioFinal?: (originalText: string, translatedText: string, audioBase64?: string) => void;
-  onTranscript?: (originalText: string, translatedText: string) => void;
+  onTranslatedAudioFinal?: (originalText: string, translatedText: string, audioBase64?: string, turnId?: string) => void;
+  onTranscript?: (originalText: string, translatedText: string, turnId?: string) => void;
   onLiveSubtitle?: (payload: LiveSubtitlePayload) => void;
   onLiveSubtitleClear?: () => void;
   onPartnerDisconnected?: () => void;
@@ -172,11 +172,11 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (type === 'translated_audio_final') {
         console.log(`[LATENCY][client] translated_audio_final turnId=${message.turnId} received at ${Date.now()}`);
-        callbacks.onTranslatedAudioFinal?.(message.originalText, message.translatedText, message.audioBase64);
+        callbacks.onTranslatedAudioFinal?.(message.originalText, message.translatedText, message.audioBase64, message.turnId);
       }
 
       if (type === 'transcript') {
-        callbacks.onTranscript?.(message.originalText, message.translatedText);
+        callbacks.onTranscript?.(message.originalText, message.translatedText, message.turnId);
       }
 
       if (type === 'live_subtitle') {

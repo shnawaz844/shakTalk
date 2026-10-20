@@ -618,11 +618,15 @@ function makeSessionCallbacks(session, sessionId, role) {
         translatedText: result.translatedText,
         turnId: result.turnId,
       });
+      // Text only: the partner already received this turn's audio as
+      // streamed translated_audio_chunk messages. Re-sending the whole turn's
+      // WAV here (~65KB per second of speech) queued ahead of the NEXT turn's
+      // live chunks on the partner's mobile connection and delayed them.
+      // The full audio is still uploaded to storage below for recordings.
       send(partnerSocket(), {
         type: 'translated_audio_final',
         originalText: result.originalText,
         translatedText: result.translatedText,
-        audioBase64: result.translatedAudioBase64,
         turnId: result.turnId,
       });
       send(partnerSocket(), { type: 'lock_released' });

@@ -50,6 +50,22 @@ function formatDuration(totalSeconds: number): string {
   return `${m}:${s}`;
 }
 
+
+/**
+ * Base64 of `byteLength` zero bytes (16-bit PCM silence). Zero bytes encode
+ * as 'A', so no byte array or encoder loop is needed.
+ */
+function silenceBase64(byteLength: number): string {
+  const n = Math.floor(byteLength);
+  const rem = n % 3;
+  return 'AAAA'.repeat(Math.floor(n / 3)) + (rem === 1 ? 'AA==' : rem === 2 ? 'AAA=' : '');
+}
+
+/** Silence with exactly the same length as an existing base64 PCM chunk. */
+function silenceLike(audioBase64: string): string {
+  return audioBase64.replace(/[^=]/g, 'A');
+}
+
 interface ActiveSubtitle {
   speaker: 'self' | 'partner';
   originalText: string;
@@ -119,6 +135,11 @@ export function SessionScreen({
   const nativePlaylistRef = useRef<AudioPlaylist | null>(null);
   const nativeTempFilesRef = useRef<string[]>([]);
   const currentNativeTurnIdRef = useRef<string | null>(null);
+  // Serializes burst file writes so they're added to the playlist in order.
+  const nativeWriteChainRef = useRef<Promise<void>>(Promise.resolve());
+  // Wall-clock time when all audio queued in the playlist should have
+  // finished playing — the playlist is only reset after this has passed.
+  const nativeQueueEndAtRef = useRef(0);
   // Safety: if partner_speaking pre-gates the mic but no audio ever arrives,
   // this timeout resets isPlayingAudioRef after 5s so the mic isn't stuck silent.
   const partnerSpeakingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -396,20 +417,9 @@ export function SessionScreen({
         if (!payload.audioBase64) return;
 
         const turnId = payload.turnId || `turn-${Date.now()}`;
-        if (turnId !== currentNativeTurnIdRef.current) {
-          currentNativeTurnIdRef.current = turnId;
-          const pl = nativePlaylistRef.current;
-          if (pl) {
-            try { pl.clear(); } catch (_) {}
-          }
-          // Clean up old temporary files
-          const oldFiles = nativeTempFilesRef.current;
-          nativeTempFilesRef.current = [];
-          oldFiles.forEach(f => FileSystem.deleteAsync(f, { idempotent: true }).catch(() => {}));
-        }
+        currentNativeTurnIdRef.current = turnId;
 
         const tempPath = `${FileSystem.cacheDirectory}turn_${turnId}_burst_${payload.index ?? 0}.wav`;
-        nativeTempFilesRef.current.push(tempPath);
 
         // Gate the mic IMMEDIATELY before the async file write — any delay before
         // setting isPlayingAudioRef=true lets mic chunks reach Gemini during the
@@ -421,27 +431,50 @@ export function SessionScreen({
         isPlayingAudioRef.current = true;
         setIsPlayingAudio(true);
 
-        void (async () => {
+        // Writes are chained so bursts reach the playlist in the order they
+        // arrived. Before, each burst was written in parallel and added when
+        // its own write finished — a small burst could finish first and play
+        // out of order.
+        const audioBase64 = payload.audioBase64;
+        nativeWriteChainRef.current = nativeWriteChainRef.current.then(async () => {
           try {
-            await FileSystem.writeAsStringAsync(tempPath, payload.audioBase64, {
+            await FileSystem.writeAsStringAsync(tempPath, audioBase64, {
               encoding: FileSystem.EncodingType.Base64,
             });
 
             const pl = nativePlaylistRef.current;
             if (pl) {
+              // Only reset the playlist once everything already queued has
+              // finished playing. Previously it was cleared whenever a NEW
+              // turn's first burst arrived, which cut off whatever was still
+              // unplayed from the previous turn — Gemini starts a new turn
+              // after every ~300ms pause, so this dropped speech constantly.
+              const now = Date.now();
+              const drained = now > nativeQueueEndAtRef.current + 300;
+              if (drained && !pl.currentStatus?.playing) {
+                try { pl.clear(); } catch (_) {}
+                const played = nativeTempFilesRef.current;
+                nativeTempFilesRef.current = [];
+                played.forEach(f => FileSystem.deleteAsync(f, { idempotent: true }).catch(() => {}));
+              }
+              // Track when everything queued should finish: 24kHz 16-bit mono
+              // = 48,000 bytes/sec, minus the 44-byte WAV header.
+              const durMs = Math.max(0, (audioBase64.length * 3) / 4 - 44) / 48;
+              nativeQueueEndAtRef.current = Math.max(now, nativeQueueEndAtRef.current) + durMs;
+              nativeTempFilesRef.current.push(tempPath);
               pl.add({ uri: tempPath });
               if (!pl.currentStatus?.playing) {
                 pl.play();
               }
             } else {
               // Fallback to queue if playlist is unavailable
-              nativeAudioQueueRef.current.push(payload.audioBase64);
+              nativeAudioQueueRef.current.push(audioBase64);
               processNativeAudioQueue();
             }
           } catch (e) {
             console.error('[SessionScreen] Native streaming playback error:', e);
           }
-        })();
+        });
       }
     }, [processWebAudioQueue, processNativeAudioQueue]),
 
@@ -550,22 +583,12 @@ export function SessionScreen({
     // and deliver any in-flight translation to the partner. Without this, audio
     // chunks simply stop arriving at the server — Gemini hangs waiting for more
     // audio and the partner never hears what was already spoken.
-    // Fix: send one 300ms block of silent PCM (zeros @ 16kHz 16-bit mono)
-    // immediately on mute so VAD detects the silence and finalises the turn.
+    // Fix: send a block of silent PCM immediately on mute so VAD detects the
+    // silence and finalises the turn.
     if (nextPaused && status === 'connected' && isGeminiReady) {
-      const SILENCE_SAMPLES = 16000 * 0.3; // 300ms @ 16kHz mono
-      const silenceBytes = new Uint8Array(SILENCE_SAMPLES * 2); // 16-bit = 2 bytes/sample, all zeros
-      // Base64-encode without Buffer/atob shims (same helper approach as useAudioRecorder)
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-      let b64 = '';
-      for (let i = 0; i < silenceBytes.length; i += 3) {
-        const b0 = silenceBytes[i], b1 = silenceBytes[i + 1] ?? 0, b2 = silenceBytes[i + 2] ?? 0;
-        b64 += chars[b0 >> 2];
-        b64 += chars[((b0 & 3) << 4) | (b1 >> 4)];
-        b64 += i + 1 < silenceBytes.length ? chars[((b1 & 0xf) << 2) | (b2 >> 6)] : '=';
-        b64 += i + 2 < silenceBytes.length ? chars[b2 & 0x3f] : '=';
-      }
-      sendAudioStreamChunk(b64, 'audio/pcm;rate=16000', role, sessionId);
+      // 800ms of silence — comfortably longer than Gemini's 300ms end-of-speech
+      // threshold so the in-flight turn reliably finalises.
+      sendAudioStreamChunk(silenceBase64(16000 * 2 * 0.8), 'audio/pcm;rate=16000', role, sessionId);
     }
   }, [hasError, isPaused, status, isGeminiReady, sendAudioStreamChunk, role, sessionId]);
 
@@ -581,27 +604,16 @@ export function SessionScreen({
       return;
     }
     // ── Echo / feedback-loop suppression ────────────────────────────────────
-    // Block the mic completely while translated audio is actively playing.
-    // This is the primary fix for the speaker-on echo loop: if we let mic
-    // chunks through during playback, Gemini picks them up as new speech
-    // and translates them again — creating an infinite echo loop.
-    // Hardware AEC (VoiceChat mode on iOS) attenuates most of the bleed, but
-    // it is never perfect, especially on loudspeaker at high volume.
-    if (isPlayingAudioRef.current) {
-      return;
-    }
-    // Post-playback reverberation tail guard:
-    // Waits a short window after playback ends for room reverb to die down
-    // before re-opening the mic, preventing the loudspeaker echo from being
-    // picked up as new speech. Reduced from 1200/300ms to 600/150ms:
-    // hardware AEC (iOS VoiceChat, Android COMMUNICATION) handles the bulk
-    // of echo cancellation, and the shorter tail (350ms speaker, 100ms earpiece)
-    // prevents word loss when the user replies immediately after a translation.
+    // While translated audio is playing (and for a short reverb tail after),
+    // the mic's content must not reach Gemini or it re-translates the
+    // loudspeaker. BUT the chunk is replaced with SILENCE of the same length
+    // rather than dropped: if nothing at all is sent, Gemini's voice-activity
+    // detection never hears the speaker stop, so a turn that was in progress
+    // when playback started can't finish until the mic reopens — that was the
+    // source of the 3–6 second stalls. Silence lets it close the turn on time.
     const tailMs = isSpeakerOnRef.current ? 350 : 100;
-    if (Date.now() < playbackEndTimeRef.current + tailMs) {
-      return;
-    }
-    sendAudioStreamChunk(audioBase64, mimeType, role, sessionId);
+    const gated = isPlayingAudioRef.current || Date.now() < playbackEndTimeRef.current + tailMs;
+    sendAudioStreamChunk(gated ? silenceLike(audioBase64) : audioBase64, mimeType, role, sessionId);
   }, [sendAudioStreamChunk, role, sessionId]);
 
   const { error: micError } = useAudioRecorder({
