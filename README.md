@@ -109,4 +109,4 @@ For Production = eas build --profile production --platform ios  --clear-cache *
 
 ## Submit Build to IOS (app specific password)
 
-$env:EXPO_APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"; eas submit --platform ios --latest
+$env:EXPO_APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"; eas submit --platform ios --latest ....
