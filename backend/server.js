@@ -745,7 +745,7 @@ wss.on('connection', (ws) => {
     if (type === 'create_session') {
       const { lang, userId, speakerGender, speakerAge } = message;
       const sessionId = uuidv4();
-      sessions.set(sessionId, {
+      const newSession = {
         host: ws, hostLang: lang, hostUserId: userId || null,
         hostVoiceProfile: { gender: speakerGender, age: speakerAge },
         guest: null, guestLang: null, guestUserId: null,
@@ -754,11 +754,12 @@ wss.on('connection', (ws) => {
           host: { paused: false, turnActive: false },
           guest: { paused: false, turnActive: false },
         },
-      });
+        createdAt: Date.now(),
+      };
+      sessions.set(sessionId, newSession);
       currentSessionId = sessionId;
       currentRole = 'host';
-      session.createdAt = Date.now();
-      console.log(`[LATENCY][CALL_CONNECT] Host created session ${sessionId} at ${session.createdAt} (Host lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
+      console.log(`[LATENCY][CALL_CONNECT] Host created session ${sessionId} at ${newSession.createdAt} (Host lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
       send(ws, { type: 'session_created', sessionId });
 
       if (userId) {
