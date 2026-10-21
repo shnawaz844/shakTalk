@@ -6,6 +6,7 @@ const { warmupSession, feedAudioChunk, closeSession } = require('./geminiService
 const { supabase } = require('./supabaseClient');
 const { uploadAudio } = require('./storageService');
 const { APP_NAME } = require('./app-config');
+const { TranslatorBot, createToken, LIVEKIT_ENABLED, LIVEKIT_URL } = require('./translatorBot');
 
 const PORT = process.env.PORT || 8080;
 const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://expo.dev/accounts/shahahmad/projects/shak-translate/builds/bb9de5af-858f-4444-948e-8a1a54ca988f';
@@ -687,6 +688,59 @@ function makeSessionCallbacks(session, sessionId, role) {
   };
 }
 
+// ── LiveKit call engine ──────────────────────────────────────────────────────
+// Both phones join a LiveKit room named after the session; a translator bot
+// joins too (see translatorBot.js). This socket keeps carrying call control,
+// subtitles and transcripts exactly as before.
+
+async function startLiveKitCall(session, sessionId) {
+  try {
+    const [hostToken, guestToken] = await Promise.all([
+      createToken(sessionId, 'host'),
+      createToken(sessionId, 'guest'),
+    ]);
+    send(session.host, { type: 'livekit_ready', url: LIVEKIT_URL, token: hostToken, identity: 'host', partnerIdentity: 'guest' });
+    send(session.guest, { type: 'livekit_ready', url: LIVEKIT_URL, token: guestToken, identity: 'guest', partnerIdentity: 'host' });
+
+    const bot = new TranslatorBot({
+      roomName: sessionId,
+      langs: { host: session.hostLang, guest: session.guestLang },
+      onText: (role, seg) => relayTranslationText(session, sessionId, role, seg),
+      onError: (err) => console.error(`[translatorBot] ${sessionId}: ${err.message}`),
+    });
+    session.bot = bot;
+    await bot.start();
+    if (!sessions.has(sessionId)) { bot.close(); return; }
+    send(session.host, { type: 'gemini_ready' });
+    send(session.guest, { type: 'gemini_ready' });
+  } catch (err) {
+    console.error(`[server] LiveKit call setup failed for ${sessionId}:`, err.message);
+    send(session.host, { type: 'error', message: 'Could not start the translated call: ' + err.message });
+    send(session.guest, { type: 'error', message: 'Could not start the translated call: ' + err.message });
+  }
+}
+
+/** Subtitles + transcript for what `role` said, in the shapes the app already handles. */
+function relayTranslationText(session, sessionId, role, seg) {
+  if (!sessions.has(sessionId)) return;
+  const speaker = role === 'host' ? session.host : session.guest;
+  const listener = getPartnerSocket(session, role);
+  const base = { originalText: seg.originalText, translatedText: seg.translatedText, turnId: seg.segId, isFinal: seg.isFinal };
+  send(speaker, { type: 'live_subtitle', speaker: 'self', ...base });
+  send(listener, { type: 'live_subtitle', speaker: 'partner', ...base });
+  if (!seg.isFinal) return;
+
+  send(speaker, { type: 'transcript', originalText: seg.originalText, translatedText: seg.translatedText, turnId: seg.segId });
+  send(listener, { type: 'translated_audio_final', originalText: seg.originalText, translatedText: seg.translatedText, turnId: seg.segId });
+
+  const senderUserId = role === 'host' ? session.hostUserId : session.guestUserId;
+  if (senderUserId) {
+    // Text only for now: the audio itself travels over LiveKit and isn't recorded.
+    dbInsertMessage(sessionId, senderUserId, role, seg.originalText, seg.translatedText, null, null)
+      .catch(e => console.error('[db] insertMessage failed:', e.message));
+  }
+}
+
 function cleanupSession(sessionId, disconnectedRole) {
   const session = sessions.get(sessionId);
   if (!session) return;
@@ -706,6 +760,7 @@ function cleanupSession(sessionId, disconnectedRole) {
 
   closeSession(sessionId, 'host');
   closeSession(sessionId, 'guest');
+  if (session.bot) session.bot.close().catch(() => {});
 
   dbEndConversation(sessionId).catch(e => console.error('[db] endConversation failed:', e.message));
   sessions.delete(sessionId);
@@ -731,6 +786,7 @@ wss.on('connection', (ws) => {
       const { lang, userId, speakerGender, speakerAge } = message;
       const sessionId = uuidv4();
       sessions.set(sessionId, {
+        hostEngine: message.engine === 'livekit' ? 'livekit' : 'legacy',
         host: ws, hostLang: lang, hostUserId: userId || null,
         hostVoiceProfile: { gender: speakerGender, age: speakerAge },
         guest: null, guestLang: null, guestUserId: null,
@@ -761,6 +817,17 @@ wss.on('connection', (ws) => {
       if (session.host === ws) { send(ws, { type: 'error', message: `Cannot join your own session as guest on the same connection.` }); return; }
       if (session.guest) { send(ws, { type: 'error', message: `Session "${sessionId}" already has a guest.` }); return; }
 
+      const guestEngine = message.engine === 'livekit' ? 'livekit' : 'legacy';
+      if (guestEngine !== session.hostEngine) {
+        send(ws, { type: 'error', message: 'Both phones must run the same app version to call each other. Please update the app.' });
+        return;
+      }
+      if (guestEngine === 'livekit' && !LIVEKIT_ENABLED) {
+        send(ws, { type: 'error', message: 'Server is not configured for LiveKit calls (LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).' });
+        return;
+      }
+      session.engine = guestEngine;
+
       session.guest = ws;
       session.guestLang = lang;
       session.guestUserId = userId || null;
@@ -771,6 +838,15 @@ wss.on('connection', (ws) => {
 
       send(session.host, { type: 'session_ready', role: 'host', sessionId, partnerLang: session.guestLang });
       send(session.guest, { type: 'session_ready', role: 'guest', sessionId, partnerLang: session.hostLang });
+
+      if (session.engine === 'livekit') {
+        startLiveKitCall(session, sessionId);
+        if (userId) {
+          dbUpdateConversationGuest(sessionId, userId, lang)
+            .catch(e => console.error('[db] updateConversationGuest failed:', e.message));
+        }
+        return;
+      }
 
       // Open persistent Gemini Live sessions for BOTH directions in parallel now
       // that both voice profiles are known. We await both before sending gemini_ready
@@ -865,6 +941,7 @@ wss.on('connection', (ws) => {
 
       if (!session) { send(ws, { type: 'error', message: 'Session not found.' }); return; }
       if (!session.host || !session.guest) return; // not fully connected yet — drop silently
+      if (session.engine === 'livekit') return; // audio travels over LiveKit, not this socket
 
       // Authoritative socket-based role resolution:
       const senderRole = ws === session.host ? 'host' : (ws === session.guest ? 'guest' : role);

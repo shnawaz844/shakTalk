@@ -1,4 +1,5 @@
-FROM node:20-alpine
+# Debian (glibc) base: @livekit/rtc-node ships no Alpine/musl binaries.
+FROM node:20-bookworm-slim
 
 # Create app directory
 WORKDIR /usr/src/app
