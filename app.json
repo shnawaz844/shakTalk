@@ -2,14 +2,14 @@
   "expo": {
     "name": "ShakTranslate",
     "slug": "shak-translate",
-    "owner": "shahahmad",
+    "owner": "shahnawaz8445",
     "scheme": "shaktranslate",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/fc77c2dc-9335-4c05-a058-d9f7af8f827e",
+      "url": "https://u.expo.dev/58b5ee24-3662-4bc4-b7d6-c30f39071e8f",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cis.shaktranslate",
-      "buildNumber": "33",
+      "buildNumber": "45",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -147,7 +147,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "fc77c2dc-9335-4c05-a058-d9f7af8f827e"
+        "projectId": "58b5ee24-3662-4bc4-b7d6-c30f39071e8f"
       }
     }
   }
