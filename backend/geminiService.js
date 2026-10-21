@@ -113,34 +113,122 @@ const SCRIPT_RANGES = {
   Ukrainian: /[\u0400-\u04FF]/u,
 };
 
+// Common romanized/Hinglish words (Hindi spoken in Latin letters)
+const HINGLISH_WORDS = new Set([
+  'kya', 'kar', 'rahe', 'raha', 'rahi', 'ho', 'hai', 'hain', 'nahi', 'nahin',
+  'main', 'mai', 'hum', 'aap', 'tum', 'kaise', 'kaisa', 'kaisi', 'kahan',
+  'kidhar', 'kab', 'kyun', 'kyu', 'baat', 'suno', 'bolo', 'achha', 'accha',
+  'thik', 'theek', 'haan', 'bhai', 'yaar', 'namaste', 'shukriya', 'samajh',
+  'gaya', 'gayi', 'gaye', 'hoga', 'hogi', 'honge', 'tha', 'thi', 'the',
+  'chal', 'chalo', 'karo', 'kiya', 'karenge', 'batao', 'dekho', 'pata',
+  'mujhe', 'tumhe', 'unhe', 'unko', 'uska', 'unka', 'mera', 'meri', 'mere',
+  'apna', 'apni', 'apne', 'kuch', 'sab', 'aur', 'par', 'bhi', 'bahut',
+  'kare', 'bolo', 'sunte', 'shuru', 'khatam', 'wala', 'wali', 'wale'
+]);
+
+// Common English stopwords (to detect English spoken when non-English was selected)
+const ENGLISH_WORDS = new Set([
+  'the', 'is', 'are', 'am', 'was', 'were', 'have', 'has', 'had', 'do', 'does',
+  'did', 'you', 'your', 'my', 'me', 'we', 'our', 'they', 'them', 'he', 'she',
+  'it', 'this', 'that', 'these', 'those', 'what', 'why', 'when', 'where',
+  'how', 'who', 'yes', 'no', 'not', 'can', 'could', 'will', 'would', 'should',
+  'doing', 'speaking', 'talking', 'listening', 'audible', 'hear', 'call',
+  'hello', 'okay', 'fine', 'good', 'morning', 'night', 'just', 'nothing',
+  'work', 'working', 'there', 'here', 'right', 'know', 'think', 'about'
+]);
+
 /**
- * Returns true only when `text` is confidently written in a DIFFERENT,
- * script-distinguishable language than `expectedLang` — never for languages
- * that share a script (can't tell those apart) and never when there isn't
- * enough text yet to judge (biases toward letting audio through rather than
- * blocking real speech on a false positive).
- *
- * Used for BOTH:
- *  • Output-side: checking translated text (prevents wrong-language audio
- *    reaching the listener).
- *  • Input-side: checking the speaker's raw inputTranscription (proximity
- *    gate — prevents partner's leaked voice from being re-translated).
+ * Returns true if the spoken text or translation indicates that the speaker
+ * spoke in a different language than expected (e.g. speaking Hindi when English
+ * was selected, or speaking English when Hindi was selected).
  */
-function scriptMismatch(text, expectedLang) {
-  if (!text) return false;
-  const expectedPattern = SCRIPT_RANGES[expectedLang];
-  if (!expectedPattern) return false;
+function isLanguageMismatch(originalText, translatedText, inputLang, outputLang) {
+  if (!originalText && !translatedText) return false;
 
-  const letters = (text.match(/\p{L}/gu) || []).length;
-  if (letters < 4) return false; // not enough signal yet
+  const orig = (originalText || '').trim();
+  const trans = (translatedText || '').trim();
 
-  if (expectedPattern.test(text)) return false; // has expected-script content — allow
+  // If input and output language are identical (e.g. English->English), no cross-language mismatch
+  if (inputLang.toLowerCase() === outputLang.toLowerCase()) return false;
 
-  for (const [lang, pattern] of Object.entries(SCRIPT_RANGES)) {
-    if (lang === expectedLang || pattern.source === expectedPattern.source) continue;
-    const otherMatches = (text.match(new RegExp(pattern.source, 'gu')) || []).length;
-    if (otherMatches >= letters * 0.5) return true; // confidently a different, distinguishable script
+  // ── 1. SCRIPT MISMATCH CHECK ─────────────────────────────────────────────
+  const inputPattern = SCRIPT_RANGES[inputLang];
+  if (inputPattern) {
+    const origLetters = (orig.match(/\p{L}/gu) || []).length;
+    if (origLetters >= 4) {
+      if (!inputPattern.test(orig)) {
+        for (const [lang, pat] of Object.entries(SCRIPT_RANGES)) {
+          if (lang === inputLang || pat.source === inputPattern.source) continue;
+          const otherMatches = (orig.match(new RegExp(pat.source, 'gu')) || []).length;
+          if (otherMatches >= origLetters * 0.5) {
+            console.log(`[isLanguageMismatch] 🛑 Script mismatch: Expected ${inputLang}, but input "${orig}" matches ${lang}`);
+            return true;
+          }
+        }
+      }
+    }
   }
+
+  // ── 2. ENGLISH SESSION RECEIVING HINDI / DEVANAGARI OR OTHER SCRIPTS ────
+  if (inputLang === 'English') {
+    if (/[ऀ-ॿ]/u.test(orig)) {
+      console.log(`[isLanguageMismatch] 🛑 Devanagari script detected in English session: "${orig}"`);
+      return true;
+    }
+    if (/[؀-ۿ]/u.test(orig)) {
+      console.log(`[isLanguageMismatch] 🛑 Arabic/Urdu script detected in English session: "${orig}"`);
+      return true;
+    }
+    if (/[\u0400-\u04FF]/u.test(orig)) {
+      console.log(`[isLanguageMismatch] 🛑 Cyrillic script detected in English session: "${orig}"`);
+      return true;
+    }
+    if (/[一-鿿]/u.test(orig)) {
+      console.log(`[isLanguageMismatch] 🛑 Chinese script detected in English session: "${orig}"`);
+      return true;
+    }
+
+    // ── 3. ENGLISH SESSION RECEIVING ROMANIZED HINDI (HINGLISH) ───────────
+    const words = orig.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
+    if (words.length >= 2) {
+      let hinglishCount = 0;
+      for (const w of words) {
+        if (HINGLISH_WORDS.has(w)) hinglishCount++;
+      }
+      if (hinglishCount >= 2 || (words.length >= 2 && hinglishCount / words.length >= 0.35)) {
+        console.log(`[isLanguageMismatch] 🛑 Romanized Hindi (Hinglish) detected in English session (${hinglishCount}/${words.length} words): "${orig}"`);
+        return true;
+      }
+    }
+  }
+
+  // ── 4. HINDI SESSION RECEIVING ENGLISH WORDS ──────────────────────────────
+  if (inputLang === 'Hindi') {
+    if (!/[ऀ-ॿ]/u.test(orig)) {
+      const words = orig.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        let englishCount = 0;
+        for (const w of words) {
+          if (ENGLISH_WORDS.has(w)) englishCount++;
+        }
+        if (englishCount >= 2 || (words.length >= 2 && englishCount / words.length >= 0.35)) {
+          console.log(`[isLanguageMismatch] 🛑 English speech detected in Hindi session (${englishCount}/${words.length} words): "${orig}"`);
+          return true;
+        }
+      }
+    }
+  }
+
+  // ── 5. PASSTHROUGH / ECHO CHECK ──────────────────────────────────────────
+  if (orig.length >= 4 && trans.length >= 4) {
+    const cleanO = orig.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const cleanT = trans.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    if (cleanO === cleanT) {
+      console.log(`[isLanguageMismatch] 🛑 Identical input/output detected ("${orig}" === "${trans}")`);
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -289,22 +377,23 @@ class LiveTranslationSession {
       return;
     }
 
-    // Cross-talk and script mismatch checks before emitting any burst
-    if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
-      if (this.fullOriginalText && scriptMismatch(this.fullOriginalText, this.inputLang)) {
-        console.log(`[LiveTranslationSession] 🛑 Cross-talk / script mismatch detected on input "${this.fullOriginalText.trim()}". Suppressing burst!`);
-        this.turnSuppressed = true;
-        this.inFlightBurstBuffers = [];
-        this.inFlightBurstBytes = 0;
-        this.outputAudioBuffers = [];
-        return;
-      }
-      if (this.fullTranslationText && scriptMismatch(this.fullTranslationText, this.outputLang)) {
-        console.log(`[LiveTranslationSession] 🛑 Output script mismatch detected on "${this.fullTranslationText.trim()}" (expected ${this.outputLang}). Suppressing burst!`);
-        this.turnSuppressed = true;
-        this.inFlightBurstBuffers = [];
-        this.inFlightBurstBytes = 0;
-        this.outputAudioBuffers = [];
+    // Cross-talk and language mismatch checks before emitting any burst
+    if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+      console.log(`[LiveTranslationSession] 🛑 Burst suppressed due to language mismatch (${this.inputLang}→${this.outputLang}): input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
+      this.turnSuppressed = true;
+      this.inFlightBurstBuffers = [];
+      this.inFlightBurstBytes = 0;
+      this.outputAudioBuffers = [];
+      return;
+    }
+
+    // CRITICAL: Gate chunk 0 so we NEVER leak wrong-language audio before input speech is verified!
+    // For the very first burst of a turn, hold it in buffer until we have at least 2 characters
+    // of transcribed input text (or until force=true at turnComplete).
+    if (!force && this.audioChunkIndex === 0 && this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
+      const textLen = (this.fullOriginalText || '').trim().length;
+      if (textLen < 2 && this.inFlightBurstBytes < 36000) {
+        // Hold in buffer until input transcription arrives (typically 50-100ms)
         return;
       }
     }
@@ -466,14 +555,11 @@ ABSOLUTE RULES (MANDATORY):
           if (part.text) {
             this.fullTranslationText += part.text;
 
-            if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
-              if (scriptMismatch(this.fullTranslationText, this.outputLang)) {
-                console.log(`[LiveTranslationSession] 🛑 Output script mismatch on "${this.fullTranslationText.trim()}". Suppressing!`);
-                this.turnSuppressed = true;
-                this.inFlightBurstBuffers = [];
-                this.inFlightBurstBytes = 0;
-                this.outputAudioBuffers = [];
-              }
+            if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+              this.turnSuppressed = true;
+              this.inFlightBurstBuffers = [];
+              this.inFlightBurstBytes = 0;
+              this.outputAudioBuffers = [];
             }
 
             if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
@@ -515,14 +601,11 @@ ABSOLUTE RULES (MANDATORY):
         if (msg.serverContent.outputTranscription.text) {
           this.fullTranslationText += msg.serverContent.outputTranscription.text;
 
-          if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
-            if (scriptMismatch(this.fullTranslationText, this.outputLang)) {
-              console.log(`[LiveTranslationSession] 🛑 Output transcription mismatch on "${this.fullTranslationText.trim()}". Suppressing!`);
-              this.turnSuppressed = true;
-              this.inFlightBurstBuffers = [];
-              this.inFlightBurstBytes = 0;
-              this.outputAudioBuffers = [];
-            }
+          if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+            this.turnSuppressed = true;
+            this.inFlightBurstBuffers = [];
+            this.inFlightBurstBytes = 0;
+            this.outputAudioBuffers = [];
           }
 
           if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
@@ -541,44 +624,34 @@ ABSOLUTE RULES (MANDATORY):
           this.fullOriginalText += msg.serverContent.inputTranscription.text;
 
           // Cross-talk and language enforcement check:
-          if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
-            if (scriptMismatch(this.fullOriginalText, this.inputLang)) {
-              console.log(`[LiveTranslationSession] 🛑 Cross-talk / script mismatch detected on input "${this.fullOriginalText.trim()}" for ${this.inputLang}→${this.outputLang}. Suppressing turn!`);
-              this.turnSuppressed = true;
-              this.inFlightBurstBuffers = [];
-              this.inFlightBurstBytes = 0;
-              this.outputAudioBuffers = [];
-            }
+          if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+            this.turnSuppressed = true;
+            this.inFlightBurstBuffers = [];
+            this.inFlightBurstBytes = 0;
+            this.outputAudioBuffers = [];
           }
 
-          // Immediately update live subtitle for self so the speaker sees their speech on screen without waiting for translation output!
-          if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
-            this.callbacks.onTranscriptionChunk({
-              turnId: this.turnId || `turn-${Date.now()}`,
-              originalText: this.fullOriginalText.trim(),
-              translatedText: this.fullTranslationText.trim(),
-            });
+          // If language is verified and we have buffered chunks waiting, release them now!
+          if (!this.turnSuppressed) {
+            if (this.inFlightBurstBuffers.length > 0 && this.audioChunkIndex === 0) {
+              this._emitBurst(false);
+            }
+
+            if (this.callbacks.onTranscriptionChunk) {
+              this.callbacks.onTranscriptionChunk({
+                turnId: this.turnId || `turn-${Date.now()}`,
+                originalText: this.fullOriginalText.trim(),
+                translatedText: this.fullTranslationText.trim(),
+              });
+            }
           }
         }
       }
 
       if (msg.serverContent && msg.serverContent.turnComplete) {
         // Final verification before flushing
-        if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
-          if (this.fullOriginalText && scriptMismatch(this.fullOriginalText, this.inputLang)) {
-            this.turnSuppressed = true;
-          }
-          if (this.fullTranslationText && scriptMismatch(this.fullTranslationText, this.outputLang)) {
-            this.turnSuppressed = true;
-          }
-          // If input text and output text are identical (e.g. English echoed into an English translation),
-          // suppress it so cross-talk isn't relayed as a fake translation
-          const cleanOrig = this.fullOriginalText.trim().toLowerCase();
-          const cleanTrans = this.fullTranslationText.trim().toLowerCase();
-          if (cleanOrig.length >= 4 && cleanOrig === cleanTrans) {
-            console.log(`[LiveTranslationSession] 🛑 Suppressing identical input/output turn ("${cleanOrig}")`);
-            this.turnSuppressed = true;
-          }
+        if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+          this.turnSuppressed = true;
         }
 
         // Final flush of any remaining burst audio.
@@ -602,7 +675,7 @@ ABSOLUTE RULES (MANDATORY):
 
         if (this.turnId) {
           const streamDurationMs = this.turnFirstChunkAt ? Date.now() - this.turnFirstChunkAt : null;
-          console.log(`[LATENCY][server] Turn ${this.turnId} (${this.inputLang}->${this.outputLang}): complete. chunks=${this.audioChunkIndex}, streamDurationMs=${streamDurationMs}, maxInterChunkGapMs=${this.turnMaxGapMs}, suppressed=${wasSuppressed}`);
+          console.log(`[LATENCY][server] Turn ${this.turnId} (${this.inputLang}->${this.outputLang}): complete. chunks=${this.audioChunkIndex}, streamDurationMs=${streamDurationMs}, suppressed=${wasSuppressed}, input="${this.fullOriginalText.trim()}", output="${this.fullTranslationText.trim()}"`);
         }
 
         if (this.callbacks.onTurnComplete) {
