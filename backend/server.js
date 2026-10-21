@@ -625,9 +625,11 @@ function makeSessionCallbacks(session, sessionId, role) {
 
       send(senderSocket(), { type: 'processing_done', turnId: result.turnId });
 
-      if (rs.paused) {
-        console.log(`[server] Turn ${result.turnId} (${role}) completed while muted — suppressing delivery.`);
+      if (result.suppressed || rs.paused || (!result.translatedAudioBase64 && !result.translatedText)) {
+        console.log(`[server] Turn ${result.turnId} (${role}) suppressed/muted — suppressing delivery to partner.`);
         send(partnerSocket(), { type: 'lock_released' });
+        send(senderSocket(), { type: 'live_subtitle_clear' });
+        send(partnerSocket(), { type: 'live_subtitle_clear' });
         return;
       }
 

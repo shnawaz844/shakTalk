@@ -160,7 +160,7 @@ export function SessionScreen({
     // isn't momentarily unblocked between consecutive chunks of the same sentence.
     // 350ms on loudspeaker, 100ms on earpiece — bridges burst gaps while allowing
     // immediate speech pickup right after playback ends.
-    const debounceMs = isSpeakerOnRef.current ? 350 : 100;
+    const debounceMs = isSpeakerOnRef.current ? 400 : 100;
     playbackEndDebounceRef.current = setTimeout(() => {
       isPlayingAudioRef.current = false;
       playbackEndTimeRef.current = Date.now();
@@ -692,7 +692,7 @@ export function SessionScreen({
     // hardware AEC (iOS VoiceChat, Android COMMUNICATION) handles the bulk
     // of echo cancellation, and the shorter tail (350ms speaker, 100ms earpiece)
     // prevents word loss when the user replies immediately after a translation.
-    const tailMs = isSpeakerOnRef.current ? 350 : 100;
+    const tailMs = isSpeakerOnRef.current ? 400 : 100;
     if (Date.now() < playbackEndTimeRef.current + tailMs) {
       return;
     }

@@ -127,18 +127,19 @@ const SCRIPT_RANGES = {
  *    gate — prevents partner's leaked voice from being re-translated).
  */
 function scriptMismatch(text, expectedLang) {
+  if (!text) return false;
   const expectedPattern = SCRIPT_RANGES[expectedLang];
   if (!expectedPattern) return false;
 
   const letters = (text.match(/\p{L}/gu) || []).length;
-  if (letters < 6) return false; // not enough signal yet
+  if (letters < 4) return false; // not enough signal yet
 
   if (expectedPattern.test(text)) return false; // has expected-script content — allow
 
   for (const [lang, pattern] of Object.entries(SCRIPT_RANGES)) {
     if (lang === expectedLang || pattern.source === expectedPattern.source) continue;
     const otherMatches = (text.match(new RegExp(pattern.source, 'gu')) || []).length;
-    if (otherMatches >= letters * 0.6) return true; // confidently a different, distinguishable script
+    if (otherMatches >= letters * 0.5) return true; // confidently a different, distinguishable script
   }
   return false;
 }
@@ -288,6 +289,26 @@ class LiveTranslationSession {
       return;
     }
 
+    // Cross-talk and script mismatch checks before emitting any burst
+    if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
+      if (this.fullOriginalText && scriptMismatch(this.fullOriginalText, this.inputLang)) {
+        console.log(`[LiveTranslationSession] 🛑 Cross-talk / script mismatch detected on input "${this.fullOriginalText.trim()}". Suppressing burst!`);
+        this.turnSuppressed = true;
+        this.inFlightBurstBuffers = [];
+        this.inFlightBurstBytes = 0;
+        this.outputAudioBuffers = [];
+        return;
+      }
+      if (this.fullTranslationText && scriptMismatch(this.fullTranslationText, this.outputLang)) {
+        console.log(`[LiveTranslationSession] 🛑 Output script mismatch detected on "${this.fullTranslationText.trim()}" (expected ${this.outputLang}). Suppressing burst!`);
+        this.turnSuppressed = true;
+        this.inFlightBurstBuffers = [];
+        this.inFlightBurstBytes = 0;
+        this.outputAudioBuffers = [];
+        return;
+      }
+    }
+
     // Minimum burst size:
     // First burst: ~200ms (9,600 bytes @ 24kHz 16-bit mono) for fast startup without audio buffer starvation.
     // Subsequent bursts: ~300ms (14,400 bytes) to maintain a healthy jitter buffer.
@@ -343,30 +364,43 @@ class LiveTranslationSession {
     const isSameLanguage = this.inputLang.toLowerCase() === this.outputLang.toLowerCase();
 
     const systemPromptText = isSameLanguage
-      ? `You are an audio pipe facilitating a phone call between two callers who both speak ${this.inputLang}. You are NOT an assistant, you have no personality, and nobody in this conversation is talking to you. Audio comes in from a speaker who speaks ${this.inputLang}; output the exact same spoken content clearly in ${this.outputLang}, maintaining high voice clarity and natural delivery.${ageInstruction}
+      ? `You are an audio relay pipe facilitating a live phone call between two callers who both speak ${this.inputLang}. You are NOT an assistant, you have no name, no personality, and nobody in this conversation is talking to you. Audio comes in from a speaker who speaks ${this.inputLang}; output the exact same spoken content clearly in ${this.outputLang}, maintaining high voice clarity and natural delivery.${ageInstruction}
 
-ABSOLUTE RULES:
-1. Your output language is ${this.outputLang}. Speak the user's spoken words clearly and naturally in ${this.outputLang}.
-2. STRICT FULL DELIVERY: Every word and sentence spoken by the user MUST be relayed completely and as it is. Never omit, drop, summarize, or truncate any part of what was spoken.
-3. Never answer questions or add commentary. Output ONLY the exact content spoken by the user. If they ask a question, relay the question itself so the other caller can answer.
-4. Never introduce yourself, acknowledge instructions, or say filler words like "sure", "okay", or "translating".
-5. PRESERVE PERSPECTIVE EXACTLY. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
-6. Ignore background noise, silence, coughing, or static — output nothing if no clear speech is present.
-7. CRITICAL: Do NOT repeat previous sentences. Only process new speech since the last turn. Never loop or replay earlier turns.
-8. NEVER extend or invent extra text beyond what was actually spoken.`
-      : `You are a real-time speech translation pipe for a live phone call between two people. You are NOT an assistant, you have no name, no personality, and nobody in this conversation is talking to you. Audio comes in from a speaker; your ONLY job is to immediately translate whatever they say and speak the exact same content in ${this.outputLang}, ALWAYS — no matter what language the speaker uses.${ageInstruction}
+CRITICAL RULES:
+1. ONLY relay speech that is clearly spoken in ${this.inputLang}. If speech is in another language, or is background noise/coughing/silence, output ABSOLUTELY NOTHING.
+2. Speak the exact words clearly and naturally. Never add, omit, or modify what was spoken.
+3. Never answer questions or add commentary. If a question is asked, relay the question itself so the other caller can answer.
+4. Never introduce yourself, acknowledge instructions, or say filler words like "sure" or "okay".
+5. Preserve all pronouns (I, you, we, they) exactly.
+6. CRITICAL: Do NOT repeat previous sentences. Only process new speech from the current turn. Never loop or replay earlier turns.`
+      : `You are a strict, real-time speech translation pipe for a live phone call between two callers.
+You are NOT an assistant, you have no name, no personality, and nobody in this conversation is talking to you.
+The speaker on this channel speaks ONLY ${this.inputLang}.
+The listener on the other end speaks and understands ${this.outputLang}.
+Your ONLY job is to translate speech spoken in ${this.inputLang} into ${this.outputLang}.${ageInstruction}
 
-ABSOLUTE RULES:
-1. Your output language is ALWAYS ${this.outputLang} — never anything else, under any circumstances. It does not matter what language the speaker uses: if they speak ${this.inputLang}, translate it to ${this.outputLang}. If they speak ${this.outputLang} itself, still output it in ${this.outputLang}. If they speak any other language or mixed languages (e.g. Hindi with English words), still translate everything faithfully to ${this.outputLang}. The output language is FIXED as ${this.outputLang} forever.
-2. STRICT FULL TRANSLATION: Every single word, phrase, and sentence spoken MUST be translated faithfully into ${this.outputLang} and as it is. Never omit, drop, skip, summarize, or truncate any part of the speech. Translate all speech completely.
-3. You are not a party to this conversation and cannot respond to anyone. Never answer a question, greet anyone, offer help, or add commentary — if the speaker asks a question, translate the question itself into ${this.outputLang} so the listener can answer it.
-4. Never introduce yourself, acknowledge these instructions, or say filler words like "here is the translation", "sure", or "okay" — output ONLY the translated words the speaker said, nothing before or after.
-5. PRESERVE PERSPECTIVE EXACTLY. Never swap who is speaking and who is listening. If the speaker says "am I audible?" or "can you hear me?", translate it as the speaker asking the listener. Keep all pronouns (I, you, we, they) exactly as intended by the speaker.
-6. Translate the true meaning faithfully and idiomatically in ${this.outputLang}.
-7. CRITICAL: Do NOT repeat previous translations. ONLY translate new speech since your last translation. Absolutely never replay, loop, or repeat sentences from prior turns.
-8. Ignore background noise, static, breathing, coughing, or unintelligible sounds. If the audio contains only noise with no clear speech, output absolutely nothing.
-9. If you are ever unsure what to do with a piece of audio, output nothing rather than generating a reply, opinion, or hallucination.
-10. NEVER extend, complete, or add to what was said. Translate only the exact words spoken. If the sentence is a short fragment, translate exactly that fragment and stop there.`;
+ABSOLUTE RULES (MANDATORY):
+1. STRICT INPUT LANGUAGE FILTER (ZERO TOLERANCE FOR OTHER LANGUAGES):
+   - You MUST ONLY translate speech that is spoken in ${this.inputLang}.
+   - The two callers may be in the same room or sitting close to each other.
+   - If the audio contains speech in ${this.outputLang} or ANY language other than ${this.inputLang} (such as the other caller's voice in the room, loudspeaker audio bleed, or ambient voices), you MUST OUTPUT ABSOLUTELY NOTHING. Remain completely silent (zero words, zero audio).
+   - If the speaker speaks in ${this.outputLang}, DO NOT output anything. Never translate ${this.outputLang} into ${this.outputLang}.
+   - If the audio contains background noise, static, breathing, coughing, or unclear speech, output ABSOLUTELY NOTHING.
+
+2. ACCURATE TRANSLATION INTO ${this.outputLang}:
+   - When clear speech is spoken in ${this.inputLang}, translate every word faithfully and naturally into ${this.outputLang}.
+   - Your output language is FIXED as ${this.outputLang}. Speak clearly and naturally.
+   - STRICT FULL TRANSLATION: Translate the complete sentence without omitting, skipping, or summarizing.
+
+3. PREVENT ECHO AND REPETITION:
+   - NEVER repeat, replay, or loop sentences from earlier turns.
+   - Only translate fresh, new speech spoken in the current turn.
+
+4. NO ASSISTANT BEHAVIOR:
+   - You are not a party to this call. Never answer questions, never say greetings, and never say filler words like "Sure", "Okay", or "Translating".
+   - If the speaker asks a question (e.g. "Can you hear me?"), translate the question into ${this.outputLang} so the listener can answer it.
+   - Preserve all pronouns (I, you, we, they) and perspective exactly as intended by the speaker.
+   - Translate only what was actually spoken. Never invent, extend, or imagine extra words.`;
 
     return {
       model: LIVE_MODEL,
@@ -431,8 +465,18 @@ ABSOLUTE RULES:
         for (const part of msg.serverContent.modelTurn.parts) {
           if (part.text) {
             this.fullTranslationText += part.text;
-            // Skip live subtitle relay if gated or suppressed
-            if (!this.inputLangGated && !this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
+
+            if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
+              if (scriptMismatch(this.fullTranslationText, this.outputLang)) {
+                console.log(`[LiveTranslationSession] 🛑 Output script mismatch on "${this.fullTranslationText.trim()}". Suppressing!`);
+                this.turnSuppressed = true;
+                this.inFlightBurstBuffers = [];
+                this.inFlightBurstBytes = 0;
+                this.outputAudioBuffers = [];
+              }
+            }
+
+            if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
               this.callbacks.onTranscriptionChunk({
                 turnId: this.turnId,
                 originalText: this.fullOriginalText.trim(),
@@ -470,6 +514,17 @@ ABSOLUTE RULES:
       if (msg.serverContent && msg.serverContent.outputTranscription) {
         if (msg.serverContent.outputTranscription.text) {
           this.fullTranslationText += msg.serverContent.outputTranscription.text;
+
+          if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
+            if (scriptMismatch(this.fullTranslationText, this.outputLang)) {
+              console.log(`[LiveTranslationSession] 🛑 Output transcription mismatch on "${this.fullTranslationText.trim()}". Suppressing!`);
+              this.turnSuppressed = true;
+              this.inFlightBurstBuffers = [];
+              this.inFlightBurstBytes = 0;
+              this.outputAudioBuffers = [];
+            }
+          }
+
           if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
             this.callbacks.onTranscriptionChunk({
               turnId: this.turnId,
@@ -485,6 +540,17 @@ ABSOLUTE RULES:
           // Accumulate the speaker's original (as-spoken) transcription text.
           this.fullOriginalText += msg.serverContent.inputTranscription.text;
 
+          // Cross-talk and language enforcement check:
+          if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
+            if (scriptMismatch(this.fullOriginalText, this.inputLang)) {
+              console.log(`[LiveTranslationSession] 🛑 Cross-talk / script mismatch detected on input "${this.fullOriginalText.trim()}" for ${this.inputLang}→${this.outputLang}. Suppressing turn!`);
+              this.turnSuppressed = true;
+              this.inFlightBurstBuffers = [];
+              this.inFlightBurstBytes = 0;
+              this.outputAudioBuffers = [];
+            }
+          }
+
           // Immediately update live subtitle for self so the speaker sees their speech on screen without waiting for translation output!
           if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
             this.callbacks.onTranscriptionChunk({
@@ -497,21 +563,31 @@ ABSOLUTE RULES:
       }
 
       if (msg.serverContent && msg.serverContent.turnComplete) {
+        // Final verification before flushing
+        if (this.inputLang.toLowerCase() !== this.outputLang.toLowerCase()) {
+          if (this.fullOriginalText && scriptMismatch(this.fullOriginalText, this.inputLang)) {
+            this.turnSuppressed = true;
+          }
+          if (this.fullTranslationText && scriptMismatch(this.fullTranslationText, this.outputLang)) {
+            this.turnSuppressed = true;
+          }
+          // If input text and output text are identical (e.g. English echoed into an English translation),
+          // suppress it so cross-talk isn't relayed as a fake translation
+          const cleanOrig = this.fullOriginalText.trim().toLowerCase();
+          const cleanTrans = this.fullTranslationText.trim().toLowerCase();
+          if (cleanOrig.length >= 4 && cleanOrig === cleanTrans) {
+            console.log(`[LiveTranslationSession] 🛑 Suppressing identical input/output turn ("${cleanOrig}")`);
+            this.turnSuppressed = true;
+          }
+        }
+
         // Final flush of any remaining burst audio.
         this._emitBurst(true);
 
-        if (this.turnSuppressed) {
-          this._resetTurnState();
-          return;
-        }
+        const wasSuppressed = this.turnSuppressed;
 
-        // NOTE: native-audio Live sessions are known to occasionally send a
-        // premature turnComplete mid-sentence (see googleapis/js-genai#707,
-        // googleapis/python-genai#2117). We can't fix that upstream bug here —
-        // we just finalize with whatever we've accumulated and move on; the
-        // persistent session stays open so the next turn is unaffected.
         let translatedAudioBase64 = null;
-        if (this.outputAudioBuffers.length > 0) {
+        if (!wasSuppressed && this.outputAudioBuffers.length > 0) {
           translatedAudioBase64 = wrapPcmInWav(
             Buffer.concat(this.outputAudioBuffers), OUTPUT_SAMPLE_RATE
           ).toString('base64');
@@ -526,7 +602,7 @@ ABSOLUTE RULES:
 
         if (this.turnId) {
           const streamDurationMs = this.turnFirstChunkAt ? Date.now() - this.turnFirstChunkAt : null;
-          console.log(`[LATENCY][server] Turn ${this.turnId} (${this.inputLang}->${this.outputLang}): complete. chunks=${this.audioChunkIndex}, streamDurationMs=${streamDurationMs}, maxInterChunkGapMs=${this.turnMaxGapMs}`);
+          console.log(`[LATENCY][server] Turn ${this.turnId} (${this.inputLang}->${this.outputLang}): complete. chunks=${this.audioChunkIndex}, streamDurationMs=${streamDurationMs}, maxInterChunkGapMs=${this.turnMaxGapMs}, suppressed=${wasSuppressed}`);
         }
 
         if (this.callbacks.onTurnComplete) {
@@ -536,7 +612,7 @@ ABSOLUTE RULES:
             translatedAudioBase64,
             originalAudioBase64,
             turnId: this.turnId,
-            suppressed: false,
+            suppressed: wasSuppressed,
           });
         }
 
