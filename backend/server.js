@@ -757,6 +757,7 @@ wss.on('connection', (ws) => {
       });
       currentSessionId = sessionId;
       currentRole = 'host';
+      const session = sessions.get(sessionId);
       session.createdAt = Date.now();
       console.log(`[LATENCY][CALL_CONNECT] Host created session ${sessionId} at ${session.createdAt} (Host lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
       send(ws, { type: 'session_created', sessionId });
