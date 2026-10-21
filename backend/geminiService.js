@@ -189,13 +189,15 @@ function isLanguageMismatch(originalText, translatedText, inputLang, outputLang)
     }
 
     // ── 3. ENGLISH SESSION RECEIVING ROMANIZED HINDI (HINGLISH) ───────────
+    // Threshold: >= 4 Hinglish words AND >= 40% of total words must be Hinglish.
+    // This prevents false positives like short phrases with common English-Hindi overlaps.
     const words = orig.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
-    if (words.length >= 2) {
+    if (words.length >= 4) {
       let hinglishCount = 0;
       for (const w of words) {
         if (HINGLISH_WORDS.has(w)) hinglishCount++;
       }
-      if (hinglishCount >= 2 || (words.length >= 2 && hinglishCount / words.length >= 0.35)) {
+      if (hinglishCount >= 4 && hinglishCount / words.length >= 0.40) {
         console.log(`[isLanguageMismatch] 🛑 Romanized Hindi (Hinglish) detected in English session (${hinglishCount}/${words.length} words): "${orig}"`);
         return true;
       }
@@ -203,15 +205,17 @@ function isLanguageMismatch(originalText, translatedText, inputLang, outputLang)
   }
 
   // ── 4. HINDI SESSION RECEIVING ENGLISH WORDS ──────────────────────────────
+  // Only block if >= 4 English words AND >= 40% ratio to avoid false positives
+  // like short English phrases mixed into Hindi Romanized speech.
   if (inputLang === 'Hindi') {
     if (!/[ऀ-ॿ]/u.test(orig)) {
       const words = orig.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
-      if (words.length >= 2) {
+      if (words.length >= 4) {
         let englishCount = 0;
         for (const w of words) {
           if (ENGLISH_WORDS.has(w)) englishCount++;
         }
-        if (englishCount >= 2 || (words.length >= 2 && englishCount / words.length >= 0.35)) {
+        if (englishCount >= 4 && englishCount / words.length >= 0.40) {
           console.log(`[isLanguageMismatch] 🛑 English speech detected in Hindi session (${englishCount}/${words.length} words): "${orig}"`);
           return true;
         }
@@ -372,13 +376,16 @@ class LiveTranslationSession {
     if (this.inFlightBurstBuffers.length === 0) return;
 
     if (this.turnSuppressed) {
+      // Already suppressed — drain buffers silently without re-checking mismatch
       this.inFlightBurstBuffers = [];
       this.inFlightBurstBytes = 0;
       return;
     }
 
-    // Cross-talk and language mismatch checks before emitting any burst
-    if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+    // Cross-talk and language mismatch checks before emitting any burst.
+    // Only check if we have enough original text to make a reliable decision (>= 3 chars).
+    const origLen = (this.fullOriginalText || '').trim().length;
+    if (origLen >= 3 && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
       console.log(`[LiveTranslationSession] 🛑 Burst suppressed due to language mismatch (${this.inputLang}→${this.outputLang}): input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
       this.turnSuppressed = true;
       this.inFlightBurstBuffers = [];
@@ -471,21 +478,26 @@ Your ONLY job is to translate speech spoken in ${this.inputLang} into ${this.out
 ABSOLUTE RULES (MANDATORY):
 1. STRICT INPUT LANGUAGE FILTER (ZERO TOLERANCE FOR OTHER LANGUAGES):
    - You MUST ONLY translate speech that is spoken in ${this.inputLang}.
-   - The two callers may be in the same room or sitting close to each other.
-   - If the audio contains speech in ${this.outputLang} or ANY language other than ${this.inputLang} (such as the other caller's voice in the room, loudspeaker audio bleed, or ambient voices), you MUST OUTPUT ABSOLUTELY NOTHING. Remain completely silent (zero words, zero audio).
+   - The two callers are on a phone call, NOT in the same room. This channel receives ONLY the mic input from a ${this.inputLang} speaker.
+   - If the audio contains speech in ${this.outputLang} or ANY language other than ${this.inputLang}, you MUST OUTPUT ABSOLUTELY NOTHING. Remain completely silent (zero words, zero audio).
    - If the speaker speaks in ${this.outputLang}, DO NOT output anything. Never translate ${this.outputLang} into ${this.outputLang}.
    - If the audio contains background noise, static, breathing, coughing, or unclear speech, output ABSOLUTELY NOTHING.
 
-2. ACCURATE TRANSLATION INTO ${this.outputLang}:
+2. SPEAKER ECHO / LOUDSPEAKER BLEED — ABSOLUTE SILENCE RULE:
+   - The phone may have previously played a ${this.outputLang} translation through its loudspeaker.
+   - If you hear audio that sounds like ${this.outputLang} speech bleeding through from the phone's speaker or room echo, you MUST OUTPUT ABSOLUTELY NOTHING.
+   - Any ${this.outputLang} audio in the input is ALWAYS loudspeaker bleed or echo — NEVER the designated speaker talking. Ignore it completely.
+
+3. ACCURATE TRANSLATION INTO ${this.outputLang}:
    - When clear speech is spoken in ${this.inputLang}, translate every word faithfully and naturally into ${this.outputLang}.
    - Your output language is FIXED as ${this.outputLang}. Speak clearly and naturally.
    - STRICT FULL TRANSLATION: Translate the complete sentence without omitting, skipping, or summarizing.
 
-3. PREVENT ECHO AND REPETITION:
+4. PREVENT ECHO AND REPETITION:
    - NEVER repeat, replay, or loop sentences from earlier turns.
    - Only translate fresh, new speech spoken in the current turn.
 
-4. NO ASSISTANT BEHAVIOR:
+5. NO ASSISTANT BEHAVIOR:
    - You are not a party to this call. Never answer questions, never say greetings, and never say filler words like "Sure", "Okay", or "Translating".
    - If the speaker asks a question (e.g. "Can you hear me?"), translate the question into ${this.outputLang} so the listener can answer it.
    - Preserve all pronouns (I, you, we, they) and perspective exactly as intended by the speaker.
@@ -521,10 +533,12 @@ ABSOLUTE RULES (MANDATORY):
           automaticActivityDetection: {
             prefixPaddingMs: 300,
             // How long Gemini waits after speech ends before finalising the turn.
-            // 500ms balances snappy detection with not clipping natural mid-sentence
-            // pauses (thinking, breathing, emphasis). 300ms was too aggressive for
-            // Hindi speakers who frequently pause within sentences, causing word loss.
-            silenceDurationMs: 500,
+            // Increased to 1000ms: Hindi/Urdu speakers frequently pause mid-sentence
+            // (for breathing, emphasis, or code-switching). 500ms was too aggressive
+            // and caused multi-fragment turns with 17-22s VOICE_TO_PARTNER latency.
+            // At 1000ms, complete sentences are captured in a single turn, and
+            // Gemini translates them end-to-end — dramatically reducing total latency.
+            silenceDurationMs: 1000,
           },
         },
       },
@@ -555,7 +569,9 @@ ABSOLUTE RULES (MANDATORY):
           if (part.text) {
             this.fullTranslationText += part.text;
 
-            if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+            // Only run mismatch check if NOT already suppressed — avoids calling
+            // isLanguageMismatch() 30-50 times per turn (was causing log spam + perf waste).
+            if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
               this.turnSuppressed = true;
               this.inFlightBurstBuffers = [];
               this.inFlightBurstBytes = 0;
@@ -601,7 +617,8 @@ ABSOLUTE RULES (MANDATORY):
         if (msg.serverContent.outputTranscription.text) {
           this.fullTranslationText += msg.serverContent.outputTranscription.text;
 
-          if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+          // Only check if not already suppressed — prevents duplicate calls per turn.
+          if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
             this.turnSuppressed = true;
             this.inFlightBurstBuffers = [];
             this.inFlightBurstBytes = 0;
@@ -623,8 +640,9 @@ ABSOLUTE RULES (MANDATORY):
           // Accumulate the speaker's original (as-spoken) transcription text.
           this.fullOriginalText += msg.serverContent.inputTranscription.text;
 
-          // Cross-talk and language enforcement check:
-          if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+          // Cross-talk and language enforcement check.
+          // Only check if not already suppressed — prevents 30-50 duplicate calls per turn.
+          if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
             this.turnSuppressed = true;
             this.inFlightBurstBuffers = [];
             this.inFlightBurstBytes = 0;
@@ -649,8 +667,8 @@ ABSOLUTE RULES (MANDATORY):
       }
 
       if (msg.serverContent && msg.serverContent.turnComplete) {
-        // Final verification before flushing
-        if (isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
+        // Final verification before flushing — only if not already suppressed
+        if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
           this.turnSuppressed = true;
         }
 
