@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { useAudioRecorder as useAudioStudioRecorder } from '@siteed/audio-studio';
 import type { AudioDataEvent } from '@siteed/audio-studio';
-import { requestRecordingPermissionsAsync, getRecordingPermissionsAsync } from 'expo-audio';
+import { requestRecordingPermissionsAsync, getRecordingPermissionsAsync, setIsAudioActiveAsync } from 'expo-audio';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONTINUOUS PCM STREAMING CAPTURE
@@ -323,12 +323,18 @@ export function useAudioRecorder({ enabled, onChunk }: AudioRecorderOptions) {
             });
 
           try {
+            if (Platform.OS === 'ios') {
+              await setIsAudioActiveAsync(true).catch(() => {});
+            }
             await startNativeCapture();
           } catch (initialErr) {
             if (cancelled) return;
             console.warn('[useAudioRecorder] startRecording failed, retrying in 200ms:', initialErr);
             await new Promise((r) => setTimeout(r, 200));
             if (cancelled) return;
+            if (Platform.OS === 'ios') {
+              await setIsAudioActiveAsync(true).catch(() => {});
+            }
             await startNativeCapture();
           }
 

@@ -897,6 +897,14 @@ wss.on('connection', (ws) => {
       if (!senderRole) return;
 
       const rs = session.roleState[senderRole];
+      if (rs) {
+        if (!rs.receivedChunkCount) rs.receivedChunkCount = 0;
+        rs.receivedChunkCount++;
+        if (rs.receivedChunkCount === 1 || rs.receivedChunkCount % 50 === 0) {
+          console.log(`[server] audio_stream_chunk received from ${senderRole} in session ${sessionId} (chunks: ${rs.receivedChunkCount}, bytes: ${audioBase64 ? audioBase64.length : 0})`);
+        }
+      }
+
       if (rs && !rs.turnActive) {
         rs.turnActive = true;
         rs.turnSpeechStartedAt = clientSentAt || Date.now();

@@ -161,9 +161,28 @@ export function SessionScreen({
   // between streaming audio bursts don't briefly reopen the mic window and
   // let loudspeaker bleed through to Gemini (causing the echo loop).
   const playbackEndDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Watchdog timer: forces isPlayingAudioRef back to false if no audio or end event arrives within 4 seconds
+  const playbackWatchdogTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetPlaybackWatchdog = useCallback(() => {
+    if (playbackWatchdogTimeoutRef.current) clearTimeout(playbackWatchdogTimeoutRef.current);
+    playbackWatchdogTimeoutRef.current = setTimeout(() => {
+      if (isPlayingAudioRef.current) {
+        console.log('[SessionScreen] Playback watchdog triggered: releasing mic gate after timeout.');
+        isPlayingAudioRef.current = false;
+        playbackEndTimeRef.current = Date.now();
+        setIsPlayingAudio(false);
+      }
+      playbackWatchdogTimeoutRef.current = null;
+    }, 4000);
+  }, []);
 
   const schedulePlaybackEnd = useCallback(() => {
     if (playbackEndDebounceRef.current) clearTimeout(playbackEndDebounceRef.current);
+    if (playbackWatchdogTimeoutRef.current) {
+      clearTimeout(playbackWatchdogTimeoutRef.current);
+      playbackWatchdogTimeoutRef.current = null;
+    }
     // Debounce to smooth over inter-chunk gaps in streaming audio so the mic
     // isn't momentarily unblocked between consecutive chunks of the same sentence.
     // 350ms on loudspeaker, 100ms on earpiece — bridges burst gaps while allowing
@@ -183,12 +202,7 @@ export function SessionScreen({
         const pl = createAudioPlaylist({ loop: 'none', updateInterval: 200 });
         nativePlaylistRef.current = pl;
         pl.addListener('playlistStatusUpdate', (status) => {
-          // Only schedule playback-end when:
-          //  1. The final audio marker has been received (all chunks sent by server), AND
-          //  2. No chunks are still being written/queued (nativePendingChunksRef === 0), AND
-          //  3. The playlist has genuinely finished playing (didJustFinish, or stopped at last track)
-          const allChunksReceived = nativeTurnFinalReceivedRef.current && nativePendingChunksRef.current === 0;
-          if (allChunksReceived && (status.didJustFinish || (!status.playing && status.trackCount > 0 && status.currentIndex >= status.trackCount - 1))) {
+          if (status.didJustFinish || (!status.playing && status.trackCount > 0 && status.currentIndex >= status.trackCount - 1)) {
             schedulePlaybackEnd();
           }
         });
@@ -200,6 +214,10 @@ export function SessionScreen({
       if (playbackEndDebounceRef.current) {
         clearTimeout(playbackEndDebounceRef.current);
         playbackEndDebounceRef.current = null;
+      }
+      if (playbackWatchdogTimeoutRef.current) {
+        clearTimeout(playbackWatchdogTimeoutRef.current);
+        playbackWatchdogTimeoutRef.current = null;
       }
       if (Platform.OS !== 'web' && nativePlaylistRef.current) {
         try { nativePlaylistRef.current.clear(); } catch (_) { }
@@ -382,58 +400,7 @@ export function SessionScreen({
     setIsPlayingAudio(false);
   }, []);
 
-  // Native streaming chunk processor — writes files and appends to AudioPlaylist strictly in order
-  const processNativeChunkQueue = useCallback(async () => {
-    if (isProcessingNativeChunksRef.current || Platform.OS === 'web') return;
-    isProcessingNativeChunksRef.current = true;
-
-    while (nativeChunkQueueRef.current.length > 0) {
-      nativeChunkQueueRef.current.sort((a, b) => a.index - b.index);
-      const chunk = nativeChunkQueueRef.current.shift();
-      if (!chunk) continue;
-
-      if (chunk.turnId !== currentNativeTurnIdRef.current) {
-        nativePendingChunksRef.current = Math.max(0, nativePendingChunksRef.current - 1);
-        continue;
-      }
-
-      const tempPath = `${FileSystem.cacheDirectory}turn_${chunk.turnId}_burst_${chunk.index}.wav`;
-      nativeTempFilesRef.current.push(tempPath);
-
-      try {
-        await FileSystem.writeAsStringAsync(tempPath, chunk.audioBase64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-
-        if (chunk.turnId === currentNativeTurnIdRef.current) {
-          const pl = nativePlaylistRef.current;
-          if (pl) {
-            pl.add({ uri: tempPath });
-            const status = pl.currentStatus;
-            if (!status?.playing) {
-              // If ExoPlayer/AVQueuePlayer stalled after finishing an earlier track,
-              // advance to the new track so it doesn't get stuck in STATE_ENDED
-              if (status && status.trackCount > 1 && status.currentIndex < status.trackCount - 1) {
-                try { pl.skipTo(status.trackCount - 1); } catch (_) { }
-              }
-              try { pl.play(); } catch (_) { }
-            }
-          } else {
-            nativeAudioQueueRef.current.push(chunk.audioBase64);
-            processNativeAudioQueue();
-          }
-        } else {
-          FileSystem.deleteAsync(tempPath, { idempotent: true }).catch(() => { });
-        }
-      } catch (e) {
-        console.error('[SessionScreen] Native streaming playback error:', e);
-      } finally {
-        nativePendingChunksRef.current = Math.max(0, nativePendingChunksRef.current - 1);
-      }
-    }
-
-    isProcessingNativeChunksRef.current = false;
-  }, [processNativeAudioQueue]);
+  const loggedSelfSubtitleTurnsRef = useRef<Set<string>>(new Set());
 
   const {
     status,
@@ -511,6 +478,7 @@ export function SessionScreen({
         }
         isPlayingAudioRef.current = true;
         setIsPlayingAudio(true);
+        resetPlaybackWatchdog();
 
         // Writes are chained so bursts reach the playlist in the order they
         // arrived. Before, each burst was written in parallel and added when
@@ -557,7 +525,7 @@ export function SessionScreen({
           }
         });
       }
-    }, [processWebAudioQueue, processNativeAudioQueue]),
+    }, [processWebAudioQueue, processNativeAudioQueue, resetPlaybackWatchdog]),
 
     onTranslatedAudioFinal: useCallback((original: string, translated: string, audioBase64?: string, turnId?: string) => {
       setPartnerSpeaking(false);
@@ -587,23 +555,21 @@ export function SessionScreen({
         });
       }
 
-      // Mark that all streaming chunks for this turn have now been dispatched by the server.
-      // The playlist status listener will only allow playback-end once pending count reaches 0.
-      nativeTurnFinalReceivedRef.current = true;
       console.log(`[LATENCY][VOICE_TO_PARTNER] Turn ${turnId || 'final'}: 🏁 All translated audio chunks received from partner.`);
 
       // If native playlist is active and already streamed chunks, do NOT re-play
-      // full audioBase64 to prevent double playback. Only fall back if streaming
-      // never started for this turn (no temp files AND current turn had no chunks).
-      if (Platform.OS !== 'web' && audioBase64) {
-        const hadStreamingChunks = turnId && currentNativeTurnIdRef.current === turnId && nativeTempFilesRef.current.length > 0;
-        if (!hadStreamingChunks) {
-          // No streaming chunks arrived — fall back to full audio playback.
-          nativeAudioQueueRef.current.push(audioBase64);
-          processNativeAudioQueue();
+      // full audioBase64 to prevent double playback. Only fall back if no streaming chunks arrived.
+      if (Platform.OS !== 'web' && audioBase64 && (!nativePlaylistRef.current || nativeTempFilesRef.current.length === 0)) {
+        nativeAudioQueueRef.current.push(audioBase64);
+        processNativeAudioQueue();
+      } else if (Platform.OS !== 'web') {
+        // If all chunks were streamed and playlist already finished playing, schedule playback end now
+        const pl = nativePlaylistRef.current;
+        if (!pl || !pl.currentStatus?.playing) {
+          schedulePlaybackEnd();
         }
       }
-    }, [processNativeAudioQueue]),
+    }, [processNativeAudioQueue, schedulePlaybackEnd]),
 
     onTranscript: useCallback((original: string, translated: string, turnId?: string) => {
       console.log(`[LATENCY][VOICE_TO_ME] Turn ${turnId || 'final'}: ✅ Complete confirmed transcript received.`);
