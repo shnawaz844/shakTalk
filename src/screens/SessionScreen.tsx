@@ -692,7 +692,7 @@ export function SessionScreen({
     // hardware AEC (iOS VoiceChat, Android COMMUNICATION) handles the bulk
     // of echo cancellation, and the shorter tail (350ms speaker, 100ms earpiece)
     // prevents word loss when the user replies immediately after a translation.
-    const tailMs = isSpeakerOnRef.current ? 400 : 100;
+    const tailMs = isSpeakerOnRef.current ? 600 : 150;
     if (Date.now() < playbackEndTimeRef.current + tailMs) {
       return;
     }
