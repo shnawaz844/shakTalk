@@ -200,6 +200,25 @@ class LiveTranslationSession {
     this.connectPromise = null;
     this.closedByUs = false;
 
+    // Connection generations: every Gemini connection we open gets a number,
+    // and its callbacks carry that number. Close/error events from an older
+    // connection (e.g. the one being retired after a goAway swap) are then
+    // ignored instead of tearing down the newer, healthy connection.
+    this._genCounter = 0;
+    this.generation = 0;
+
+    // Session resumption: Gemini periodically sends a handle that lets a new
+    // connection continue the same session (and context) after the old
+    // connection is closed, so a reconnect mid-call doesn't start from zero.
+    this.resumeHandle = null;
+
+    // Audio that arrived while no connection was open (reconnect in
+    // progress). Flushed in order once connected instead of each chunk
+    // awaiting the connect individually. Capped so a long outage can't
+    // replay a wall of stale audio.
+    this.pendingAudio = [];
+    this._retryAfter = 0;
+
     // Heartbeat: send silent PCM every KEEPALIVE_INTERVAL_MS while the session
     // is open and idle (no speech). Gemini Live closes idle connections after
     // ~60s without input — the keepalive prevents that timeout so translation
@@ -336,7 +355,7 @@ class LiveTranslationSession {
     return ` Your spoken delivery should match the natural pitch, cadence, and energy of a ${bracket} — do not change the translated words themselves, only how they sound.`;
   }
 
-  _buildConfig() {
+  _buildConfig(gen, resumeHandle) {
     const voiceName = this._buildVoiceName();
     const ageInstruction = this._buildAgeInstruction();
     const inputCode = bcp47For(this.inputLang);
@@ -402,26 +421,58 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
           automaticActivityDetection: {
             prefixPaddingMs: 300,
             // How long Gemini waits after speech ends before finalising the turn.
-            // 500ms balances snappy detection with not clipping natural mid-sentence
-            // pauses (thinking, breathing, emphasis). 300ms was too aggressive for
-            // Hindi speakers who frequently pause within sentences, causing word loss.
-            silenceDurationMs: 500,
+            // 300ms balances snappy detection with not clipping natural mid-sentence
+            // pauses (thinking, breathing, emphasis). 100ms was too aggressive and
+            // caused word loss when speakers paused briefly.
+            silenceDurationMs: 300,
           },
+          // CRITICAL for a translation pipe: by default, any new speech from
+          // the speaker interrupts (cancels) the translation Gemini is still
+          // generating for their previous phrase. With a 300ms silence
+          // threshold that happens on almost every natural pause, and the
+          // half-spoken translation was discarded — the main cause of
+          // "dropped" sentences. NO_INTERRUPTION lets each phrase's
+          // translation finish while the speaker keeps talking.
+          activityHandling: 'NO_INTERRUPTION',
         },
+        // Keep the session's context bounded so long calls don't slow down
+        // or hit the session length limit — old turns are dropped from the
+        // model's context automatically (a translator doesn't need them).
+        contextWindowCompression: { slidingWindow: {} },
+        // Ask Gemini for resumption handles so a dropped / goAway'd
+        // connection can be replaced without losing the session.
+        sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
       },
       callbacks: {
-        onmessage: (data) => this._onMessage(data),
-        onerror: (err) => this._onError(err),
-        onclose: (e) => this._onClose(e),
+        onmessage: (data) => this._onMessage(data, gen),
+        onerror: (err) => this._onError(err, gen),
+        onclose: (e) => this._onClose(e, gen),
       }
     };
   }
 
-  _onMessage(data) {
+  _onMessage(data, gen) {
     try {
       const msg = typeof data === 'string' || Buffer.isBuffer(data)
         ? JSON.parse(data.toString())
         : data;
+
+      // Resumption handles and goAway only count from the active connection —
+      // a retired connection's messages must not trigger another swap or
+      // overwrite the handle of the session that replaced it.
+      const fromActive = gen === this.generation;
+
+      if (fromActive && msg.sessionResumptionUpdate) {
+        const { resumable, newHandle } = msg.sessionResumptionUpdate;
+        if (resumable && newHandle) this.resumeHandle = newHandle;
+      }
+
+      if (fromActive && msg.goAway) {
+        // Gemini is about to close this connection (connection lifetime
+        // limit). Open the replacement now, while the old one still works,
+        // so the call never waits on a cold reconnect.
+        this._handleGoAway(msg.goAway.timeLeft);
+      }
 
       if (msg.serverContent && msg.serverContent.interrupted) {
         console.log(`[LiveTranslationSession] Turn interrupted (${this.inputLang}→${this.outputLang})`);
@@ -565,22 +616,83 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
     }
   }
 
-  _onError(err) {
-    console.error(`[LiveTranslationSession] Live session error (${this.inputLang}→${this.outputLang}):`, err);
-    this.session = null; // Force reconnect on next feedAudio
-    this.connectPromise = null; // Clear any in-flight connect promise so reconnect can start fresh
-    this._stopKeepalive();
-    if (this.callbacks.onError) this.callbacks.onError(err);
+  _onError(err, gen) {
+    if (gen !== this.generation) return; // error on a retired connection — ignore
+    console.error(`[LiveTranslationSession] Live session error (${this.inputLang}→${this.outputLang}):`, err?.message || err);
+    this._connectionLost();
   }
 
-  _onClose(e) {
-    console.log(`[LiveTranslationSession] Session closed (${this.inputLang}→${this.outputLang}):`, e?.code, e?.reason);
-    this.session = null; // Will reconnect lazily on next feedAudio, unless we closed it ourselves
-    this.connectPromise = null; // Clear in-flight connect so ensureConnected can restart cleanly
-    this._stopKeepalive();
-    if (!this.closedByUs && e && e.code && e.code !== 1000 && this.callbacks.onError) {
-      this.callbacks.onError(new Error(`Live session closed with code ${e.code}: ${e.reason || 'Unknown error'}`));
+  _onClose(e, gen) {
+    if (gen !== this.generation) {
+      // Old connection retired after a goAway swap — expected, harmless.
+      console.log(`[LiveTranslationSession] Retired connection closed (${this.inputLang}→${this.outputLang})`);
+      return;
     }
+    console.log(`[LiveTranslationSession] Session closed (${this.inputLang}→${this.outputLang}):`, e?.code, e?.reason);
+    this._connectionLost();
+  }
+
+  /**
+   * The active connection is gone. Reconnect right away (resuming the
+   * session when we have a handle) instead of waiting for the next audio
+   * chunk — the user should never see an error for a routine reconnect.
+   */
+  _connectionLost() {
+    this.session = null;
+    this._stopKeepalive();
+    if (this.closedByUs) return;
+    if (!this.connectPromise) {
+      this.ensureConnected().catch((err) => {
+        console.error(`[LiveTranslationSession] Reconnect failed (${this.inputLang}→${this.outputLang}):`, err.message);
+        if (this.callbacks.onError) this.callbacks.onError(err);
+      });
+    }
+  }
+
+  _closeQuietly(session) {
+    if (!session) return;
+    try {
+      if (typeof session.close === 'function') session.close();
+      else if (session.conn?.close) session.conn.close();
+    } catch (_) { /* already closed */ }
+  }
+
+  /**
+   * Open one Gemini Live connection. Tries to resume the existing session
+   * first; if the handle is rejected, starts a fresh session instead.
+   * Each attempt gets its own generation number for its callbacks.
+   */
+  _openConnection() {
+    const attempt = (handle) => {
+      const gen = ++this._genCounter;
+      return new Promise((resolve, reject) => {
+        // 10s timeout so a bad network path can't hang the call forever.
+        const timer = setTimeout(() => {
+          reject(new Error(`ai.live.connect timed out after 10000ms for ${this.inputLang}→${this.outputLang}`));
+        }, 10000);
+        ai.live.connect(this._buildConfig(gen, handle))
+          .then((session) => { clearTimeout(timer); resolve({ session, gen }); })
+          .catch((err) => { clearTimeout(timer); reject(err); });
+      });
+    };
+
+    const handle = this.resumeHandle;
+    return attempt(handle).catch((err) => {
+      if (!handle) throw err;
+      console.warn(`[LiveTranslationSession] Resume failed (${this.inputLang}→${this.outputLang}), starting fresh:`, err.message);
+      this.resumeHandle = null;
+      return attempt(null);
+    });
+  }
+
+  _activate(session, gen) {
+    if (this.closedByUs) { this._closeQuietly(session); return; }
+    this.session = session;
+    this.generation = gen;
+    this._lastFeedAt = Date.now(); // reset idle timer on fresh connect
+    this._startKeepalive();
+    this._flushPending();
+    console.log(`[LiveTranslationSession] Session ready (${this.inputLang}→${this.outputLang}), gen=${gen}`);
   }
 
   /**
@@ -588,77 +700,89 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
    */
   async ensureConnected() {
     if (this.session) return;
-
-    if (this.connectPromise) {
-      await this.connectPromise;
-      return;
-    }
-
-    console.log(`[LiveTranslationSession] Opening session (${this.inputLang}→${this.outputLang})...`);
-
-    // Connect with a 10s timeout to prevent hanging forever on high-latency international connections
-    const connectWithTimeout = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(`ai.live.connect timed out after 10000ms for ${this.inputLang}→${this.outputLang}`));
-      }, 10000);
-
-      ai.live.connect(this._buildConfig())
-        .then((session) => {
-          clearTimeout(timer);
-          resolve(session);
-        })
+    if (!this.connectPromise) {
+      console.log(`[LiveTranslationSession] Opening session (${this.inputLang}→${this.outputLang})${this.resumeHandle ? ' (resuming)' : ''}...`);
+      this.connectPromise = this._openConnection()
+        .then(({ session, gen }) => this._activate(session, gen))
         .catch((err) => {
-          clearTimeout(timer);
-          reject(err);
-        });
-    });
-
-    this.connectPromise = connectWithTimeout
-      .then((session) => {
-        this.session = session;
-        this.connectPromise = null;
-        this._lastFeedAt = Date.now(); // reset idle timer on fresh connect
-        this._startKeepalive(); // start heartbeat to prevent idle timeout
-        console.log(`[LiveTranslationSession] Session ready (${this.inputLang}→${this.outputLang})`);
-      })
-      .catch((err) => {
-        this.connectPromise = null;
-        throw err;
-      });
-
+          this._retryAfter = Date.now() + 1000; // back off so every chunk doesn't retry
+          throw err;
+        })
+        .finally(() => { this.connectPromise = null; });
+    }
     await this.connectPromise;
   }
 
   /**
-   * Feed one small chunk of continuously-streamed raw PCM audio into the
-   * session. Fire-and-forget from the caller's perspective — results come
-   * back later via the onAudioChunk/onTurnComplete callbacks, not a return
-   * value, since there's no per-chunk request/response boundary anymore.
+   * goAway: swap in a new connection while the old one still works. Audio
+   * keeps flowing to the old connection until the new one is ready; the old
+   * one is then given a few seconds to finish any translation it's still
+   * speaking before it is closed.
    */
-  async feedAudio(audioBase64, mimeType) {
-    // Only accumulate input audio for the CURRENT turn — not across reconnects.
-    // Pushing to inputAudioBuffers before ensureConnected means they grow
-    // unboundedly if the session is dead and reconnects are slow/failing,
-    // which eventually causes stalls. We accumulate after confirming the
-    // session is alive instead, and cap the buffer to 30s of audio (~200
-    // chunks @ 150ms) to prevent any runaway growth.
+  _handleGoAway(timeLeft) {
+    if (this.closedByUs || this.connectPromise) return;
+    console.log(`[LiveTranslationSession] goAway received (${this.inputLang}→${this.outputLang}), timeLeft=${timeLeft} — swapping connection`);
+    const old = this.session;
+    this.connectPromise = this._openConnection()
+      .then(({ session, gen }) => {
+        this._activate(session, gen);
+        setTimeout(() => this._closeQuietly(old), 5000);
+      })
+      .catch((err) => {
+        console.error(`[LiveTranslationSession] goAway swap failed (${this.inputLang}→${this.outputLang}):`, err.message);
+        // The old connection will close shortly; _onClose then reconnects.
+      })
+      .finally(() => { this.connectPromise = null; });
+  }
+
+  _flushPending() {
+    if (!this.session) return;
+    const queued = this.pendingAudio;
+    this.pendingAudio = [];
+    if (queued.length) {
+      console.log(`[LiveTranslationSession] Flushing ${queued.length} queued chunks (${this.inputLang}→${this.outputLang})`);
+    }
+    for (const { audioBase64, mimeType } of queued) {
+      this.session.sendRealtimeInput({ audio: { data: audioBase64, mimeType } });
+    }
+  }
+
+  /**
+   * Feed one small chunk of continuously-streamed raw PCM audio into the
+   * session. Sends immediately when connected; otherwise queues the chunk
+   * (in order, capped at ~3s) and kicks off a reconnect.
+   */
+  feedAudio(audioBase64, mimeType) {
+    // Keep the most recent ~30s of input for the per-turn recording.
     const MAX_INPUT_BUFFERS = 200;
+    // ~3s of audio at 150ms chunks — older queued audio is dropped first.
+    const MAX_PENDING = 20;
 
     this.lastFeedAudioAt = Date.now();
     this._lastFeedAt = Date.now(); // update idle timer for keepalive
 
-    await this.ensureConnected();
+    this.inputAudioBuffers.push(Buffer.from(audioBase64, 'base64'));
+    if (this.inputAudioBuffers.length > MAX_INPUT_BUFFERS) this.inputAudioBuffers.shift();
 
-    if (!this.session || typeof this.session.sendRealtimeInput !== 'function') {
-      throw new Error('Live API connection is not available.');
+    if (this.session && typeof this.session.sendRealtimeInput === 'function') {
+      try {
+        this.session.sendRealtimeInput({ audio: { data: audioBase64, mimeType } });
+        return;
+      } catch (err) {
+        console.warn(`[LiveTranslationSession] send failed (${this.inputLang}→${this.outputLang}), queueing:`, err.message);
+        this.session = null;
+      }
     }
 
-    // Accumulate after session is confirmed live, and cap to avoid unbounded growth.
-    if (this.inputAudioBuffers.length < MAX_INPUT_BUFFERS) {
-      this.inputAudioBuffers.push(Buffer.from(audioBase64, 'base64'));
-    }
+    this.pendingAudio.push({ audioBase64, mimeType });
+    if (this.pendingAudio.length > MAX_PENDING) this.pendingAudio.shift();
 
-    this.session.sendRealtimeInput({ audio: { data: audioBase64, mimeType } });
+    if (!this.connectPromise && !this.closedByUs && Date.now() >= this._retryAfter) {
+      this.ensureConnected().catch((err) => {
+        console.error(`[LiveTranslationSession] Connect failed (${this.inputLang}→${this.outputLang}):`, err.message);
+        if (this.callbacks.onError) this.callbacks.onError(err);
+      });
+    }
   }
 
   /**
@@ -667,11 +791,10 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
   close() {
     this.closedByUs = true;
     this._stopKeepalive();
-    if (this.session?.conn?.close) {
-      this.session.conn.close();
-    }
+    this._closeQuietly(this.session);
     this.session = null;
     this.connectPromise = null;
+    this.pendingAudio = [];
   }
 }
 
@@ -720,10 +843,11 @@ function feedAudioChunk(sessionId, role, audioBase64, mimeType) {
     console.warn(`[geminiService] No active session for ${role} in ${sessionId} — dropping chunk (not yet warmed up?)`);
     return;
   }
-  liveSession.feedAudio(audioBase64, mimeType).catch((err) => {
+  try {
+    liveSession.feedAudio(audioBase64, mimeType);
+  } catch (err) {
     console.error(`[geminiService] feedAudio failed for ${role} in ${sessionId}:`, err.message);
-    if (liveSession.callbacks.onError) liveSession.callbacks.onError(err);
-  });
+  }
 }
 
 /**
