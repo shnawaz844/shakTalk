@@ -512,8 +512,12 @@ export function SessionScreen({
               nativeQueueEndAtRef.current = Math.max(now, nativeQueueEndAtRef.current) + durMs;
               nativeTempFilesRef.current.push(tempPath);
               pl.add({ uri: tempPath });
-              if (!pl.currentStatus?.playing) {
-                pl.play();
+              const status = pl.currentStatus;
+              if (!status?.playing) {
+                if (status && status.trackCount > 1 && status.currentIndex < status.trackCount - 1) {
+                  try { pl.skipTo(status.trackCount - 1); } catch (_) { }
+                }
+                try { pl.play(); } catch (_) { }
               }
             } else {
               // Fallback to queue if playlist is unavailable
