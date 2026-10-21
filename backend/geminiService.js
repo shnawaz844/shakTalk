@@ -51,7 +51,7 @@ const ai = new GoogleGenAI({
 // Overridable for A/B testing candidate models against the current one
 // without editing code each time - unset falls back to the model already
 // proven in production.
-const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-live-2.5-flash-native-audio';
+const LIVE_MODEL = process.env.GEMINI_LIVE_MODEL || 'gemini-3.5-live-translate-preview';
 
 // Sample rate the client streams raw PCM at (must match src streaming recorder config).
 const INPUT_SAMPLE_RATE = 16000;
@@ -131,14 +131,20 @@ function scriptMismatch(text, expectedLang) {
   if (!expectedPattern) return false;
 
   const letters = (text.match(/\p{L}/gu) || []).length;
-  if (letters < 6) return false; // not enough signal yet
+  // Lowered from 6 to 3: when phones are physically close, even a short
+  // bleed snippet should trigger suppression fast — waiting for 6 letters
+  // meant the first few hundred ms of echo got through before the gate shut.
+  if (letters < 3) return false;
 
   if (expectedPattern.test(text)) return false; // has expected-script content — allow
 
   for (const [lang, pattern] of Object.entries(SCRIPT_RANGES)) {
     if (lang === expectedLang || pattern.source === expectedPattern.source) continue;
     const otherMatches = (text.match(new RegExp(pattern.source, 'gu')) || []).length;
-    if (otherMatches >= letters * 0.6) return true; // confidently a different, distinguishable script
+    // Lowered from 0.6 to 0.5: half the characters in a foreign script is
+    // already a strong signal — the old 60% threshold let short echo phrases
+    // (e.g. 4-letter words) slip through.
+    if (otherMatches >= letters * 0.5) return true;
   }
   return false;
 }
@@ -226,8 +232,28 @@ class LiveTranslationSession {
     this._keepaliveTimer = null;
     this._lastFeedAt = 0;
 
+    // ── Echo/cross-talk timing gate ──────────────────────────────────────────
+    // Tracks when we last EMITTED translated audio so that if new input audio
+    // arrives suspiciously soon afterwards, it's almost certainly loudspeaker
+    // bleed (the partner's phone picked up this session's output). This is
+    // the primary echo prevention layer — scriptMismatch is a secondary check.
+    this._lastOutputEmittedAt = 0;
+    // Cooldown after a turn is suppressed (cross-talk or echo) — prevents
+    // rapid re-triggering where the echo of the suppressed turn's tail
+    // immediately starts a new turn.
+    this._lastSuppressionAt = 0;
+
     this._resetTurnState();
   }
+
+  // How long after emitting output audio we consider new input to be echo.
+  // 800ms covers the round-trip: output chunk → speaker → travels through
+  // air → partner mic → network to server. On speakerphone at close range
+  // the actual acoustic delay is <50ms, but processing adds ~200-400ms.
+  static get ECHO_GATE_MS() { return 800; }
+  // After suppressing a cross-talk turn, ignore new turns for this long
+  // to prevent the suppressed audio's reverb tail from re-triggering.
+  static get SUPPRESSION_COOLDOWN_MS() { return 1200; }
 
   _resetTurnState() {
     // Output (Gemini's spoken translation) accumulated for the in-flight turn.
@@ -319,6 +345,10 @@ class LiveTranslationSession {
     this.inFlightBurstBytes = 0;
 
     const wav = wrapPcmInWav(burstPcm, OUTPUT_SAMPLE_RATE);
+    // Record when output was emitted so the PARTNER session's echo gate can
+    // detect loopback. The partner session's _lastOutputEmittedAt is set by
+    // the server (see server.js onAudioChunk) after relaying this chunk.
+    this._lastOutputEmittedAt = Date.now();
     if (this.callbacks.onAudioChunk) {
       this.callbacks.onAudioChunk({
         audioBase64: wav.toString('base64'),
@@ -399,6 +429,11 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
             text: systemPromptText
           }]
         },
+        ...(LIVE_MODEL.includes('translate') ? {
+          translationConfig: {
+            targetLanguageCode: outputCode || (this.outputLang ? this.outputLang.toLowerCase() : 'en'),
+          },
+        } : {}),
         responseModalities: ['AUDIO'],
         speechConfig: {
           voiceConfig: {
@@ -546,6 +581,7 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
           if (!this.isSameLanguage && scriptMismatch(this.fullOriginalText, this.inputLang)) {
             console.log(`[geminiService] 🛑 Cross-talk gate triggered (${this.inputLang}→${this.outputLang}): detected non-${this.inputLang} speech in mic ("${this.fullOriginalText}"). Suppressing turn.`);
             this.turnSuppressed = true;
+            this._lastSuppressionAt = Date.now();
             this.inFlightBurstBuffers = [];
             this.inFlightBurstBytes = 0;
             this.outputAudioBuffers = [];
@@ -565,6 +601,7 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
       if (msg.serverContent && msg.serverContent.turnComplete) {
         if (this.turnSuppressed) {
           console.log(`[geminiService] Suppressed cross-talk turn completed — dropping without relay.`);
+          this._lastSuppressionAt = Date.now();
           this._resetTurnState();
           return;
         }
@@ -752,14 +789,42 @@ CRITICAL LANGUAGE ISOLATION & CROSS-TALK REJECTION:
    * session. Sends immediately when connected; otherwise queues the chunk
    * (in order, capped at ~3s) and kicks off a reconnect.
    */
+  /**
+   * Returns true if this chunk should be treated as echo/cross-talk based on
+   * timing alone (output was emitted very recently from the PARTNER session
+   * on the same device — see server.js `notifyPartnerOutputEmitted`).
+   */
+  _isLikelyEcho() {
+    if (!this._partnerLastOutputAt) return false;
+    return (Date.now() - this._partnerLastOutputAt) < LiveTranslationSession.ECHO_GATE_MS;
+  }
+
+  /**
+   * Called by the server when the PARTNER session on the OTHER device emits
+   * translated audio that will play on THIS device's speaker. If this device's
+   * mic then picks that up, feedAudio will detect the timing overlap.
+   */
+  notifyPartnerOutputEmitted() {
+    this._partnerLastOutputAt = Date.now();
+  }
+
   feedAudio(audioBase64, mimeType) {
     // Keep the most recent ~30s of input for the per-turn recording.
     const MAX_INPUT_BUFFERS = 200;
     // ~3s of audio at 150ms chunks — older queued audio is dropped first.
     const MAX_PENDING = 20;
 
-    this.lastFeedAudioAt = Date.now();
-    this._lastFeedAt = Date.now(); // update idle timer for keepalive
+    const now = Date.now();
+    this.lastFeedAudioAt = now;
+    this._lastFeedAt = now; // update idle timer for keepalive
+
+    // ── Suppression cooldown ────────────────────────────────────────────────
+    // After a cross-talk turn was just suppressed, ignore new audio for a
+    // short cooldown. The tail of the suppressed echo is still reverberating
+    // in the room and would immediately open a new turn → suppress → repeat.
+    if (this._lastSuppressionAt && (now - this._lastSuppressionAt) < LiveTranslationSession.SUPPRESSION_COOLDOWN_MS) {
+      return; // silently drop — don't even queue
+    }
 
     this.inputAudioBuffers.push(Buffer.from(audioBase64, 'base64'));
     if (this.inputAudioBuffers.length > MAX_INPUT_BUFFERS) this.inputAudioBuffers.shift();
@@ -863,4 +928,17 @@ function closeSession(sessionId, role) {
   }
 }
 
-module.exports = { warmupSession, feedAudioChunk, closeSession };
+/**
+ * Notify a role's LiveTranslationSession that its PARTNER just emitted
+ * translated audio. The partner's speaker will play it, and if this role's
+ * mic picks it up (phones nearby), feedAudio's timing gate will suppress it.
+ */
+function notifyOutputEmitted(sessionId, role) {
+  const key = `${sessionId}:${role}`;
+  const liveSession = activeSessions.get(key);
+  if (liveSession) {
+    liveSession.notifyPartnerOutputEmitted();
+  }
+}
+
+module.exports = { warmupSession, feedAudioChunk, closeSession, notifyOutputEmitted };

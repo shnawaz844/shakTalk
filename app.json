@@ -2,14 +2,14 @@
   "expo": {
     "name": "ShakTranslate",
     "slug": "shak-translate",
-    "owner": "shahahmad",
+    "owner": "shahnawaz8445s-team",
     "scheme": "shaktranslate",
     "version": "1.0.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/fc77c2dc-9335-4c05-a058-d9f7af8f827e",
+      "url": "https://u.expo.dev/6c642bcc-3f6c-40b5-bb35-015f70528d66",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -147,7 +147,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "fc77c2dc-9335-4c05-a058-d9f7af8f827e"
+        "projectId": "6c642bcc-3f6c-40b5-bb35-015f70528d66"
       }
     }
   }

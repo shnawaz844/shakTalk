@@ -2,7 +2,7 @@ require('dotenv').config();
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const { v4: uuidv4 } = require('uuid');
-const { warmupSession, feedAudioChunk, closeSession } = require('./geminiService');
+const { warmupSession, feedAudioChunk, closeSession, notifyOutputEmitted } = require('./geminiService');
 const { supabase } = require('./supabaseClient');
 const { uploadAudio } = require('./storageService');
 const { APP_NAME } = require('./app-config');
@@ -570,6 +570,14 @@ function makeSessionCallbacks(session, sessionId, role) {
           serverRelayedAt: Date.now(),
         });
 
+        // Echo timing gate: tell the PARTNER's own Gemini session that
+        // translated audio is about to play on the partner's speaker. If the
+        // partner's mic picks up this audio (phones nearby on speakerphone),
+        // the partner's LiveTranslationSession.feedAudio will detect the
+        // timing overlap and suppress it as echo.
+        const partnerRole = role === 'host' ? 'guest' : 'host';
+        notifyOutputEmitted(sessionId, partnerRole);
+
         if (chunk.text) {
           send(partnerSocket(), {
             type: 'live_subtitle',
@@ -905,7 +913,13 @@ wss.on('connection', (ws) => {
         }
       }
 
-      if (rs && !rs.turnActive) {
+      // Detect silence-gated chunks: the client replaces mic audio with silence
+      // while translated audio is playing to prevent echo loops. These chunks
+      // must NOT trigger partner_speaking or set turnActive — they're just
+      // silence filler keeping Gemini's VAD happy, not real speech.
+      const isSilenceGated = audioBase64 && /^A+={0,2}$/.test(audioBase64);
+
+      if (rs && !rs.turnActive && !isSilenceGated) {
         rs.turnActive = true;
         rs.turnSpeechStartedAt = clientSentAt || Date.now();
         rs.turnStartedAt = Date.now();

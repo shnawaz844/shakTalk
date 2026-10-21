@@ -174,7 +174,7 @@ export function SessionScreen({
         setIsPlayingAudio(false);
       }
       playbackWatchdogTimeoutRef.current = null;
-    }, 4000);
+    }, 6000);
   }, []);
 
   const schedulePlaybackEnd = useCallback(() => {
@@ -185,9 +185,9 @@ export function SessionScreen({
     }
     // Debounce to smooth over inter-chunk gaps in streaming audio so the mic
     // isn't momentarily unblocked between consecutive chunks of the same sentence.
-    // 350ms on loudspeaker, 100ms on earpiece — bridges burst gaps while allowing
-    // immediate speech pickup right after playback ends.
-    const debounceMs = isSpeakerOnRef.current ? 350 : 100;
+    // 600ms on loudspeaker (covers room reverb when phones are nearby), 150ms
+    // on earpiece — bridges burst gaps while allowing speech pickup after playback.
+    const debounceMs = isSpeakerOnRef.current ? 600 : 150;
     playbackEndDebounceRef.current = setTimeout(() => {
       isPlayingAudioRef.current = false;
       playbackEndTimeRef.current = Date.now();
@@ -662,14 +662,16 @@ export function SessionScreen({
       return;
     }
     // ── Echo / feedback-loop suppression ────────────────────────────────────
-    // While translated audio is playing (and for a short reverb tail after),
+    // While translated audio is playing (and for a reverb tail after),
     // the mic's content must not reach Gemini or it re-translates the
     // loudspeaker. BUT the chunk is replaced with SILENCE of the same length
     // rather than dropped: if nothing at all is sent, Gemini's voice-activity
     // detection never hears the speaker stop, so a turn that was in progress
     // when playback started can't finish until the mic reopens — that was the
     // source of the 3–6 second stalls. Silence lets it close the turn on time.
-    const tailMs = isSpeakerOnRef.current ? 350 : 100;
+    // On speakerphone the tail is 600ms to cover room reverb at close range;
+    // on earpiece it's shorter since there's minimal bleed.
+    const tailMs = isSpeakerOnRef.current ? 600 : 150;
     const gated = isPlayingAudioRef.current || Date.now() < playbackEndTimeRef.current + tailMs;
     sendAudioStreamChunk(gated ? silenceLike(audioBase64) : audioBase64, mimeType, role, sessionId);
   }, [sendAudioStreamChunk, role, sessionId]);
