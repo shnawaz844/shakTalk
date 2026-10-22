@@ -6,6 +6,8 @@ import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
 import { tokenCache } from './src/utils/tokenCache';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SessionScreen } from './src/screens/SessionScreen';
+import { LiveCallScreen } from './src/screens/LiveCallScreen';
+import { CALL_ENGINE } from './src/config';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
@@ -72,7 +74,16 @@ function MainApp() {
         {screen === 'profile' && (
           <ProfileScreen onBack={() => setScreen('home')} />
         )}
-        {screen === 'session' && sessionParams && (
+        {screen === 'session' && sessionParams && CALL_ENGINE === 'livekit' && (
+          <LiveCallScreen
+            sessionId={sessionParams.sessionId}
+            role={sessionParams.role}
+            myLang={sessionParams.myLang}
+            partnerLang={sessionParams.partnerLang}
+            onEnd={handleEndSession}
+          />
+        )}
+        {screen === 'session' && sessionParams && CALL_ENGINE === 'legacy' && (
           <SessionScreen
             sessionId={sessionParams.sessionId}
             role={sessionParams.role}

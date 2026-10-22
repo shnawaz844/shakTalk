@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { websocketService } from '../services/websocketService';
-import { WS_URL } from '../config';
+import { WS_URL, CALL_ENGINE } from '../config';
+import type { LiveKitCallInfo } from '../livekit/useLiveKitCall';
 
 export type ConnectionStatus =
   | 'idle'
@@ -40,6 +41,8 @@ interface WebSocketContextType {
   partnerLang: string | null;
   isProcessing: boolean;
   isGeminiReady: boolean;
+  /** Set once the server hands out the LiveKit room token (LiveKit engine only). */
+  liveKit: LiveKitCallInfo | null;
   queueDepth: number;
   createSession: (lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => Promise<void>;
   joinSession: (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => Promise<void>;
@@ -95,6 +98,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // True once the server confirms both Gemini Live sessions are open and ready.
   // Audio fed before this point would be silently dropped by the server.
   const [isGeminiReady, setIsGeminiReady] = useState(false);
+  const [liveKit, setLiveKit] = useState<LiveKitCallInfo | null>(null);
   // How many of the local user's sentences are queued server-side waiting to process
   const [queueDepth, setQueueDepth] = useState(0);
 
@@ -142,6 +146,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const elapsed = Date.now() - connectStartTimeRef.current;
       console.log(`[LATENCY][CALL_CONNECT] 🎉 Gemini AI speech engines READY in ${elapsed}ms! Call is fully established & audio unblocked.`);
       setIsGeminiReady(true);
+    }
+
+    if (type === 'livekit_ready') {
+      setLiveKit({ url: message.url, token: message.token, identity: message.identity, partnerIdentity: message.partnerIdentity });
     }
 
     if (type === 'processing_started') {
@@ -260,8 +268,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
+      setLiveKit(null);
       websocketService.send({
-        type: 'create_session', lang, userId,
+        type: 'create_session', lang, userId, engine: CALL_ENGINE,
         ...(speakerGender ? { speakerGender } : {}),
         ...(speakerAge !== undefined ? { speakerAge } : {}),
       });
@@ -283,8 +292,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
+      setLiveKit(null);
       websocketService.send({
-        type: 'join_session', sessionId: sid, lang, userId,
+        type: 'join_session', sessionId: sid, lang, userId, engine: CALL_ENGINE,
         ...(speakerGender ? { speakerGender } : {}),
         ...(speakerAge !== undefined ? { speakerAge } : {}),
       });
@@ -358,6 +368,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setPartnerLang(null);
     setIsProcessing(false);
     setQueueDepth(0);
+    setLiveKit(null);
   }, []);
 
   // Cleanup on provider unmount (rare, usually app close)
@@ -376,6 +387,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         partnerLang,
         isProcessing,
         isGeminiReady,
+        liveKit,
         queueDepth,
         createSession,
         joinSession,

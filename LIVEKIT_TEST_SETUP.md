@@ -1,0 +1,110 @@
+# `test` branch: WebRTC call + Gemini Live Translate
+
+This branch changes how a ShakTalk call works:
+
+| | Before (legacy engine) | This branch (LiveKit engine) |
+|---|---|---|
+| Partner's real voice | Not heard | Heard right away (WebRTC, like WhatsApp), at 25% volume |
+| Translation model | `gemini-live-2.5-flash-native-audio` (waits for the speaker to pause) | `gemini-3.5-live-translate-preview` (translates while the speaker talks) |
+| Translated voice | Arrives after the turn ends (3–24 s in tests) | Streams continuously; Google says it stays "a few seconds" behind |
+| Echo handling | App mutes the mic while translation plays | Phone's built-in echo cancellation (WebRTC); mic never muted |
+| Android mic | Raw mic, no noise suppression | Voice-call mode with echo cancellation + noise suppression |
+
+The UI is unchanged. The old engine is still in the code and can be switched back on (see the end of this file).
+
+## How it works
+
+```
+Phone A (host) ──mic──►┐                      ┌──► Phone B hears: A's voice (25%) + "translation-of-host" (100%)
+                       │   LiveKit room       │
+Phone B (guest) ─mic──►┤  (named = session)   ├──► Phone A hears: B's voice (25%) + "translation-of-guest" (100%)
+                       │                      │
+     translator bot ◄──┘  (runs inside our    └── bot publishes the two translation tracks
+     backend: mic → Gemini Live Translate → track)
+```
+
+The existing WebSocket server still handles session create/join, subtitles, transcripts and the database. New files:
+
+- `backend/translatorBot.js`: joins the room and pipes each mic through Gemini into a translation track.
+- `backend/liveTranslate.js`: Gemini Live Translate connection, with reconnect/resume and latency logging.
+- `src/livekit/useLiveKitCall.ts`: the call (join, publish mic, play partner voice + translation).
+- `src/screens/LiveCallScreen.tsx`: the call screen for this engine. It uses the same layout and styles as `SessionScreen`.
+
+## 1. LiveKit server (pick one)
+
+**A. LiveKit Cloud (fastest for testing).** Create a project at cloud.livekit.io. From the project settings, copy the WebSocket URL (`wss://<project>.livekit.cloud`), the API key and the API secret.
+
+**B. Self-host on our EC2.** Run `livekit-server` (Docker image `livekit/livekit-server`) next to the backend. It needs:
+- TLS in front of port 7880 (for example `wss://lk.shaktalk.com` via nginx/Caddy)
+- port 7881/tcp and 50000–60000/udp open in the security group
+- TURN enabled in its config, for phones on strict mobile networks
+
+See docs.livekit.io → Self-hosting.
+
+## 2. Backend environment variables
+
+Add to the backend `.env` (the existing Vertex variables stay as they are):
+
+```env
+# LiveKit (required for the new engine)
+LIVEKIT_URL=wss://<your-livekit-host>
+LIVEKIT_API_KEY=...
+LIVEKIT_API_SECRET=...
+# Optional: internal address for the bot if LiveKit runs on the same machine
+# LIVEKIT_BOT_URL=ws://127.0.0.1:7880
+
+# Gemini Live Translate (defaults shown)
+GEMINI_TRANSLATE_MODEL=gemini-3.5-live-translate-preview
+GEMINI_TRANSLATE_BACKEND=vertex          # or "apikey"
+# GEMINI_TRANSLATE_LOCATION=asia-south1  # defaults to GOOGLE_CLOUD_LOCATION
+# GEMINI_API_KEY=...                     # only for GEMINI_TRANSLATE_BACKEND=apikey
+# GEMINI_TRANSLATE_ECHO=false            # true = also speak words already in the listener's language
+```
+
+Then `cd backend && npm install` and restart.
+
+- The Docker image now uses `node:20-bookworm-slim`, because LiveKit's native library doesn't run on Alpine.
+- On plain EC2 (Ubuntu or Amazon Linux), nothing extra is needed.
+
+**If the server log shows `[liveTranslate] ... connect failed`:** the preview model may not be on Vertex in our region yet. Try `GEMINI_TRANSLATE_LOCATION=us-central1` first. If that also fails, use `GEMINI_TRANSLATE_BACKEND=apikey` with a key from Google AI Studio, which is where Google launched the model. Google's announcements only mention the Gemini API and AI Studio, not Vertex.
+
+## 3. App build
+
+The branch adds native modules (WebRTC), so **a new build is required. An OTA update (`eas update`) won't work.**
+
+- The app version is bumped to **1.1.0**, so OTA updates from this branch can't reach older installs and crash them.
+- **Both phones must run the new build.** If an old build tries to call a new one, it gets a clear "same app version" error.
+
+```sh
+npm install
+eas build --profile development --platform android   # and/or ios
+```
+
+## 4. What to test
+
+1. **Call and voices:** start a call between two phones (for example Hindi ↔ English). Each person should hear the other's real voice immediately and quietly, with the translation on top.
+2. **Long speech:** talk for 10–20 s without stopping. The translation should start while you're still talking.
+3. **Echo:** both phones on loudspeaker. Nothing should get re-translated.
+4. **Controls:** mute, speaker/earpiece, end call, subtitles and the transcript panel.
+5. **Long call:** stay on a call for 15+ minutes.
+
+Server log lines to collect:
+
+- `[LATENCY][translate] <session>:host→English: translated audio started 1234ms after the speaker started talking`. This is the number to report: speech start → first translated audio.
+- `[liveTranslate] ... ready (Xms)`: connection time to Gemini.
+- `[translatorBot] ... receiving host mic`: the bot is hearing each phone.
+
+## Known limits of this branch
+
+- **Preview model.** Developers report three problems:
+  - occasional wrong output language
+  - the voice drifting during long sessions
+  - no way to pin the voice
+
+  The gender/age voice setting from onboarding isn't used by this engine; the model imitates the speaker's voice instead.
+- **Recordings.** Call audio isn't saved to storage in this engine. Text transcripts are still saved to the database.
+- **Cantonese** maps to Traditional Chinese (`zh-Hant`), because the model has no separate Cantonese target.
+
+## Switching back to the old engine
+
+Set `EXPO_PUBLIC_CALL_ENGINE=legacy` in the EAS build profile's `env` and rebuild. The app then uses the original `SessionScreen` path, which includes the fixes from PR #2.
