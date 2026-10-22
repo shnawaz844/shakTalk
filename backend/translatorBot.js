@@ -1,15 +1,26 @@
-const {
-  Room,
-  RoomEvent,
-  AudioStream,
-  AudioSource,
-  AudioFrame,
-  LocalAudioTrack,
-  TrackPublishOptions,
-  TrackSource,
-  TrackKind,
-} = require('@livekit/rtc-node');
-const { AccessToken } = require('livekit-server-sdk');
+let rtcNode = null;
+try {
+  rtcNode = require('@livekit/rtc-node');
+} catch (err) {
+  console.warn('[translatorBot] Warning: @livekit/rtc-node is not installed or failed to load:', err.message);
+}
+
+const Room = rtcNode?.Room;
+const RoomEvent = rtcNode?.RoomEvent;
+const AudioStream = rtcNode?.AudioStream;
+const AudioSource = rtcNode?.AudioSource;
+const AudioFrame = rtcNode?.AudioFrame;
+const LocalAudioTrack = rtcNode?.LocalAudioTrack;
+const TrackPublishOptions = rtcNode?.TrackPublishOptions;
+const TrackSource = rtcNode?.TrackSource;
+const TrackKind = rtcNode?.TrackKind;
+
+let AccessToken = null;
+try {
+  ({ AccessToken } = require('livekit-server-sdk'));
+} catch (err) {
+  console.warn('[translatorBot] Warning: livekit-server-sdk is not installed or failed to load:', err.message);
+}
 const { LiveTranslateStream } = require('./liveTranslate');
 
 /**
@@ -36,13 +47,14 @@ const LIVEKIT_BOT_URL = process.env.LIVEKIT_BOT_URL || LIVEKIT_URL;
 const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
 const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
 
-const LIVEKIT_ENABLED = Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+const LIVEKIT_ENABLED = Boolean(rtcNode && AccessToken && LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
 
 const BOT_IDENTITY = 'translator';
 const OUTPUT_RATE = 24000; // Gemini output
 const FRAME_SAMPLES = OUTPUT_RATE / 50; // 20ms frames into the call
 
 async function createToken(roomName, identity, { canPublish = true } = {}) {
+  if (!AccessToken) throw new Error('livekit-server-sdk is not available');
   const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, { identity, ttl: '6h' });
   at.addGrant({ roomJoin: true, room: roomName, canPublish, canSubscribe: true, canPublishData: true });
   return at.toJwt();
