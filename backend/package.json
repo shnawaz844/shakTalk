@@ -9,9 +9,12 @@
   },
   "dependencies": {
     "@google/genai": "^1.44.0",
+    "@livekit/rtc-node": "1.1.0",
     "@supabase/supabase-js": "^2.106.0",
     "dotenv": "^16.4.5",
+    "google-genai-v2": "npm:@google/genai@2.27.0",
     "googleapis": "^171.4.0",
+    "livekit-server-sdk": "2.19.1",
     "uuid": "^11.0.5",
     "ws": "^8.18.0"
   }

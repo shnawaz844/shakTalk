@@ -20,6 +20,11 @@ export {
 const wsUrl = process.env.EXPO_PUBLIC_WS_URL || 'wss://www.shaktalk.com';
 export const WS_URL = wsUrl;
 
+// Call engine: 'livekit' = WebRTC call + Gemini Live Translate bot (test branch
+// default); 'legacy' = the original record → server → Gemini → playback path.
+export const CALL_ENGINE: 'livekit' | 'legacy' =
+  process.env.EXPO_PUBLIC_CALL_ENGINE === 'legacy' ? 'legacy' : 'livekit';
+
 // HTTP equivalent of WS_URL, for plain REST calls (e.g. /clerk/update-profile).
 // Derived from WS_URL so both always point at the same backend.
 export const API_URL = WS_URL.replace(/^ws/, 'http');
