@@ -63,7 +63,7 @@ function getClient() {
   if (_ai) return _ai;
   if (BACKEND === 'apikey') {
     if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_TRANSLATE_BACKEND=apikey but GEMINI_API_KEY is not set');
-    _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    _ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY, vertexai: false });
   } else {
     const project = process.env.GOOGLE_CLOUD_PROJECT;
     if (!project) throw new Error('GOOGLE_CLOUD_PROJECT is not set (needed for GEMINI_TRANSLATE_BACKEND=vertex)');
@@ -153,16 +153,49 @@ class LiveTranslateStream {
     console.log(`[liveTranslate] ${this.label}: connecting (target=${this.targetCode}${handle ? ', resuming' : ''})`);
 
     this.connectPromise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('connect timed out after 10s')), 10000);
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          reject(new Error('connect timed out after 10s'));
+        }
+      }, 10000);
+
       getClient().live.connect({
         model: MODEL,
         config: this._config(handle),
         callbacks: {
           onmessage: (msg) => this._onMessage(msg, gen),
-          onerror: (e) => this._onDrop(gen, `error: ${e?.message || e}`, openedAt),
-          onclose: (e) => this._onDrop(gen, `closed ${e?.code ?? ''} ${e?.reason ?? ''}`.trim(), openedAt, e?.code),
+          onerror: (e) => {
+            if (!settled && !this.session) {
+              settled = true;
+              clearTimeout(timer);
+              reject(new Error(`connection error: ${e?.message || e}`));
+            }
+            this._onDrop(gen, `error: ${e?.message || e}`, openedAt);
+          },
+          onclose: (e) => {
+            if (!settled && !this.session) {
+              settled = true;
+              clearTimeout(timer);
+              reject(new Error(`closed by server (${e?.code}): ${e?.reason || 'no reason provided'}`));
+            }
+            this._onDrop(gen, `closed ${e?.code ?? ''} ${e?.reason ?? ''}`.trim(), openedAt, e?.code);
+          },
         },
-      }).then((session) => { clearTimeout(timer); resolve(session); }, (err) => { clearTimeout(timer); reject(err); });
+      }).then((session) => {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          resolve(session);
+        }
+      }, (err) => {
+        clearTimeout(timer);
+        if (!settled) {
+          settled = true;
+          reject(err);
+        }
+      });
     })
       .then((session) => {
         if (this.closed) { try { session.close(); } catch (_) {} return; }

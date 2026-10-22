@@ -29,7 +29,7 @@ if (credFile) {
     console.error(`[geminiService] ❌ Credentials file UNREADABLE at "${credFile}":`, err.message);
   }
 } else {
-  console.error('[geminiService] ❌ GOOGLE_APPLICATION_CREDENTIALS is not set!');
+  console.log('[geminiService] ℹ️ GOOGLE_APPLICATION_CREDENTIALS not set — using Application Default Credentials (ADC/Cloud Run).');
 }
 
 const project = process.env.GOOGLE_CLOUD_PROJECT;
