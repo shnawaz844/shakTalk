@@ -126,15 +126,48 @@ const HINGLISH_WORDS = new Set([
   'kare', 'bolo', 'sunte', 'shuru', 'khatam', 'wala', 'wali', 'wale'
 ]);
 
-// Common English stopwords (to detect English spoken when non-English was selected)
+// Common English stopwords and grammatical markers (Latin letters)
 const ENGLISH_WORDS = new Set([
-  'the', 'is', 'are', 'am', 'was', 'were', 'have', 'has', 'had', 'do', 'does',
-  'did', 'you', 'your', 'my', 'me', 'we', 'our', 'they', 'them', 'he', 'she',
-  'it', 'this', 'that', 'these', 'those', 'what', 'why', 'when', 'where',
-  'how', 'who', 'yes', 'no', 'not', 'can', 'could', 'will', 'would', 'should',
-  'doing', 'speaking', 'talking', 'listening', 'audible', 'hear', 'call',
-  'hello', 'okay', 'fine', 'good', 'morning', 'night', 'just', 'nothing',
-  'work', 'working', 'there', 'here', 'right', 'know', 'think', 'about'
+  'the', 'is', 'are', 'am', 'was', 'were', 'have', 'has', 'had', 'having',
+  'do', 'does', 'did', 'done', 'doing',
+  'you', 'your', 'yours', 'my', 'mine', 'me', 'we', 'our', 'ours', 'us',
+  'they', 'them', 'their', 'theirs', 'he', 'him', 'his', 'she', 'her', 'hers',
+  'it', 'its', 'this', 'that', 'these', 'those',
+  'what', 'whats', 'why', 'when', 'where', 'how', 'who', 'whom', 'which',
+  'can', 'could', 'will', 'would', 'shall', 'should', 'must', 'might',
+  'and', 'but', 'or', 'so', 'if', 'because', 'with', 'for', 'from', 'to', 'of', 'at', 'in', 'on', 'about', 'also',
+  'yes', 'no', 'not', 'please', 'thanks', 'thank', 'sorry', 'welcome', 'hello', 'hi', 'hey',
+  'speaking', 'talking', 'listening', 'audible', 'hear', 'hearing', 'call', 'calling',
+  'there', 'here', 'just', 'nothing', 'something', 'anything', 'everything',
+  'know', 'knowing', 'think', 'thinking', 'want', 'going', 'come', 'coming', 'understand',
+  'fine', 'good', 'morning', 'night', 'work', 'working', 'right'
+]);
+
+// English words phonetically transliterated into Devanagari by Gemini's native audio model
+// when an English speaker speaks into a Hindi session.
+// Unlike Hindi loan nouns (like "car", "phone", "train"), these are English grammatical words,
+// question words, pronouns, auxiliary verbs, and conversational expressions that NEVER form
+// a grammatical Hindi sentence unless the speaker is actually speaking English.
+const DEVANAGARI_ENGLISH_GRAMMAR_WORDS = new Set([
+  // Question words
+  'व्हाट', 'वाट', 'व्हाट्स', 'वाट्स', 'व्हाय', 'वाई', 'व्हेन', 'वेन', 'वेयर', 'वेर', 'हाउ', 'हू', 'विच',
+  // Pronouns
+  'यू', 'योअर', 'योर', 'माय', 'माई', 'मी', 'आय', 'आई', 'वी', 'दे', 'ही', 'शी', 'इट', 'इट्स', 'अस', 'देम', 'हिम',
+  // Auxiliary & Be verbs
+  'इज़', 'इज', 'आर', 'एम', 'ऐम', 'वॉज़', 'वाज', 'वर', 'बीन', 'बी',
+  'डू', 'डज़', 'डज', 'डिड', 'डन', 'डूइंग', 'डुइंग',
+  'हैव', 'हैज़', 'हैज', 'हैड', 'हैविंग',
+  'कैन', 'कुड', 'विल', 'वुड', 'शुड', 'मस्ट', 'माइट',
+  // Prepositions & Conjunctions
+  'एंड', 'बट', 'बिकॉज़', 'बिकॉज', 'विथ', 'विद', 'फॉर', 'फ्रॉम', 'टू', 'ऑफ', 'अबाउट', 'ऑल्सो', 'आलसो',
+  // Conversational markers & verbs
+  'हेलो', 'हैलो', 'हाय', 'ओके', 'यस', 'नो', 'नॉट', 'प्लीज', 'प्लीज़', 'थैंक', 'थैंक्स', 'सॉरी', 'वेलकम',
+  'स्पीक', 'स्पीकिंग', 'लिसन', 'लिसनिंग', 'हियर', 'हियरिंग', 'टॉक', 'टॉकिंग', 'टेल', 'टेलिंग',
+  'नो', 'नोइंग', 'थिंक', 'थिंकिंग', 'वांट', 'गोइंग', 'कमिंग',
+  'ऑडिबल', 'ऑडीबल', 'अंडरस्टैंड', 'फाइन', 'गुड', 'मॉर्निंग', 'नाइट',
+  'देयर', 'हियर', 'दिस', 'दैट', 'दीज़', 'दोज़', 'नथिंग', 'समथिंग', 'एनीथिंग', 'एवरीथिंग',
+  // Very common phonetic transliterations in user speech turns
+  'ऑफीस', 'ऑफिस', 'ऑफ़िस'
 ]);
 
 /**
@@ -154,14 +187,16 @@ function isLanguageMismatch(originalText, translatedText, inputLang, outputLang)
   // ── 1. SCRIPT MISMATCH CHECK ─────────────────────────────────────────────
   const inputPattern = SCRIPT_RANGES[inputLang];
   if (inputPattern) {
-    const origLetters = (orig.match(/\p{L}/gu) || []).length;
+    const origLetters = (orig.match(/[\p{L}\p{M}]/gu) || []).length;
     if (origLetters >= 4) {
-      if (!inputPattern.test(orig)) {
+      const expectedMatches = (orig.match(new RegExp(inputPattern.source, 'gu')) || []).length;
+      // If expected script is < 30% of total letters, check if another script dominates
+      if (expectedMatches < origLetters * 0.30) {
         for (const [lang, pat] of Object.entries(SCRIPT_RANGES)) {
           if (lang === inputLang || pat.source === inputPattern.source) continue;
           const otherMatches = (orig.match(new RegExp(pat.source, 'gu')) || []).length;
-          if (otherMatches >= origLetters * 0.5) {
-            console.log(`[isLanguageMismatch] 🛑 Script mismatch: Expected ${inputLang}, but input "${orig}" matches ${lang}`);
+          if (otherMatches >= origLetters * 0.50) {
+            console.log(`[isLanguageMismatch] 🛑 Script mismatch: Expected ${inputLang} (${expectedMatches}/${origLetters} letters), but input "${orig}" matches ${lang} (${otherMatches}/${origLetters} letters)`);
             return true;
           }
         }
@@ -189,44 +224,48 @@ function isLanguageMismatch(originalText, translatedText, inputLang, outputLang)
     }
 
     // ── 3. ENGLISH SESSION RECEIVING ROMANIZED HINDI (HINGLISH) ───────────
-    // Threshold: >= 4 Hinglish words AND >= 40% of total words must be Hinglish.
-    // This prevents false positives like short phrases with common English-Hindi overlaps.
     const words = orig.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
-    if (words.length >= 4) {
+    if (words.length >= 3) {
       let hinglishCount = 0;
       for (const w of words) {
         if (HINGLISH_WORDS.has(w)) hinglishCount++;
       }
-      if (hinglishCount >= 4 && hinglishCount / words.length >= 0.40) {
-        console.log(`[isLanguageMismatch] 🛑 Romanized Hindi (Hinglish) detected in English session (${hinglishCount}/${words.length} words): "${orig}"`);
+      const ratio = hinglishCount / words.length;
+      if ((words.length === 3 && hinglishCount >= 2 && ratio >= 0.60) ||
+          (words.length >= 4 && hinglishCount >= 3 && ratio >= 0.35)) {
+        console.log(`[isLanguageMismatch] 🛑 Romanized Hindi (Hinglish) detected in English session (${hinglishCount}/${words.length} words, ratio=${Math.round(ratio * 100)}%): "${orig}"`);
         return true;
       }
     }
   }
 
-  // ── 4. HINDI SESSION RECEIVING ENGLISH WORDS ──────────────────────────────
-  // Only block if >= 4 English words AND >= 40% ratio to avoid false positives
-  // like short English phrases mixed into Hindi Romanized speech.
+  // ── 4. HINDI SESSION RECEIVING ENGLISH (LATIN OR PHONETIC DEVANAGARI) ─────
   if (inputLang === 'Hindi') {
-    if (!/[ऀ-ॿ]/u.test(orig)) {
-      const words = orig.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/).filter(Boolean);
-      if (words.length >= 4) {
-        let englishCount = 0;
-        for (const w of words) {
-          if (ENGLISH_WORDS.has(w)) englishCount++;
+    // Note: \\p{M} preserves Devanagari matras (vowel signs like ू , ी , े) and halants (्)
+    const tokens = orig.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s]/gu, '').split(/\s+/).filter(Boolean);
+    if (tokens.length >= 2) {
+      let englishCount = 0;
+      for (const tok of tokens) {
+        if (ENGLISH_WORDS.has(tok) || DEVANAGARI_ENGLISH_GRAMMAR_WORDS.has(tok)) {
+          englishCount++;
         }
-        if (englishCount >= 4 && englishCount / words.length >= 0.40) {
-          console.log(`[isLanguageMismatch] 🛑 English speech detected in Hindi session (${englishCount}/${words.length} words): "${orig}"`);
-          return true;
-        }
+      }
+      const ratio = englishCount / tokens.length;
+      // 2-word phrase: both must be English (e.g. "व्हाट आर", "what are", "कैन यू")
+      // 3+ words: >= 2 English words AND >= 35% ratio (e.g. "ऑफीस व्हाट आर यू डूइंग?" -> 5/5 = 100%)
+      const isEnglish = (tokens.length === 2 && englishCount === 2) ||
+                        (tokens.length >= 3 && englishCount >= 2 && ratio >= 0.35);
+      if (isEnglish) {
+        console.log(`[isLanguageMismatch] 🛑 English speech detected in Hindi session (${englishCount}/${tokens.length} words, ratio=${Math.round(ratio * 100)}%): "${orig}"`);
+        return true;
       }
     }
   }
 
   // ── 5. PASSTHROUGH / ECHO CHECK ──────────────────────────────────────────
   if (orig.length >= 4 && trans.length >= 4) {
-    const cleanO = orig.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
-    const cleanT = trans.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const cleanO = orig.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '');
+    const cleanT = trans.toLowerCase().replace(/[^\p{L}\p{M}\p{N}]/gu, '');
     if (cleanO === cleanT) {
       console.log(`[isLanguageMismatch] 🛑 Identical input/output detected ("${orig}" === "${trans}")`);
       return true;
@@ -323,6 +362,20 @@ class LiveTranslationSession {
     this.turnSuppressed = false;
   }
 
+  _suppressCurrentTurn(reason = '') {
+    if (this.turnSuppressed) return;
+    this.turnSuppressed = true;
+    this.inFlightBurstBuffers = [];
+    this.inFlightBurstBytes = 0;
+    this.outputAudioBuffers = [];
+    if (reason) {
+      console.log(`[LiveTranslationSession] 🛑 Turn ${this.turnId || 'active'} suppressed (${this.inputLang}→${this.outputLang}): ${reason}`);
+    }
+    if (this.callbacks.onSuppressed) {
+      this.callbacks.onSuppressed({ turnId: this.turnId });
+    }
+  }
+
   // ── Keepalive heartbeat ───────────────────────────────────────────────────
   // Gemini Live closes idle WebSocket connections after approximately 60s of
   // no audio input. If both users are silent for a while (e.g. one finishes
@@ -386,11 +439,7 @@ class LiveTranslationSession {
     // Only check if we have enough original text to make a reliable decision (>= 3 chars).
     const origLen = (this.fullOriginalText || '').trim().length;
     if (origLen >= 3 && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
-      console.log(`[LiveTranslationSession] 🛑 Burst suppressed due to language mismatch (${this.inputLang}→${this.outputLang}): input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
-      this.turnSuppressed = true;
-      this.inFlightBurstBuffers = [];
-      this.inFlightBurstBytes = 0;
-      this.outputAudioBuffers = [];
+      this._suppressCurrentTurn(`Burst check mismatch: input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
       return;
     }
 
@@ -569,13 +618,8 @@ ABSOLUTE RULES (MANDATORY):
           if (part.text) {
             this.fullTranslationText += part.text;
 
-            // Only run mismatch check if NOT already suppressed — avoids calling
-            // isLanguageMismatch() 30-50 times per turn (was causing log spam + perf waste).
             if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
-              this.turnSuppressed = true;
-              this.inFlightBurstBuffers = [];
-              this.inFlightBurstBytes = 0;
-              this.outputAudioBuffers = [];
+              this._suppressCurrentTurn(`ModelTurn mismatch: input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
             }
 
             if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
@@ -617,12 +661,8 @@ ABSOLUTE RULES (MANDATORY):
         if (msg.serverContent.outputTranscription.text) {
           this.fullTranslationText += msg.serverContent.outputTranscription.text;
 
-          // Only check if not already suppressed — prevents duplicate calls per turn.
           if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
-            this.turnSuppressed = true;
-            this.inFlightBurstBuffers = [];
-            this.inFlightBurstBytes = 0;
-            this.outputAudioBuffers = [];
+            this._suppressCurrentTurn(`OutputTranscription mismatch: input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
           }
 
           if (!this.turnSuppressed && this.callbacks.onTranscriptionChunk) {
@@ -640,13 +680,8 @@ ABSOLUTE RULES (MANDATORY):
           // Accumulate the speaker's original (as-spoken) transcription text.
           this.fullOriginalText += msg.serverContent.inputTranscription.text;
 
-          // Cross-talk and language enforcement check.
-          // Only check if not already suppressed — prevents 30-50 duplicate calls per turn.
           if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
-            this.turnSuppressed = true;
-            this.inFlightBurstBuffers = [];
-            this.inFlightBurstBytes = 0;
-            this.outputAudioBuffers = [];
+            this._suppressCurrentTurn(`InputTranscription mismatch: input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
           }
 
           // If language is verified and we have buffered chunks waiting, release them now!
@@ -667,9 +702,8 @@ ABSOLUTE RULES (MANDATORY):
       }
 
       if (msg.serverContent && msg.serverContent.turnComplete) {
-        // Final verification before flushing — only if not already suppressed
         if (!this.turnSuppressed && isLanguageMismatch(this.fullOriginalText, this.fullTranslationText, this.inputLang, this.outputLang)) {
-          this.turnSuppressed = true;
+          this._suppressCurrentTurn(`TurnComplete mismatch: input="${(this.fullOriginalText || '').trim()}", output="${(this.fullTranslationText || '').trim()}"`);
         }
 
         // Final flush of any remaining burst audio.
@@ -890,4 +924,4 @@ function closeSession(sessionId, role) {
   }
 }
 
-module.exports = { warmupSession, feedAudioChunk, closeSession };
+module.exports = { warmupSession, feedAudioChunk, closeSession, isLanguageMismatch };

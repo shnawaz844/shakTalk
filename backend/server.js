@@ -549,6 +549,7 @@ function makeSessionCallbacks(session, sessionId, role) {
       if (!rs.turnActive) {
         rs.turnActive = true;
         rs.turnStartedAt = Date.now();
+        rs.turnSpeechStartedAt = rs.lastChunkClientSentAt || Date.now();
         send(partnerSocket(), { type: 'partner_speaking', turnId: chunk.turnId });
         send(senderSocket(), { type: 'processing_started', turnId: chunk.turnId });
       }
@@ -587,6 +588,14 @@ function makeSessionCallbacks(session, sessionId, role) {
     onTranscriptionChunk(data) {
       if (!sessions.has(sessionId) || rs.paused) return;
 
+      if (!rs.turnActive) {
+        rs.turnActive = true;
+        rs.turnStartedAt = Date.now();
+        rs.turnSpeechStartedAt = rs.lastChunkClientSentAt || Date.now();
+        send(partnerSocket(), { type: 'partner_speaking', turnId: data.turnId });
+        send(senderSocket(), { type: 'processing_started', turnId: data.turnId });
+      }
+
       const speechStart = rs.turnSpeechStartedAt || rs.turnStartedAt;
       if (speechStart) {
         const fromSpeechMs = Date.now() - speechStart;
@@ -614,6 +623,24 @@ function makeSessionCallbacks(session, sessionId, role) {
         speechStartedAt: rs.turnSpeechStartedAt || rs.turnStartedAt,
         serverRelayedAt: Date.now(),
       });
+    },
+
+    onSuppressed({ turnId }) {
+      if (!sessions.has(sessionId)) return;
+      console.log(`[server] Turn ${turnId || 'active'} (${role}) suppressed early — clearing partner UI immediately.`);
+      rs.turnActive = false;
+      send(partnerSocket(), { type: 'lock_released' });
+      send(partnerSocket(), { type: 'live_subtitle_clear' });
+      send(senderSocket(), { type: 'live_subtitle_clear' });
+    },
+
+    onInterrupted({ turnId }) {
+      if (!sessions.has(sessionId)) return;
+      console.log(`[server] Turn ${turnId || 'active'} (${role}) interrupted — resetting state.`);
+      rs.turnActive = false;
+      send(partnerSocket(), { type: 'lock_released' });
+      send(partnerSocket(), { type: 'live_subtitle_clear' });
+      send(senderSocket(), { type: 'live_subtitle_clear' });
     },
 
     onTurnComplete(result) {
@@ -892,10 +919,8 @@ wss.on('connection', (ws) => {
       if (!senderRole) return;
 
       const rs = session.roleState[senderRole];
-      if (rs && !rs.turnActive) {
-        rs.turnActive = true;
-        rs.turnSpeechStartedAt = clientSentAt || Date.now();
-        rs.turnStartedAt = Date.now();
+      if (rs) {
+        rs.lastChunkClientSentAt = clientSentAt || Date.now();
       }
 
       // When sender is muted/paused, drop all audio chunks immediately — never feed into Gemini!
