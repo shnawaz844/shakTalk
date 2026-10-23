@@ -27,6 +27,7 @@ interface SessionParams {
   role: 'host' | 'guest';
   myLang: string;
   partnerLang: string;
+  engine?: 'legacy' | 'livekit';
 }
 
 const publishableKey =
@@ -74,7 +75,7 @@ function MainApp() {
         {screen === 'profile' && (
           <ProfileScreen onBack={() => setScreen('home')} />
         )}
-        {screen === 'session' && sessionParams && CALL_ENGINE === 'livekit' && (
+        {screen === 'session' && sessionParams && (sessionParams.engine || CALL_ENGINE) === 'livekit' && (
           <LiveCallScreen
             sessionId={sessionParams.sessionId}
             role={sessionParams.role}
@@ -83,7 +84,7 @@ function MainApp() {
             onEnd={handleEndSession}
           />
         )}
-        {screen === 'session' && sessionParams && CALL_ENGINE === 'legacy' && (
+        {screen === 'session' && sessionParams && (sessionParams.engine || CALL_ENGINE) === 'legacy' && (
           <SessionScreen
             sessionId={sessionParams.sessionId}
             role={sessionParams.role}
