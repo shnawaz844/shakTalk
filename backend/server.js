@@ -15,6 +15,7 @@ const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://ex
 // quality/latency is solid without Gemini in the loop. AI translation is
 // back on for real: audio_stream_chunk now feeds Gemini as before.
 const AI_TRANSLATION_ENABLED = true;
+const DEFAULT_CALL_ENGINE = process.env.DEFAULT_CALL_ENGINE || 'legacy';
 
 const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
 if (!CLERK_SECRET_KEY) {
@@ -833,8 +834,9 @@ wss.on('connection', (ws) => {
     if (type === 'create_session') {
       const { lang, userId, speakerGender, speakerAge } = message;
       const sessionId = uuidv4();
+      const hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       sessions.set(sessionId, {
-        hostEngine: message.engine === 'livekit' ? 'livekit' : 'legacy',
+        hostEngine,
         host: ws, hostLang: lang, hostUserId: userId || null,
         hostVoiceProfile: { gender: speakerGender, age: speakerAge },
         guest: null, guestLang: null, guestUserId: null,
@@ -848,7 +850,10 @@ wss.on('connection', (ws) => {
       currentRole = 'host';
       const session = sessions.get(sessionId);
       session.createdAt = Date.now();
-      console.log(`[LATENCY][CALL_CONNECT] Host created session ${sessionId} at ${session.createdAt} (Host lang: ${lang}, userId: ${userId}, gender: ${speakerGender})`);
+      const activeModel = hostEngine === 'livekit'
+        ? (process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview')
+        : (process.env.GEMINI_LIVE_MODEL || 'gemini-live-2.5-flash-native-audio');
+      console.log(`[server] Host created session ${sessionId} [engine=${hostEngine}, model=${activeModel}] at ${session.createdAt} (Host lang: ${lang}, userId: ${userId})`);
       send(ws, { type: 'session_created', sessionId });
 
       if (userId) {
@@ -867,7 +872,7 @@ wss.on('connection', (ws) => {
       if (session.host === ws) { send(ws, { type: 'error', message: `Cannot join your own session as guest on the same connection.` }); return; }
       if (session.guest) { send(ws, { type: 'error', message: `Session "${sessionId}" already has a guest.` }); return; }
 
-      const guestEngine = message.engine === 'livekit' ? 'livekit' : 'legacy';
+      const guestEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       if (guestEngine !== session.hostEngine) {
         send(ws, { type: 'error', message: 'Both phones must run the same app version to call each other. Please update the app.' });
         return;

@@ -20,10 +20,20 @@ export {
 const wsUrl = process.env.EXPO_PUBLIC_WS_URL || 'wss://www.shaktalk.com';
 export const WS_URL = wsUrl;
 
-// Call engine: 'legacy' = Gemini 2.5 Flash Native Audio on Vertex AI (geminiService.js);
-// 'livekit' = WebRTC call + Gemini Live Translate bot (requires Google AI Studio credits).
+// Call engine configuration:
+// - 'legacy' (DEFAULT): Gemini 2.5 Flash Native Audio on Vertex AI (geminiService.js).
+// - 'livekit': Gemini 3.5 Live Translate preview bot via LiveKit (liveTranslate.js).
+// Configurable via EXPO_PUBLIC_CALL_ENGINE ('legacy' | 'livekit') or EXPO_PUBLIC_TRANSLATION_MODEL ('gemini-2.5' | 'gemini-3.5').
+const configuredEngine = (process.env.EXPO_PUBLIC_CALL_ENGINE || process.env.EXPO_PUBLIC_TRANSLATION_MODEL || '').toLowerCase();
 export const CALL_ENGINE: 'livekit' | 'legacy' =
-  process.env.EXPO_PUBLIC_CALL_ENGINE === 'livekit' ? 'livekit' : 'legacy';
+  configuredEngine === 'livekit' || configuredEngine === 'gemini-3.5' || configuredEngine === '3.5'
+    ? 'livekit'
+    : 'legacy';
+
+export const ACTIVE_TRANSLATION_MODEL =
+  CALL_ENGINE === 'livekit'
+    ? (process.env.EXPO_PUBLIC_GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview')
+    : (process.env.EXPO_PUBLIC_GEMINI_LIVE_MODEL || 'gemini-live-2.5-flash-native-audio');
 
 // HTTP equivalent of WS_URL, for plain REST calls (e.g. /clerk/update-profile).
 // Derived from WS_URL so both always point at the same backend.
