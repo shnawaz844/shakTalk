@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import { websocketService } from '../services/websocketService';
 import { WS_URL, CALL_ENGINE } from '../config';
 import type { LiveKitCallInfo } from '../livekit/useLiveKitCall';
+import { CallEngine, getCurrentEngine, getStoredEngine } from '../utils/enginePreference';
 
 export type ConnectionStatus =
   | 'idle'
@@ -44,8 +45,9 @@ interface WebSocketContextType {
   /** Set once the server hands out the LiveKit room token (LiveKit engine only). */
   liveKit: LiveKitCallInfo | null;
   queueDepth: number;
-  createSession: (lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => Promise<void>;
-  joinSession: (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => Promise<void>;
+  callEngine: CallEngine;
+  createSession: (lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => Promise<void>;
+  joinSession: (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => Promise<void>;
   sendAudioStreamChunk: (
     audioBase64: string,
     mimeType: string,
@@ -80,7 +82,7 @@ interface WebSocketCallbacks {
   onTurnRejected?: () => void;
   onLockReleased?: () => void;
   onQueueResumed?: () => void;
-  onSessionReadyEvent?: (partnerLang: string) => void;
+  onSessionReadyEvent?: (partnerLang: string, engine?: CallEngine) => void;
   onWebRTCOffer?: (sdp: any) => void;
   onWebRTCAnswer?: (sdp: any) => void;
   onWebRTCIceCandidate?: (candidate: any) => void;
@@ -94,6 +96,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [role, setRole] = useState<'host' | 'guest' | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
+  const [callEngine, setCallEngine] = useState<CallEngine>(getCurrentEngine());
   const [isProcessing, setIsProcessing] = useState(false);
   // True once the server confirms both Gemini Live sessions are open and ready.
   // Audio fed before this point would be silently dropped by the server.
@@ -130,15 +133,17 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     if (type === 'session_ready') {
       const elapsed = Date.now() - connectStartTimeRef.current;
-      console.log(`[LATENCY][CALL_CONNECT] Partner joined & peer handshake ready in ${elapsed}ms (partnerLang=${message.partnerLang}). Waiting for Gemini AI warmup...`);
+      console.log(`[LATENCY][CALL_CONNECT] Partner joined & peer handshake ready in ${elapsed}ms (partnerLang=${message.partnerLang}, engine=${message.engine}). Waiting for Gemini AI warmup...`);
       setStatus('connected');
       setIsGeminiReady(false); // reset — gemini_ready will follow once both sessions are open
       if (message.role) {
         setRole(message.role);
       }
+      const effectiveEngine = (message.engine === 'livekit' ? 'livekit' : 'legacy') as CallEngine;
+      setCallEngine(effectiveEngine);
       if (message.partnerLang) {
         setPartnerLang(message.partnerLang);
-        callbacksMap.current.forEach(c => c.onSessionReadyEvent?.(message.partnerLang));
+        callbacksMap.current.forEach(c => c.onSessionReadyEvent?.(message.partnerLang, effectiveEngine));
       }
     }
 
@@ -256,7 +261,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
   }, []);
 
-  const createSession = useCallback(async (lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => {
+  const createSession = useCallback(async (lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => {
     connectStartTimeRef.current = Date.now();
     console.log(`[LATENCY][CALL_CONNECT] Creating session at ${connectStartTimeRef.current}...`);
     setStatus('connecting');
@@ -269,8 +274,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
       setLiveKit(null);
+      const engine = preferredEngine || await getStoredEngine();
+      setCallEngine(engine);
       websocketService.send({
-        type: 'create_session', lang, userId, engine: CALL_ENGINE,
+        type: 'create_session', lang, userId, engine,
         ...(speakerGender ? { speakerGender } : {}),
         ...(speakerAge !== undefined ? { speakerAge } : {}),
       });
@@ -280,7 +287,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [handleMessage]);
 
-  const joinSession = useCallback(async (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number) => {
+  const joinSession = useCallback(async (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => {
     connectStartTimeRef.current = Date.now();
     console.log(`[LATENCY][CALL_CONNECT] Joining session ${sid} at ${connectStartTimeRef.current}...`);
     setStatus('connecting');
@@ -293,8 +300,10 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
       setLiveKit(null);
+      const engine = preferredEngine || await getStoredEngine();
+      setCallEngine(engine);
       websocketService.send({
-        type: 'join_session', sessionId: sid, lang, userId, engine: CALL_ENGINE,
+        type: 'join_session', sessionId: sid, lang, userId, engine,
         ...(speakerGender ? { speakerGender } : {}),
         ...(speakerAge !== undefined ? { speakerAge } : {}),
       });
@@ -385,6 +394,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         role,
         sessionId,
         partnerLang,
+        callEngine,
         isProcessing,
         isGeminiReady,
         liveKit,

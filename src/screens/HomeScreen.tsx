@@ -35,6 +35,7 @@ interface HomeScreenProps {
     role: 'host' | 'guest';
     myLang: string;
     partnerLang: string;
+    engine?: 'legacy' | 'livekit';
   }) => void;
   onOpenProfile: () => void;
   onOpenConversation: (conversationId: string, myUserId: string) => void;
@@ -145,7 +146,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
 
-  const { status, sessionId, partnerLang, role: wsRole, createSession, joinSession, endSession } = useWebSocket({
+  const { status, sessionId, partnerLang, role: wsRole, callEngine, createSession, joinSession, endSession } = useWebSocket({
     onError: (msg) => {
       setErrorMsg(msg);
       setConnectingMsg(null);
@@ -159,9 +160,9 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     const resolvedRole = wsRole || roleRef.current;
     if (status === 'connected' && sessionId && partnerLang && resolvedRole) {
       setConnectingMsg(null);
-      onSessionReady({ sessionId, role: resolvedRole, myLang, partnerLang });
+      onSessionReady({ sessionId, role: resolvedRole, myLang, partnerLang, engine: callEngine });
     }
-  }, [status, sessionId, partnerLang, wsRole]);
+  }, [status, sessionId, partnerLang, wsRole, callEngine]);
 
   const handleJoinFromUrl = async (url: string | null) => {
     if (!url) return;

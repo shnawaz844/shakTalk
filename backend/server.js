@@ -870,18 +870,12 @@ wss.on('connection', (ws) => {
 
       if (!session) { send(ws, { type: 'error', message: `Session "${sessionId}" not found.` }); return; }
       if (session.host === ws) { send(ws, { type: 'error', message: `Cannot join your own session as guest on the same connection.` }); return; }
-      if (session.guest) { send(ws, { type: 'error', message: `Session "${sessionId}" already has a guest.` }); return; }
-
-      const guestEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
-      if (guestEngine !== session.hostEngine) {
-        send(ws, { type: 'error', message: 'Both phones must run the same app version to call each other. Please update the app.' });
-        return;
-      }
-      if (guestEngine === 'livekit' && !LIVEKIT_ENABLED) {
+      // Guest joins: automatically adopt the host's selected engine
+      session.engine = session.hostEngine || DEFAULT_CALL_ENGINE;
+      if (session.engine === 'livekit' && !LIVEKIT_ENABLED) {
         send(ws, { type: 'error', message: 'Server is not configured for LiveKit calls (LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET).' });
         return;
       }
-      session.engine = guestEngine;
 
       session.guest = ws;
       session.guestLang = lang;
@@ -891,10 +885,10 @@ wss.on('connection', (ws) => {
       currentRole = 'guest';
       const guestJoinAt = Date.now();
       const waitTime = session.createdAt ? guestJoinAt - session.createdAt : 0;
-      console.log(`[LATENCY][CALL_CONNECT] Guest joined session: ${sessionId} (${waitTime}ms after host creation)`);
+      console.log(`[LATENCY][CALL_CONNECT] Guest joined session: ${sessionId} [engine=${session.engine}] (${waitTime}ms after host creation)`);
 
-      send(session.host, { type: 'session_ready', role: 'host', sessionId, partnerLang: session.guestLang });
-      send(session.guest, { type: 'session_ready', role: 'guest', sessionId, partnerLang: session.hostLang });
+      send(session.host, { type: 'session_ready', role: 'host', sessionId, partnerLang: session.guestLang, engine: session.engine });
+      send(session.guest, { type: 'session_ready', role: 'guest', sessionId, partnerLang: session.hostLang, engine: session.engine });
 
       if (session.engine === 'livekit') {
         startLiveKitCall(session, sessionId);

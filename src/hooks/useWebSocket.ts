@@ -16,7 +16,7 @@ interface UseWebSocketOptions {
   onTurnRejected?: () => void;
   onLockReleased?: () => void;
   onQueueResumed?: () => void;
-  onSessionReadyEvent?: (partnerLang: string) => void;
+  onSessionReadyEvent?: (partnerLang: string, engine?: string) => void;
   onWebRTCOffer?: (sdp: any) => void;
   onWebRTCAnswer?: (sdp: any) => void;
   onWebRTCIceCandidate?: (candidate: any) => void;
@@ -39,6 +39,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     role: context.role,
     sessionId: context.sessionId,
     partnerLang: context.partnerLang,
+    callEngine: context.callEngine,
     isProcessing: context.isProcessing,
     isGeminiReady: context.isGeminiReady,
     liveKit: context.liveKit,
