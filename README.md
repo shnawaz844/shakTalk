@@ -95,6 +95,26 @@ ShakTranslate is a real-time, two-user AI voice translation application built wi
 MIT
 
 
+## ⚙️ Translation Engine & Model Configuration
+
+The project supports both engines, configurable via environment variables:
+
+| Engine | Model | Backend | How to enable |
+|---|---|---|---|
+| **Legacy (DEFAULT)** | `gemini-live-2.5-flash-native-audio` | Google Cloud Vertex AI (GCP Service Account) | Default (No env needed, or set `EXPO_PUBLIC_CALL_ENGINE=legacy`) |
+| **LiveKit** | `gemini-3.5-live-translate-preview` | LiveKit Bot + Google AI Studio (API Key) | Set `EXPO_PUBLIC_CALL_ENGINE=livekit` |
+
+### Switching via Environment:
+- **In Mobile App (`.env` or EAS build profile):**
+  - Default: Uses `gemini-live-2.5-flash-native-audio`
+  - To test Gemini 3.5: `EXPO_PUBLIC_CALL_ENGINE=livekit` (or `EXPO_PUBLIC_TRANSLATION_MODEL=gemini-3.5`)
+- **In Backend (`backend/.env`):**
+  - `DEFAULT_CALL_ENGINE=legacy` (or `livekit`)
+  - `GEMINI_LIVE_MODEL=gemini-live-2.5-flash-native-audio`
+  - `GEMINI_TRANSLATE_MODEL=gemini-3.5-live-translate-preview`
+
+---
+
 ## BUILD COMMAND 
 
 For development = eas build --profile development --platform android  --clear-cache
