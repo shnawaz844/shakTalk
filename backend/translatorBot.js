@@ -163,7 +163,7 @@ class TranslatorBot {
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
     // The partner of `role` is the one hearing this: guard their mic while it plays.
-    this.guards[this.partnerOf(role)].onPlayback((samples.length / OUTPUT_RATE) * 1000);
+    this.guards[this.partnerOf(role)].onPlayback(samples, OUTPUT_RATE);
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
         const part = samples.slice(i, i + FRAME_SAMPLES);

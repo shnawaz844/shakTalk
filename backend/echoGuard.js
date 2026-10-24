@@ -29,6 +29,10 @@ const BARGE_RMS = Number(process.env.ECHO_GUARD_BARGE_RMS || 2500);
 const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 4);
 // Barge-in must last this long before the mic opens (a cough or a click doesn't count).
 const BARGE_HOLD_MS = 200;
+// Translated audio quieter than this (int16 RMS per 20ms) is treated as silence.
+// Gemini Live Translate streams continuously and can send silent chunks; those
+// must not keep the mic guarded, or it would stay muted indefinitely.
+const AUDIBLE_RMS = Number(process.env.ECHO_GUARD_AUDIBLE_RMS || 300);
 
 function rmsOf(pcm) {
   const n = pcm.length >> 1;
@@ -42,7 +46,8 @@ class EchoGuard {
   constructor(label, { now = () => Date.now() } = {}) {
     this.label = label;
     this.now = now;
-    this.playEndAt = 0;   // when the translation this listener is hearing finishes (server clock)
+    this.playEndAt = 0;   // when everything queued for this listener finishes playing (server clock)
+    this.audibleEndAt = 0; // when the last AUDIBLE part of it finishes — this is what guards the mic
     this.echoLevel = 0;   // running estimate of leaked echo at the mic (int16 RMS)
     this.loudSince = 0;   // start of the current loud stretch during playback
     this.held = [];       // loud frames held back until barge-in is confirmed
@@ -50,14 +55,29 @@ class EchoGuard {
     this.lastLogAt = 0;
   }
 
-  /** Call when `durationMs` of translated audio is queued for this listener. */
-  onPlayback(durationMs) {
-    const t = this.now();
-    this.playEndAt = Math.max(this.playEndAt, t) + durationMs;
+  /**
+   * Call with each chunk of translated audio queued for this listener
+   * (Int16Array samples at `rate` Hz). Chunks play back to back, so the chunk
+   * starts when the previous one ends; only its audible part extends the guard.
+   */
+  onPlayback(samples, rate) {
+    const start = Math.max(this.playEndAt, this.now());
+    const frame = Math.max(1, Math.round(rate * 0.02));
+    let lastAudibleEnd = -1;
+    for (let i = 0; i < samples.length; i += frame) {
+      const end = Math.min(samples.length, i + frame);
+      let sum = 0;
+      for (let j = i; j < end; j++) sum += samples[j] * samples[j];
+      if (Math.sqrt(sum / (end - i)) > AUDIBLE_RMS) lastAudibleEnd = end;
+    }
+    this.playEndAt = start + (samples.length / rate) * 1000;
+    if (lastAudibleEnd >= 0) {
+      this.audibleEndAt = Math.max(this.audibleEndAt, start + (lastAudibleEnd / rate) * 1000);
+    }
   }
 
   isGuarding() {
-    return ENABLED && this.now() < this.playEndAt + TAIL_MS;
+    return ENABLED && this.now() < this.audibleEndAt + TAIL_MS;
   }
 
   /**
