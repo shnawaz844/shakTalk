@@ -100,7 +100,11 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
         if (cancelled) { await room.disconnect(); return; }
         // Tracks published before we connected.
         room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => consider(pub, p)));
-        await room.localParticipant.setMicrophoneEnabled(true);
+        await room.localParticipant.setMicrophoneEnabled(true, {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        });
         try {
           room.localParticipant.setTrackSubscriptionPermissions(false, [
             { participantIdentity: TRANSLATOR_IDENTITY, allowAll: true },
@@ -127,7 +131,11 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
 
   const setMicEnabled = useCallback(async (enabled: boolean) => {
     setMicEnabledState(enabled);
-    await roomRef.current?.localParticipant.setMicrophoneEnabled(enabled).catch(() => {});
+    await roomRef.current?.localParticipant.setMicrophoneEnabled(enabled, {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    }).catch(() => {});
   }, []);
 
   const setSpeaker = useCallback(async (on: boolean) => {

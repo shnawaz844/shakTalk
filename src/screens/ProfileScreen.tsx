@@ -15,6 +15,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
+import { ModelSwitcher } from '../components/ModelSwitcher';
 import type { Gender } from './OnboardingScreen';
 
 interface ProfileScreenProps {
@@ -190,6 +191,10 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
               Used as your default language on the home screen until you pick a different one there.
             </Text>
             <LanguageSelector label="" selected={nativeLanguage} onSelect={setNativeLanguage} />
+          </View>
+
+          <View style={{ marginVertical: 14 }}>
+            <ModelSwitcher />
           </View>
 
           <TouchableOpacity

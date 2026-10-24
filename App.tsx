@@ -15,7 +15,7 @@ import { ConversationDetailScreen } from './src/screens/ConversationDetailScreen
 import { AudioRecordingsScreen } from './src/screens/AudioRecordingsScreen';
 import { PlanSelectionScreen } from './src/screens/PlanSelectionScreen';
 import { WebSocketProvider } from './src/contexts/WebSocketContext';
-import { getCurrentEngine } from './src/utils/enginePreference';
+import { getCurrentEngine, getCurrentPlanTier } from './src/utils/enginePreference';
 import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
@@ -135,6 +135,7 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
         const token = await getToken();
         if (!token) return;
         const engine = getCurrentEngine();
+        const tier = getCurrentPlanTier();
         const MODEL_MAP: Record<string, string> = {
           legacy: 'gemini-live-2.5-flash-native-audio',
           livekit: 'gemini-3.5-live-translate-preview',
@@ -142,7 +143,7 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
         await fetch(`${API_URL}/user/set-plan`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ engine, modelId: MODEL_MAP[engine] }),
+          body: JSON.stringify({ engine, modelId: MODEL_MAP[engine], tier }),
         });
       } catch (_) {
         // Non-critical — plan save failure shouldn't block the user

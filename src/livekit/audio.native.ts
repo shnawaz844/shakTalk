@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { AudioSession } from '@livekit/react-native';
+import { AudioSession, AndroidAudioTypePresets } from '@livekit/react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync } from 'expo-audio';
 
 export async function startCallAudio() {
@@ -7,6 +7,13 @@ export async function startCallAudio() {
   if (!perm.granted) {
     const req = await requestRecordingPermissionsAsync();
     if (!req.granted) throw new Error('Microphone permission is required for calls. Please allow it in Settings.');
+  }
+  if (Platform.OS === 'android') {
+    await AudioSession.configureAudio({
+      android: {
+        audioTypeOptions: AndroidAudioTypePresets.communication,
+      },
+    }).catch((e) => console.warn('[LiveKitAudio] configureAudio failed:', e));
   }
   await AudioSession.startAudioSession();
 }
