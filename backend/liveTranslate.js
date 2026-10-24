@@ -3,7 +3,6 @@ require('dotenv').config();
 // installed under an alias so the legacy engine (geminiService.js) keeps the
 // 1.x SDK it was tested with.
 const { GoogleGenAI, Modality } = require('google-genai-v2');
-const { isLanguageMismatch } = require('./geminiService');
 
 /**
  * Continuous speech-to-speech translation with Gemini 3.5 Live Translate.
@@ -127,33 +126,6 @@ class LiveTranslateStream {
     if (this.segTimer) clearTimeout(this.segTimer);
     this.segTimer = null;
     this.seg = { segId: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, originalText: '', translatedText: '' };
-    // Reset per-turn suppression state.
-    this._turnSuppressed = false;
-    // Buffer for the very first audio frames of a turn, held until we have
-    // enough input transcription text to verify the speaker's language.
-    this._pendingAudio = [];
-    this._inputVerified = false;
-  }
-
-  /**
-   * Suppress the current turn: discard any buffered audio frames and ignore
-   * all subsequent audio frames until the next turn begins.
-   */
-  _suppressTurn(reason) {
-    if (this._turnSuppressed) return;
-    this._turnSuppressed = true;
-    this._pendingAudio = [];
-    console.log(`[liveTranslate] ${this.label}: 🛑 Turn suppressed – ${reason}`);
-  }
-
-  /**
-   * Release any buffered audio frames that passed language verification.
-   * Called once inputTranscription has confirmed the speaker's language.
-   */
-  _flushPendingAudio() {
-    if (this._turnSuppressed) { this._pendingAudio = []; return; }
-    for (const buf of this._pendingAudio) this.onAudio(buf);
-    this._pendingAudio = [];
   }
 
   _config(handle) {
@@ -284,8 +256,6 @@ class LiveTranslateStream {
     if (sc.modelTurn?.parts) {
       for (const part of sc.modelTurn.parts) {
         if (part.inlineData?.data) {
-          if (this._turnSuppressed) continue; // language-mismatch guard
-
           const pcm = Buffer.from(part.inlineData.data, 'base64');
 
           if (this.awaitingFirstAudio) {
@@ -293,12 +263,8 @@ class LiveTranslateStream {
             console.log(`[LATENCY][translate] ${this.label}: translated audio started ${Date.now() - this.speechStartAt}ms after the speaker started talking`);
           }
 
-          if (!this._inputVerified) {
-            // Hold audio until we have input transcription to verify the language.
-            this._pendingAudio.push(pcm);
-          } else {
-            this.onAudio(pcm);
-          }
+          // Directly stream translated audio to listener in real time (zero buffering)
+          this.onAudio(pcm);
         }
       }
     }
@@ -307,52 +273,17 @@ class LiveTranslateStream {
     if (sc.inputTranscription?.text) {
       this.seg.originalText += sc.inputTranscription.text;
       changed = true;
-
-      // ── Language mismatch / echo check ──────────────────────────────────
-      // We have enough text now to decide whether the speaker is actually
-      // speaking the language they were configured for, or whether this
-      // stream is picking up room audio from the partner's phone.
-      if (!this._turnSuppressed) {
-        const orig = this.seg.originalText;
-        const trans = this.seg.translatedText;
-        if (orig.trim().length >= 3 &&
-            isLanguageMismatch(orig, trans, this.inputLanguage, this.targetLanguage)) {
-          this._suppressTurn(
-            `inputTranscription mismatch: input="${orig.trim()}", inputLang=${this.inputLanguage}, targetLang=${this.targetLanguage}`
-          );
-        } else {
-          // Language looks correct – release buffered audio to the caller.
-          this._inputVerified = true;
-          this._flushPendingAudio();
-        }
-      }
     }
     if (sc.outputTranscription?.text) {
       this.seg.translatedText += sc.outputTranscription.text;
       changed = true;
-
-      // Passthrough / echo check: if the model simply echoed the input
-      // without translating (input === output), that's a sign it's processing
-      // the partner's already-translated audio.
-      if (!this._turnSuppressed) {
-        const orig = this.seg.originalText;
-        const trans = this.seg.translatedText;
-        if (isLanguageMismatch(orig, trans, this.inputLanguage, this.targetLanguage)) {
-          this._suppressTurn(
-            `outputTranscription echo/mismatch: input="${orig.trim()}", output="${trans.trim()}"`
-          );
-        }
-      }
     }
-    if (changed && !this._turnSuppressed) {
+    if (changed) {
       this.onText({ ...this.seg, isFinal: false });
       if (this.segTimer) clearTimeout(this.segTimer);
       this.segTimer = setTimeout(() => this._finishSegment(), SEGMENT_IDLE_MS);
     }
     if (sc.turnComplete) {
-      // At turn end, if we never verified (e.g. pure silence / no text),
-      // flush whatever audio was buffered so we don't permanently drop it.
-      if (!this._turnSuppressed && !this._inputVerified) this._flushPendingAudio();
       this._finishSegment();
     }
   }

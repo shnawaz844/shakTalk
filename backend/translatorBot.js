@@ -56,8 +56,12 @@ const FRAME_SAMPLES = OUTPUT_RATE / 50; // 20ms frames into the call
 
 let roomService = null;
 function getRoomService() {
-  if (!roomService && RoomServiceClient && LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET) {
-    roomService = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+  if (!roomService && RoomServiceClient && (LIVEKIT_BOT_URL || LIVEKIT_URL) && LIVEKIT_API_KEY && LIVEKIT_API_SECRET) {
+    let raw = LIVEKIT_BOT_URL || LIVEKIT_URL;
+    let httpUrl = raw;
+    if (httpUrl.startsWith('wss://')) httpUrl = 'https://' + httpUrl.slice(6);
+    else if (httpUrl.startsWith('ws://')) httpUrl = 'http://' + httpUrl.slice(5);
+    roomService = new RoomServiceClient(httpUrl, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
   }
   return roomService;
 }
@@ -103,11 +107,16 @@ class TranslatorBot {
     const room = new Room();
     this.room = room;
 
-    const muteRawMicToPartner = (role, trackSid) => {
+    const muteRawMicToPartner = async (role, trackSid) => {
       const listener = this.partnerOf(role);
       const svc = getRoomService();
       if (svc && trackSid) {
-        svc.updateSubscriptions(this.roomName, listener, [trackSid], false).catch(() => {});
+        try {
+          await svc.updateSubscriptions(this.roomName, listener, [trackSid], false);
+          console.log(`[translatorBot] ${this.roomName}: unsubscribed ${listener} from ${role} raw mic (${trackSid})`);
+        } catch (err) {
+          console.warn(`[translatorBot] ${this.roomName}: updateSubscriptions failed for ${listener}: ${err.message}`);
+        }
       }
     };
 
@@ -115,6 +124,22 @@ class TranslatorBot {
       const role = participant.identity;
       if (role === 'host' || role === 'guest') {
         muteRawMicToPartner(role, publication.sid);
+      }
+    });
+
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      const listener = participant.identity;
+      if (listener === 'host' || listener === 'guest') {
+        const speaker = this.partnerOf(listener);
+        for (const p of room.remoteParticipants.values()) {
+          if (p.identity === speaker) {
+            for (const pub of p.trackPublications.values()) {
+              if (pub.kind === TrackKind.KIND_AUDIO) {
+                muteRawMicToPartner(speaker, pub.sid || pub.track?.sid);
+              }
+            }
+          }
+        }
       }
     });
 
