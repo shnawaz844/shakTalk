@@ -100,10 +100,9 @@ class TranslatorBot {
     this.outputs = {}; // role → { source, chain }
     this.streams = {}; // role → LiveTranslateStream
     this.readers = {}; // role → ReadableStreamDefaultReader
-    // Tracks when loudspeaker translation playback ends on each participant's device.
-    // While a role's speaker is playing translated audio (+ room reverb tail),
-    // we gate that role's mic from sending acoustic loudspeaker leakage to Gemini.
-    this._playbackUntil = { host: 0, guest: 0 };
+    // Hardware AEC (Android MODE_IN_COMMUNICATION / iOS VPIO voiceChat) eliminates
+    // the loudspeaker→mic feedback path at the device level, so no server-side
+    // acoustic gate is needed here.
   }
 
   partnerOf(role) {
@@ -242,13 +241,6 @@ class TranslatorBot {
       for (;;) {
         const { value: frame, done } = await reader.read();
         if (done || this.closed) break;
-        // ── Acoustic Shield (Speaker Protection) ────────────────────────────────────
-        // While translated audio is actively playing out of THIS role's phone
-        // loudspeaker, any mic signal from this phone is acoustic loudspeaker leakage.
-        // We drop mic frames during playback + 250ms room reverberation decay
-        // so Gemini never hears its own loudspeaker output and cannot loop.
-        if (Date.now() < (this._playbackUntil[role] || 0) + 250) continue;
-
         const d = frame.data;
         translate.feed(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
       }
@@ -265,12 +257,6 @@ class TranslatorBot {
     // odd byte offset) and push it into the call in 20ms frames, in order.
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
-
-    // Calculate real playback duration in milliseconds (at OUTPUT_RATE = 24000 Hz)
-    const durationMs = (samples.length / OUTPUT_RATE) * 1000;
-    const now = Date.now();
-    // Extend the playback window for the listener phone
-    this._playbackUntil[listener] = Math.max(this._playbackUntil[listener] || 0, now) + durationMs;
 
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
