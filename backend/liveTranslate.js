@@ -26,7 +26,7 @@ const { GoogleGenAI, Modality } = require('google-genai-v2');
 
 const MODEL = process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview';
 const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase();
-const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO === 'true';
+const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO === 'false';
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 
@@ -100,7 +100,7 @@ class LiveTranslateStream {
     this.targetCode = targetCodeFor(targetLanguage);
     this.onAudio = onAudio;
     this.onText = onText;
-    this.onError = onError || (() => {});
+    this.onError = onError || (() => { });
 
     this.session = null;
     this.connectPromise = null;
@@ -201,7 +201,7 @@ class LiveTranslateStream {
       });
     })
       .then((session) => {
-        if (this.closed) { try { session.close(); } catch (_) {} return; }
+        if (this.closed) { try { session.close(); } catch (_) { } return; }
         this.session = session;
         this.generation = gen;
         this.failures = 0;
@@ -247,7 +247,7 @@ class LiveTranslateStream {
       const old = this.session;
       this.session = null;
       console.log(`[liveTranslate] ${this.label}: goAway (${msg.goAway.timeLeft}), reconnecting`);
-      this._ensureConnected().then(() => setTimeout(() => { try { old?.close(); } catch (_) {} }, 3000));
+      this._ensureConnected().then(() => setTimeout(() => { try { old?.close(); } catch (_) { } }, 3000));
     }
 
     const sc = msg.serverContent;
@@ -337,7 +337,7 @@ class LiveTranslateStream {
     this.closed = true;
     if (this.segTimer) clearTimeout(this.segTimer);
     this._finishSegment();
-    try { this.session?.close(); } catch (_) {}
+    try { this.session?.close(); } catch (_) { }
     this.session = null;
     this.pending = [];
   }
