@@ -11,6 +11,7 @@ const {
 } = require('@livekit/rtc-node');
 const { AccessToken } = require('livekit-server-sdk');
 const { LiveTranslateStream } = require('./liveTranslate');
+const { EchoGuard } = require('./echoGuard');
 
 /**
  * LiveKit call engine
@@ -66,6 +67,11 @@ class TranslatorBot {
     this.outputs = {}; // role → { source, chain }
     this.streams = {}; // role → LiveTranslateStream
     this.readers = {}; // role → ReadableStreamDefaultReader
+    // role → EchoGuard for that person's mic (guards it while they hear translation)
+    this.guards = {
+      host: new EchoGuard(`${roomName.slice(0, 8)}:host`),
+      guest: new EchoGuard(`${roomName.slice(0, 8)}:guest`),
+    };
   }
 
   partnerOf(role) {
@@ -141,7 +147,8 @@ class TranslatorBot {
         const { value: frame, done } = await reader.read();
         if (done || this.closed) break;
         const d = frame.data;
-        translate.feed(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
+        const pcm = this.guards[role].filter(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
+        if (pcm.length) translate.feed(pcm);
       }
     } catch (err) {
       if (!this.closed) console.warn(`[translatorBot] ${this.roomName}: ${role} mic stream ended: ${err.message}`);
@@ -155,6 +162,8 @@ class TranslatorBot {
     // odd byte offset) and push it into the call in 20ms frames, in order.
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
+    // The partner of `role` is the one hearing this: guard their mic while it plays.
+    this.guards[this.partnerOf(role)].onPlayback((samples.length / OUTPUT_RATE) * 1000);
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
         const part = samples.slice(i, i + FRAME_SAMPLES);
