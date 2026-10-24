@@ -16,8 +16,9 @@ const TrackSource = rtcNode?.TrackSource;
 const TrackKind = rtcNode?.TrackKind;
 
 let AccessToken = null;
+let RoomServiceClient = null;
 try {
-  ({ AccessToken } = require('livekit-server-sdk'));
+  ({ AccessToken, RoomServiceClient } = require('livekit-server-sdk'));
 } catch (err) {
   console.warn('[translatorBot] Warning: livekit-server-sdk is not installed or failed to load:', err.message);
 }
@@ -52,6 +53,14 @@ const LIVEKIT_ENABLED = Boolean(rtcNode && AccessToken && LIVEKIT_URL && LIVEKIT
 const BOT_IDENTITY = 'translator';
 const OUTPUT_RATE = 24000; // Gemini output
 const FRAME_SAMPLES = OUTPUT_RATE / 50; // 20ms frames into the call
+
+let roomService = null;
+function getRoomService() {
+  if (!roomService && RoomServiceClient && LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET) {
+    roomService = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+  }
+  return roomService;
+}
 
 async function createToken(roomName, identity, { canPublish = true } = {}) {
   if (!AccessToken) throw new Error('livekit-server-sdk is not available');
@@ -94,10 +103,26 @@ class TranslatorBot {
     const room = new Room();
     this.room = room;
 
+    const muteRawMicToPartner = (role, trackSid) => {
+      const listener = this.partnerOf(role);
+      const svc = getRoomService();
+      if (svc && trackSid) {
+        svc.updateSubscriptions(this.roomName, listener, [trackSid], false).catch(() => {});
+      }
+    };
+
+    room.on(RoomEvent.TrackPublished, (publication, participant) => {
+      const role = participant.identity;
+      if (role === 'host' || role === 'guest') {
+        muteRawMicToPartner(role, publication.sid);
+      }
+    });
+
     room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
       const role = participant.identity;
       if (track.kind !== TrackKind.KIND_AUDIO) return;
       if (role !== 'host' && role !== 'guest') return;
+      muteRawMicToPartner(role, track.sid || publication?.sid);
       this._pipe(role, track);
     });
     room.on(RoomEvent.Disconnected, (reason) => {
@@ -122,8 +147,11 @@ class TranslatorBot {
     // Participants who joined (and were subscribed) before our handler ran.
     for (const participant of room.remoteParticipants.values()) {
       for (const pub of participant.trackPublications.values()) {
-        if (pub.track && pub.kind === TrackKind.KIND_AUDIO) {
-          if (participant.identity === 'host' || participant.identity === 'guest') this._pipe(participant.identity, pub.track);
+        if (pub.kind === TrackKind.KIND_AUDIO) {
+          if (participant.identity === 'host' || participant.identity === 'guest') {
+            muteRawMicToPartner(participant.identity, pub.sid || pub.track?.sid);
+            if (pub.track) this._pipe(participant.identity, pub.track);
+          }
         }
       }
     }
@@ -179,22 +207,23 @@ class TranslatorBot {
   _play(role, pcm) {
     const out = this.outputs[role];
     if (!out || this.closed) return;
+    const listener = this.partnerOf(role);
     // Copy into an aligned Int16Array (base64-decoded Buffers can start at an
     // odd byte offset) and push it into the call in 20ms frames, in order.
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
     // Track how many 20ms frames we are about to enqueue so the crosstalk gate
-    // can pause the mic pipeline for this role while audio is playing.
+    // can pause the mic pipeline for the listener phone while audio is playing on their speaker.
     const frameCount = Math.ceil(samples.length / FRAME_SAMPLES);
-    this._playingFrames[role] = (this._playingFrames[role] || 0) + frameCount;
+    this._playingFrames[listener] = (this._playingFrames[listener] || 0) + frameCount;
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
         const part = samples.slice(i, i + FRAME_SAMPLES);
         await out.source.captureFrame(new AudioFrame(part, OUTPUT_RATE, 1, part.length));
-        this._playingFrames[role] = Math.max(0, this._playingFrames[role] - 1);
+        this._playingFrames[listener] = Math.max(0, this._playingFrames[listener] - 1);
       }
     }).catch((err) => {
-      this._playingFrames[role] = Math.max(0, this._playingFrames[role] - frameCount);
+      this._playingFrames[listener] = Math.max(0, this._playingFrames[listener] - frameCount);
       console.warn(`[translatorBot] ${this.roomName}: playback error: ${err.message}`);
     });
   }
