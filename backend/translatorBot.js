@@ -78,6 +78,11 @@ class TranslatorBot {
     this.outputs = {}; // role → { source, chain }
     this.streams = {}; // role → LiveTranslateStream
     this.readers = {}; // role → ReadableStreamDefaultReader
+    // Tracks which roles currently have active translation audio draining into
+    // the call. While a role's translation is playing, we skip forwarding that
+    // role's mic audio to Gemini to prevent the phone speaker from being
+    // picked up by its own mic and fed back into the translation pipeline.
+    this._playingFrames = { host: 0, guest: 0 }; // count of in-flight 20ms frames
   }
 
   partnerOf(role) {
@@ -130,6 +135,7 @@ class TranslatorBot {
     const listener = this.partnerOf(role);
     this.streams[role] = new LiveTranslateStream({
       label: `${this.roomName.slice(0, 8)}:${role}→${this.langs[listener]}`,
+      inputLanguage: this.langs[role],
       targetLanguage: this.langs[listener],
       onAudio: (pcm) => this._play(role, pcm),
       onText: (seg) => this.onText(role, seg),
@@ -152,6 +158,16 @@ class TranslatorBot {
       for (;;) {
         const { value: frame, done } = await reader.read();
         if (done || this.closed) break;
+        // ── Crosstalk gate ──────────────────────────────────────────────────────────
+        // While translated audio is actively playing out of THIS role's phone
+        // speaker (e.g. playing the host's translated Hindi), skip sending the
+        // mic audio to Gemini. This prevents the phone's own speaker output
+        // from feeding back into the translation pipeline and triggering an
+        // echo loop in same-room calls.
+        // LiveKit's WebRTC AEC already handles same-device echo, but same-room
+        // cross-device acoustic coupling requires this server-side gate.
+        if (this._playingFrames[role] > 0) continue;
+
         const d = frame.data;
         translate.feed(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
       }
@@ -167,12 +183,20 @@ class TranslatorBot {
     // odd byte offset) and push it into the call in 20ms frames, in order.
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
+    // Track how many 20ms frames we are about to enqueue so the crosstalk gate
+    // can pause the mic pipeline for this role while audio is playing.
+    const frameCount = Math.ceil(samples.length / FRAME_SAMPLES);
+    this._playingFrames[role] = (this._playingFrames[role] || 0) + frameCount;
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
         const part = samples.slice(i, i + FRAME_SAMPLES);
         await out.source.captureFrame(new AudioFrame(part, OUTPUT_RATE, 1, part.length));
+        this._playingFrames[role] = Math.max(0, this._playingFrames[role] - 1);
       }
-    }).catch((err) => console.warn(`[translatorBot] ${this.roomName}: playback error: ${err.message}`));
+    }).catch((err) => {
+      this._playingFrames[role] = Math.max(0, this._playingFrames[role] - frameCount);
+      console.warn(`[translatorBot] ${this.roomName}: playback error: ${err.message}`);
+    });
   }
 
   async close() {

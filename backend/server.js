@@ -103,7 +103,56 @@ const httpServer = http.createServer(async (req, res) => {
     return;
   }
 
-  // ── GET /conversations?userId=... ──────────────────────────────────────────
+  // ── POST /user/set-plan ────────────────────────────────────────────────────
+  // Upserts the AI translation plan the user chose before login.
+  // Body: { engine: 'legacy'|'livekit', modelId: string }
+  // Header: Authorization: Bearer <clerk_token>
+  if (req.method === 'POST' && req.url === '/user/set-plan') {
+    try {
+      const body = await new Promise((resolve, reject) => {
+        let data = '';
+        req.on('data', chunk => { data += chunk; });
+        req.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
+        req.on('error', reject);
+      });
+      const { engine, modelId } = body;
+      if (!engine || !modelId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'engine and modelId are required.' }));
+        return;
+      }
+      const authHeader = req.headers['authorization'] ?? '';
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (!token) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing Authorization header.' }));
+        return;
+      }
+      const userId = verifyClerkToken(token);
+      const { error } = await supabase
+        .from('user_plans')
+        .upsert(
+          {
+            user_id:     userId,
+            plan_engine: engine,
+            model_id:    modelId,
+            updated_at:  new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
+      if (error) throw error;
+      console.log(`[server] Saved plan for user ${userId}: engine=${engine}, model=${modelId}`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      console.error('[server] /user/set-plan error:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+
   if (req.method === 'GET' && req.url?.match(/^\/conversations(\?.*)?$/)) {
     try {
       const url = new URL(req.url, `http://localhost`);
