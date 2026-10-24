@@ -15,6 +15,15 @@ export async function startCallAudio() {
       },
     }).catch((e) => console.warn('[LiveKitAudio] configureAudio failed:', e));
   }
+
+  if (Platform.OS === 'ios') {
+    await AudioSession.setAppleAudioConfiguration({
+      audioCategory: 'playAndRecord',
+      audioMode: 'voiceChat',
+      audioCategoryOptions: ['allowBluetooth', 'defaultToSpeaker', 'allowBluetoothA2DP'],
+    }).catch((e) => console.warn('[LiveKitAudio] iOS audio setup failed:', e));
+  }
+
   await AudioSession.startAudioSession();
 }
 
