@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- ShakTranslate - Supabase Schema
 -- Run this in: Supabase Dashboard -> SQL Editor -> New Query
 -- ============================================================
@@ -40,3 +40,18 @@ CREATE INDEX IF NOT EXISTS messages_sent_at_idx      ON public.messages (sent_at
 -- Disable RLS so service role key can read/write freely
 ALTER TABLE public.conversations DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages      DISABLE ROW LEVEL SECURITY;
+
+-- USER_PLANS table
+-- Stores the AI translation plan each user selected on the plan-selection screen.
+-- user_id is the Clerk user sub (unique per user).
+CREATE TABLE IF NOT EXISTS public.user_plans (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       TEXT NOT NULL UNIQUE,
+  plan_engine   TEXT NOT NULL,     -- 'legacy' | 'livekit'
+  model_id      TEXT NOT NULL,     -- e.g. 'gemini-live-2.5-flash-native-audio'
+  selected_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS user_plans_user_idx ON public.user_plans (user_id);
+ALTER TABLE public.user_plans DISABLE ROW LEVEL SECURITY;

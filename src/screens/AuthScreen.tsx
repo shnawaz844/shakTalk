@@ -17,7 +17,6 @@ import { useSignIn, useSignUp, useOAuth } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { APP_NAME_LOWER, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO } from '../config';
-import { ModelSwitcher } from '../components/ModelSwitcher';
 WebBrowser.maybeCompleteAuthSession();
 
 export function AuthScreen() {
@@ -264,8 +263,6 @@ export function AuthScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* Translation Model Switcher */}
-              <ModelSwitcher style={{ marginTop: 20 }} />
             </>
           ) : (
             // Verification Code Flow

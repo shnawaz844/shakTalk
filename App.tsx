@@ -7,13 +7,15 @@ import { tokenCache } from './src/utils/tokenCache';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { SessionScreen } from './src/screens/SessionScreen';
 import { LiveCallScreen } from './src/screens/LiveCallScreen';
-import { CALL_ENGINE } from './src/config';
+import { CALL_ENGINE, API_URL } from './src/config';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { ConversationDetailScreen } from './src/screens/ConversationDetailScreen';
 import { AudioRecordingsScreen } from './src/screens/AudioRecordingsScreen';
+import { PlanSelectionScreen } from './src/screens/PlanSelectionScreen';
 import { WebSocketProvider } from './src/contexts/WebSocketContext';
+import { getCurrentEngine } from './src/utils/enginePreference';
 import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
@@ -21,6 +23,7 @@ import * as SplashScreen from 'expo-splash-screen';
 WebBrowser.maybeCompleteAuthSession();
 
 type AppScreen = 'onboarding' | 'home' | 'session' | 'profile' | 'conversation' | 'recordings';
+type AuthFlow = 'plan-selection' | 'login';
 
 interface SessionParams {
   sessionId: string;
@@ -121,7 +124,31 @@ function MainApp() {
 }
 
 function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const [authFlow, setAuthFlow] = React.useState<AuthFlow>('plan-selection');
+
+  // After the user signs in, save the plan they chose to the backend.
+  React.useEffect(() => {
+    if (!isSignedIn) return;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const engine = getCurrentEngine();
+        const MODEL_MAP: Record<string, string> = {
+          legacy: 'gemini-live-2.5-flash-native-audio',
+          livekit: 'gemini-3.5-live-translate-preview',
+        };
+        await fetch(`${API_URL}/user/set-plan`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ engine, modelId: MODEL_MAP[engine] }),
+        });
+      } catch (_) {
+        // Non-critical — plan save failure shouldn't block the user
+      }
+    })();
+  }, [isSignedIn]);
 
   if (!isLoaded || !openingFinished) {
     return (
@@ -136,10 +163,23 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
     );
   }
 
+  if (isSignedIn) {
+    return (
+      <>
+        <StatusBar style="light" hidden={false} />
+        <MainApp />
+      </>
+    );
+  }
+
   return (
     <>
       <StatusBar style="light" hidden={false} />
-      {isSignedIn ? <MainApp /> : <AuthScreen />}
+      {authFlow === 'plan-selection' ? (
+        <PlanSelectionScreen onContinue={() => setAuthFlow('login')} />
+      ) : (
+        <AuthScreen />
+      )}
     </>
   );
 }
