@@ -1,3 +1,12 @@
+if (!globalThis.crypto || !globalThis.crypto.getRandomValues) {
+  try {
+    const nodeCrypto = require('crypto');
+    globalThis.crypto = nodeCrypto.webcrypto || {
+      getRandomValues: (arr) => nodeCrypto.randomFillSync(arr),
+    };
+  } catch (_) {}
+}
+
 let rtcNode = null;
 try {
   rtcNode = require('@livekit/rtc-node');

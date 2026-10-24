@@ -40,21 +40,29 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
         >
           <View style={styles.btnContent}>
             <View style={styles.titleRow}>
-              <Text
-                style={[
-                  styles.btnTitle,
-                  engine === 'legacy' ? styles.btnTitleActive : styles.btnTitleInactive,
-                ]}
-              >
-                ⚡ 2.5 Flash
-              </Text>
+              <View style={styles.titleWithIcon}>
+                <Feather
+                  name="zap"
+                  size={13}
+                  color={engine === 'legacy' ? '#39FF14' : '#8A9793'}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.btnTitle,
+                    engine === 'legacy' ? styles.btnTitleActiveLegacy : styles.btnTitleInactive,
+                  ]}
+                >
+                  2.5 Flash
+                </Text>
+              </View>
               {engine === 'legacy' && (
-                <View style={styles.activeCheck}>
-                  <Feather name="check" size={11} color="#000" />
+                <View style={[styles.activeCheck, { backgroundColor: '#39FF14' }]}>
+                  <Feather name="check" size={10} color="#000" />
                 </View>
               )}
             </View>
-            <Text style={styles.btnSubtitle}>Vertex AI (Stable)</Text>
+            <Text style={styles.btnSubtitle}>Vertex AI • Stable (~$0.06/m)</Text>
           </View>
         </TouchableOpacity>
 
@@ -69,21 +77,29 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
         >
           <View style={styles.btnContent}>
             <View style={styles.titleRow}>
-              <Text
-                style={[
-                  styles.btnTitle,
-                  engine === 'livekit' ? styles.btnTitleActive : styles.btnTitleInactive,
-                ]}
-              >
-                🌐 3.5 Live
-              </Text>
+              <View style={styles.titleWithIcon}>
+                <Feather
+                  name="activity"
+                  size={13}
+                  color={engine === 'livekit' ? '#2FE0A8' : '#8A9793'}
+                  style={{ marginRight: 4 }}
+                />
+                <Text
+                  style={[
+                    styles.btnTitle,
+                    engine === 'livekit' ? styles.btnTitleActiveLive : styles.btnTitleInactive,
+                  ]}
+                >
+                  3.5 Live
+                </Text>
+              </View>
               {engine === 'livekit' && (
-                <View style={styles.activeCheck}>
-                  <Feather name="check" size={11} color="#000" />
+                <View style={[styles.activeCheck, { backgroundColor: '#2FE0A8' }]}>
+                  <Feather name="check" size={10} color="#000" />
                 </View>
               )}
             </View>
-            <Text style={styles.btnSubtitle}>Simultaneous LiveKit</Text>
+            <Text style={styles.btnSubtitle}>LiveKit • Simultaneous (~$0.10/m)</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -139,11 +155,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  titleWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   btnTitle: {
     fontSize: 13,
     fontWeight: '700',
   },
-  btnTitleActive: {
+  btnTitleActiveLegacy: {
+    color: '#39FF14',
+  },
+  btnTitleActiveLive: {
     color: '#2FE0A8',
   },
   btnTitleInactive: {
@@ -158,7 +181,6 @@ const styles = StyleSheet.create({
     width: 15,
     height: 15,
     borderRadius: 8,
-    backgroundColor: '#2FE0A8',
     alignItems: 'center',
     justifyContent: 'center',
   },

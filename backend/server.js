@@ -115,7 +115,7 @@ const httpServer = http.createServer(async (req, res) => {
         req.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
         req.on('error', reject);
       });
-      const { engine, modelId } = body;
+      const { engine, modelId, tier } = body;
       if (!engine || !modelId) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'engine and modelId are required.' }));
@@ -141,7 +141,7 @@ const httpServer = http.createServer(async (req, res) => {
           { onConflict: 'user_id' }
         );
       if (error) throw error;
-      console.log(`[server] Saved plan for user ${userId}: engine=${engine}, model=${modelId}`);
+      console.log(`[server] Saved plan for user ${userId}: engine=${engine}, model=${modelId}, tier=${tier || 'default'}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
