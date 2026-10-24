@@ -63,8 +63,8 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
 
     const wanted = (pub: RemoteTrackPublication, p: RemoteParticipant) =>
       pub.kind === Track.Kind.Audio &&
-      ((p.identity === partnerIdentity) ||
-       (p.identity === TRANSLATOR_IDENTITY && pub.trackName === translationTrackName));
+      p.identity === TRANSLATOR_IDENTITY &&
+      pub.trackName === translationTrackName;
 
     const consider = (pub: RemoteTrackPublication, p: RemoteParticipant) => {
       pub.setSubscribed(wanted(pub, p));
@@ -80,9 +80,7 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
         document.body.appendChild(el);
         webAudioElsRef.current.push(el);
       }
-      const isPartnerVoice = p.identity === partnerIdentity;
-      (track as any).setVolume?.(isPartnerVoice ? PARTNER_VOICE_VOLUME : 1);
-      console.log(`[LiveKitCall] playing ${isPartnerVoice ? 'partner voice' : 'translation'} (${p.identity}/${pub.trackName})`);
+      console.log(`[LiveKitCall] playing translation (${p.identity}/${pub.trackName})`);
     });
     room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
       if (Platform.OS !== 'web') return;
@@ -103,6 +101,11 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
         // Tracks published before we connected.
         room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => consider(pub, p)));
         await room.localParticipant.setMicrophoneEnabled(true);
+        try {
+          room.localParticipant.setTrackSubscriptionPermissions(false, [
+            { participantIdentity: TRANSLATOR_IDENTITY, allowAll: true },
+          ]);
+        } catch (_) {}
         if (Platform.OS === 'web') await room.startAudio().catch(() => {});
         await setSpeakerphone(true).catch(() => {});
         setError(null);
