@@ -128,10 +128,30 @@ class TranslatorBot {
       }
     };
 
+    const syncSubscriptions = async () => {
+      const svc = getRoomService();
+      if (!svc) return;
+      const hostTransSid = this.outputs['host']?.pub?.sid;
+      const guestTransSid = this.outputs['guest']?.pub?.sid;
+
+      if (hostTransSid) {
+        // Translation of Host speech goes to Guest
+        await svc.updateSubscriptions(this.roomName, 'guest', [hostTransSid], true).catch(() => {});
+        await svc.updateSubscriptions(this.roomName, 'host', [hostTransSid], false).catch(() => {});
+      }
+      if (guestTransSid) {
+        // Translation of Guest speech goes to Host
+        await svc.updateSubscriptions(this.roomName, 'host', [guestTransSid], true).catch(() => {});
+        await svc.updateSubscriptions(this.roomName, 'guest', [guestTransSid], false).catch(() => {});
+      }
+    };
+    this.syncSubscriptions = syncSubscriptions;
+
     room.on(RoomEvent.TrackPublished, (publication, participant) => {
       const role = participant.identity;
       if (role === 'host' || role === 'guest') {
         muteRawMicToPartner(role, publication.sid);
+        syncSubscriptions();
       }
     });
 
@@ -148,6 +168,7 @@ class TranslatorBot {
             }
           }
         }
+        syncSubscriptions();
       }
     });
 
@@ -173,9 +194,10 @@ class TranslatorBot {
       const track = LocalAudioTrack.createAudioTrack(`translation-of-${role}`, source);
       const options = new TrackPublishOptions();
       options.source = TrackSource.SOURCE_MICROPHONE;
-      await room.localParticipant.publishTrack(track, options);
-      this.outputs[role] = { source, track, chain: Promise.resolve() };
+      const pub = await room.localParticipant.publishTrack(track, options);
+      this.outputs[role] = { source, track, pub, chain: Promise.resolve() };
     }
+    await syncSubscriptions();
 
     // Participants who joined (and were subscribed) before our handler ran.
     for (const participant of room.remoteParticipants.values()) {
@@ -188,6 +210,7 @@ class TranslatorBot {
         }
       }
     }
+    await syncSubscriptions();
     console.log(`[translatorBot] ${this.roomName}: joined, translating host(${this.langs.host}) ↔ guest(${this.langs.guest})`);
   }
 

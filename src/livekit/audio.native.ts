@@ -8,13 +8,15 @@ export async function startCallAudio() {
     const req = await requestRecordingPermissionsAsync();
     if (!req.granted) throw new Error('Microphone permission is required for calls. Please allow it in Settings.');
   }
-  if (Platform.OS === 'android') {
-    await AudioSession.configureAudio({
-      android: {
-        audioTypeOptions: AndroidAudioTypePresets.communication,
-      },
-    }).catch((e) => console.warn('[LiveKitAudio] configureAudio failed:', e));
-  }
+  await AudioSession.configureAudio({
+    android: {
+      preferredOutputList: ['speaker', 'earpiece', 'headset', 'bluetooth'],
+      audioTypeOptions: AndroidAudioTypePresets.communication,
+    },
+    ios: {
+      defaultOutput: 'speaker',
+    },
+  }).catch((e) => console.warn('[LiveKitAudio] configureAudio failed:', e));
 
   if (Platform.OS === 'ios') {
     await AudioSession.setAppleAudioConfiguration({
@@ -25,6 +27,7 @@ export async function startCallAudio() {
   }
 
   await AudioSession.startAudioSession();
+  await setSpeakerphone(true).catch(() => {});
 }
 
 export async function stopCallAudio() {
@@ -34,9 +37,9 @@ export async function stopCallAudio() {
 /** Loudspeaker on/off. Android: speaker/earpiece. iOS: force_speaker/default. */
 export async function setSpeakerphone(on: boolean) {
   const target = Platform.OS === 'ios' ? (on ? 'force_speaker' : 'default') : (on ? 'speaker' : 'earpiece');
-  const outputs = await AudioSession.getAudioOutputs();
-  // A headset or Bluetooth device takes priority; only switch between built-in outputs.
-  if (!outputs.includes(target)) return;
-  if (!on && Platform.OS === 'android' && (outputs.includes('headset') || outputs.includes('bluetooth'))) return;
-  await AudioSession.selectAudioOutput(target);
+  try {
+    await AudioSession.selectAudioOutput(target);
+  } catch (err) {
+    console.warn('[LiveKitAudio] selectAudioOutput failed:', err);
+  }
 }
