@@ -61,16 +61,30 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
     });
     roomRef.current = room;
 
-    const wanted = (pub: RemoteTrackPublication, p: RemoteParticipant) =>
-      pub.kind === Track.Kind.Audio &&
-      p.identity === TRANSLATOR_IDENTITY &&
-      pub.trackName === translationTrackName;
+    const wanted = (pub: RemoteTrackPublication, p: RemoteParticipant) => {
+      if (pub.kind !== Track.Kind.Audio) return false;
+      // Never subscribe to partner's raw microphone track
+      if (p.identity === partnerIdentity) return false;
+      // Subscribe to translator bot's audio track
+      if (p.identity === TRANSLATOR_IDENTITY) {
+        if (pub.trackName) {
+          return pub.trackName === translationTrackName || pub.trackName.includes(partnerIdentity);
+        }
+        return true;
+      }
+      return false;
+    };
 
     const consider = (pub: RemoteTrackPublication, p: RemoteParticipant) => {
-      pub.setSubscribed(wanted(pub, p));
+      const want = wanted(pub, p);
+      pub.setSubscribed(want);
+      console.log(`[LiveKitCall] consider track ${pub.trackSid} (${p.identity}/${pub.trackName || 'unnamed'}) -> subscribed: ${want}`);
     };
 
     room.on(RoomEvent.TrackPublished, consider);
+    room.on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
+      p.trackPublications.forEach((pub) => consider(pub, p));
+    });
     room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, p: RemoteParticipant) => {
       if (track.kind !== Track.Kind.Audio) return;
       if (Platform.OS === 'web') {
@@ -80,7 +94,10 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
         document.body.appendChild(el);
         webAudioElsRef.current.push(el);
       }
-      console.log(`[LiveKitCall] playing translation (${p.identity}/${pub.trackName})`);
+      try {
+        (track as any).setVolume?.(1.0);
+      } catch (_) {}
+      console.log(`[LiveKitCall] playing translation (${p.identity}/${pub.trackName || pub.trackSid})`);
     });
     room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
       if (Platform.OS !== 'web') return;
@@ -98,20 +115,16 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
         if (cancelled) return;
         await room.connect(url, token, { autoSubscribe: false });
         if (cancelled) { await room.disconnect(); return; }
-        // Tracks published before we connected.
+        // Tracks published before or as we connected.
         room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => consider(pub, p)));
         await room.localParticipant.setMicrophoneEnabled(true, {
           echoCancellation: true,
           noiseSuppression: true,
           autoGainControl: true,
         });
-        try {
-          room.localParticipant.setTrackSubscriptionPermissions(false, [
-            { participantIdentity: TRANSLATOR_IDENTITY, allowAll: true },
-          ]);
-        } catch (_) {}
         if (Platform.OS === 'web') await room.startAudio().catch(() => {});
         await setSpeakerphone(true).catch(() => {});
+        setTimeout(() => { setSpeakerphone(true).catch(() => {}); }, 600);
         setError(null);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not join the call');
