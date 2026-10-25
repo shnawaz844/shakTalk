@@ -947,7 +947,17 @@ function cleanupSession(sessionId, disconnectedRole) {
  *                            old builds): then the app's userId is used if well-formed
  */
 async function wsCaller(message) {
-  if (message.authToken) return verifyClerkToken(message.authToken);
+  if (message.authToken) {
+    try {
+      return await verifyClerkToken(message.authToken);
+    } catch (err) {
+      if (!AUTH_ENFORCE && isValidUserId(message.userId)) {
+        console.warn(`[auth] WebSocket token verification failed (${err.message}), using fallback userId ${message.userId} because AUTH_ENFORCE=false`);
+        return message.userId;
+      }
+      throw err;
+    }
+  }
   if (!AUTH_ENFORCE) return isValidUserId(message.userId) ? message.userId : null;
   throw new AuthError('Please log in again to start a call.');
 }
