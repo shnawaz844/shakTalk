@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 
 /**
@@ -11,10 +11,13 @@ import { useAuth } from '@clerk/clerk-expo';
  */
 export function useAuthFetch() {
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
   return useCallback(async (url: string, init: RequestInit = {}) => {
-    const token = await getToken().catch(() => null);
+    const token = await getTokenRef.current().catch(() => null);
     const headers = new Headers(init.headers);
     if (token) headers.set('Authorization', `Bearer ${token}`);
     return fetch(url, { ...init, headers });
-  }, [getToken]);
+  }, []);
 }
