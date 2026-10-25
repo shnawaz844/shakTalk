@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,11 @@ import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { ModelSwitcher } from '../components/ModelSwitcher';
+import {
+  CallEngine,
+  getStoredEngine,
+  subscribeEngineChange,
+} from '../utils/enginePreference';
 import type { Gender } from './OnboardingScreen';
 
 interface ProfileScreenProps {
@@ -37,6 +42,13 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const [age, setAge] = useState(String(meta?.age ?? ''));
   const [nativeLanguage, setNativeLanguage] = useState<string>(meta?.nativeLanguage || 'English');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [engine, setEngine] = useState<CallEngine>('legacy');
+
+  useEffect(() => {
+    getStoredEngine().then(setEngine);
+    const unsubscribe = subscribeEngineChange(setEngine);
+    return unsubscribe;
+  }, []);
 
   const handleUpdateProfile = async () => {
     if (!user) return;
@@ -87,6 +99,9 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
     }
   };
 
+  const isLiveKit = engine === 'livekit';
+  const accentColor = isLiveKit ? '#2FE0A8' : '#39FF14';
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topGlow} />
@@ -121,8 +136,61 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
           <Text style={styles.emailText}>{user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
 
+        {/* Selected AI Model Showcase Card */}
+        <View style={[styles.modelHeroCard, { borderColor: isLiveKit ? 'rgba(47,224,168,0.3)' : 'rgba(57,255,20,0.3)' }]}>
+          <View style={styles.modelHeroTopRow}>
+            <View style={styles.modelStatusBadge}>
+              <View style={[styles.modelStatusDot, { backgroundColor: accentColor }]} />
+              <Text style={[styles.modelStatusText, { color: accentColor }]}>
+                ACTIVE TRANSLATION MODEL
+              </Text>
+            </View>
+            <View style={[styles.tierBadge, { borderColor: accentColor }]}>
+              <Text style={[styles.tierBadgeText, { color: accentColor }]}>
+                {isLiveKit ? 'PRO TIER' : 'STARTER TIER'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.modelHeroContent}>
+            <View style={[styles.modelIconCircle, { backgroundColor: isLiveKit ? 'rgba(47,224,168,0.12)' : 'rgba(57,255,20,0.12)' }]}>
+              <Feather
+                name={isLiveKit ? 'activity' : 'zap'}
+                size={22}
+                color={accentColor}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modelHeroTitle}>
+                {isLiveKit ? 'Gemini 3.5 Live' : 'Gemini 2.5 Flash'}
+              </Text>
+              <Text style={styles.modelHeroEngine}>
+                {isLiveKit ? 'LiveKit Engine • Real-Time Voice' : 'Vertex AI • Turn-Based Audio'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.modelHeroDivider} />
+
+          <View style={styles.modelMetaRow}>
+            <Text style={styles.modelMetaLabel}>MODEL ID:</Text>
+            <Text style={styles.modelMetaValue}>
+              {isLiveKit ? 'gemini-3.5-live-translate-preview' : 'gemini-live-2.5-flash-native-audio'}
+            </Text>
+          </View>
+        </View>
+
         {/* Form */}
         <View style={styles.form}>
+          {/* Switcher Option */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>SWITCH AI MODEL</Text>
+            <Text style={styles.hint}>
+              Select between simultaneous continuous translation or crisp turn-based translation.
+            </Text>
+            <ModelSwitcher />
+          </View>
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>FIRST NAME</Text>
             <View style={styles.inputContainer}>
@@ -191,10 +259,6 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
               Used as your default language on the home screen until you pick a different one there.
             </Text>
             <LanguageSelector label="" selected={nativeLanguage} onSelect={setNativeLanguage} />
-          </View>
-
-          <View style={{ marginVertical: 14 }}>
-            <ModelSwitcher />
           </View>
 
           <TouchableOpacity
@@ -291,4 +355,90 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#000', fontSize: 16, fontWeight: '800' },
+  modelHeroCard: {
+    backgroundColor: '#121714',
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 28,
+    borderWidth: 1.5,
+  },
+  modelHeroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  modelStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  modelStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  modelStatusText: {
+    fontSize: 10,
+    fontFamily: 'Courier',
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+  tierBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  tierBadgeText: {
+    fontSize: 9.5,
+    fontFamily: 'Courier',
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  modelHeroContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  modelIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modelHeroTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  modelHeroEngine: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  modelHeroDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    marginVertical: 14,
+  },
+  modelMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  modelMetaLabel: {
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontSize: 10,
+    fontFamily: 'Courier',
+    letterSpacing: 1,
+  },
+  modelMetaValue: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    fontFamily: 'Courier',
+  },
 });

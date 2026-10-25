@@ -37,9 +37,10 @@ CREATE INDEX IF NOT EXISTS messages_conversation_idx ON public.messages (convers
 CREATE INDEX IF NOT EXISTS messages_sender_idx       ON public.messages (sender_user_id);
 CREATE INDEX IF NOT EXISTS messages_sent_at_idx      ON public.messages (sent_at);
 
--- Disable RLS so service role key can read/write freely
-ALTER TABLE public.conversations DISABLE ROW LEVEL SECURITY;
-ALTER TABLE public.messages      DISABLE ROW LEVEL SECURITY;
+-- RLS ON with no policies: the server's service role key bypasses RLS, while
+-- the public anon key gets no access. (See migrations/2026-10-25_enable_row_level_security.sql)
+ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages      ENABLE ROW LEVEL SECURITY;
 
 -- USER_PLANS table
 -- Stores the AI translation plan each user selected on the plan-selection screen.
@@ -54,4 +55,4 @@ CREATE TABLE IF NOT EXISTS public.user_plans (
 );
 
 CREATE INDEX IF NOT EXISTS user_plans_user_idx ON public.user_plans (user_id);
-ALTER TABLE public.user_plans DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_plans ENABLE ROW LEVEL SECURITY;

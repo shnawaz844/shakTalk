@@ -31,6 +31,10 @@ async function uploadAudio(sessionId, messageId, suffix, base64Wav) {
       return null;
     }
 
+    // The public-style URL is stored as the row's reference to the file. It is
+    // never handed to the app directly any more: /conversations/:id/recordings
+    // turns it into a short-lived signed link (signedUrlFor below), so the
+    // bucket can be made private in Supabase.
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(filePath);
     return data?.publicUrl ?? null;
   } catch (err) {
@@ -39,4 +43,27 @@ async function uploadAudio(sessionId, messageId, suffix, base64Wav) {
   }
 }
 
-module.exports = { uploadAudio };
+const SIGNED_URL_SECONDS = 60 * 60; // links the app gets are valid for 1 hour
+
+/**
+ * Turns a stored recording URL (".../object/public/audio-recordings/<path>")
+ * or a bare storage path into a signed URL that expires. Returns null if the
+ * file can't be signed (missing, or not in our bucket).
+ */
+async function signedUrlFor(storedUrlOrPath) {
+  if (!storedUrlOrPath) return null;
+  const marker = `/${BUCKET}/`;
+  const i = storedUrlOrPath.indexOf(marker);
+  const path = i >= 0 ? storedUrlOrPath.slice(i + marker.length).split('?')[0] : storedUrlOrPath;
+  if (!path || path.includes('..')) return null;
+  try {
+    const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(decodeURIComponent(path), SIGNED_URL_SECONDS);
+    if (error) { console.warn('[storageService] sign failed:', error.message); return null; }
+    return data?.signedUrl ?? null;
+  } catch (err) {
+    console.warn('[storageService] sign failed:', err.message);
+    return null;
+  }
+}
+
+module.exports = { uploadAudio, signedUrlFor };

@@ -65,12 +65,11 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
       if (pub.kind !== Track.Kind.Audio) return false;
       // Never subscribe to partner's raw microphone track
       if (p.identity === partnerIdentity) return false;
-      // Subscribe to translator bot's audio track
+      // Subscribe ONLY to the translation of my partner. An exact name match:
+      // an unnamed or differently named translator track could be the
+      // translation of my own voice, and must never play on my phone.
       if (p.identity === TRANSLATOR_IDENTITY) {
-        if (pub.trackName) {
-          return pub.trackName === translationTrackName || pub.trackName.includes(partnerIdentity);
-        }
-        return true;
+        return pub.trackName === translationTrackName;
       }
       return false;
     };
@@ -117,6 +116,13 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
         if (cancelled) { await room.disconnect(); return; }
         // Tracks published before or as we connected.
         room.remoteParticipants.forEach((p) => p.trackPublications.forEach((pub) => consider(pub, p)));
+        // Only the translator bot may receive my raw microphone. LiveKit then
+        // refuses to send it to my partner at all (enforced by the server, not
+        // just by their app), before my mic is even published, so there is no
+        // window where the partner could hear the untranslated voice.
+        room.localParticipant.setTrackSubscriptionPermissions(false, [
+          { participantIdentity: TRANSLATOR_IDENTITY, allowAll: true },
+        ]);
         await room.localParticipant.setMicrophoneEnabled(true, {
           echoCancellation: true,
           noiseSuppression: true,

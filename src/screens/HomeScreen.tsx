@@ -24,10 +24,12 @@ import { QRScanner } from '../components/QRScanner';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useAuthFetch } from '../utils/authFetch';
 import { useRef } from 'react';
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_NAME } from '../config';
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
+import { CallEngine, getStoredEngine, subscribeEngineChange } from '../utils/enginePreference';
 
 interface HomeScreenProps {
   onSessionReady: (params: {
@@ -80,6 +82,7 @@ function extractSessionIdFromUrl(url: string | null): string | null {
 
 export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, onOpenRecordings }: HomeScreenProps) {
   const { signOut } = useAuth();
+  const authFetch = useAuthFetch();
   const { user } = useUser();
   // Voice profile from Clerk metadata — used for Gemini voice warm-up at session start
   const meta = user?.unsafeMetadata as any;
@@ -91,6 +94,13 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const isDesktop = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
 
   const [myLang, setMyLang] = useState('English');
+  const [engine, setEngine] = useState<CallEngine>('legacy');
+
+  useEffect(() => {
+    getStoredEngine().then(setEngine);
+    const unsub = subscribeEngineChange(setEngine);
+    return unsub;
+  }, []);
 
   // Default to the user's native language (set in their profile) until they
   // explicitly pick a different language here — an explicit pick, once made,
@@ -136,12 +146,13 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     if (!userId) return;
     const httpUrl = WS_URL.replace(/^ws(s)?:\/\//, 'http$1://');
     setLoadingConvs(true);
-    fetch(`${httpUrl}/conversations?userId=${encodeURIComponent(userId)}`)
+    // Login token proves who we are; ?userId= only helps servers still in rollout mode.
+    authFetch(`${httpUrl}/conversations?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setRecentConversations(data); })
       .catch(e => console.warn('[HomeScreen] Failed to load conversations:', e))
       .finally(() => setLoadingConvs(false));
-  }, [userId]);
+  }, [userId, authFetch]);
 
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
@@ -336,7 +347,32 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                 {APP_NAME_SUFFIX ? <Text style={styles.titleGreen}>{APP_NAME_SUFFIX}</Text> : null}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Selected AI Model Badge */}
+              <TouchableOpacity
+                onPress={onOpenProfile}
+                style={[
+                  styles.modelHeaderBadge,
+                  { borderColor: engine === 'livekit' ? 'rgba(47,224,168,0.35)' : 'rgba(57,255,20,0.35)' },
+                ]}
+                activeOpacity={0.8}
+              >
+                <View
+                  style={[
+                    styles.modelHeaderDot,
+                    { backgroundColor: engine === 'livekit' ? '#2FE0A8' : '#39FF14' },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.modelHeaderText,
+                    { color: engine === 'livekit' ? '#2FE0A8' : '#39FF14' },
+                  ]}
+                >
+                  {engine === 'livekit' ? '3.5 Live' : '2.5 Flash'}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity onPress={onOpenProfile} style={styles.profileBtn}>
                 {user?.imageUrl ? (
                   <Image source={{ uri: user.imageUrl }} style={styles.profileAvatar} />
@@ -695,6 +731,27 @@ const styles = StyleSheet.create({
     borderColor: colors.hair,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  modelHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  modelHeaderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  modelHeaderText: {
+    fontSize: 11,
+    fontWeight: '700',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    letterSpacing: 0.5,
   },
   profileAvatar: {
     width: 24,

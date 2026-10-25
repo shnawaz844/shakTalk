@@ -58,7 +58,14 @@ GEMINI_TRANSLATE_MODEL=gemini-3.5-live-translate-preview
 GEMINI_TRANSLATE_BACKEND=vertex          # or "apikey"
 # GEMINI_TRANSLATE_LOCATION=asia-south1  # defaults to GOOGLE_CLOUD_LOCATION
 # GEMINI_API_KEY=...                     # only for GEMINI_TRANSLATE_BACKEND=apikey
-# GEMINI_TRANSLATE_ECHO=false            # true = also speak words already in the listener's language
+# GEMINI_TRANSLATE_ECHO_TARGET=true      # default true: also speak words already in the listener's language
+#                                        # (replaces the old GEMINI_TRANSLATE_ECHO, whose value was read inverted)
+# GEMINI_TRANSLATE_SKIP_SILENCE=false    # true = don't stream silence to Gemini (saves input cost)
+
+# Login checks (see backend/auth.js)
+# AUTH_ENFORCE=true                      # set false ONLY while old app builds without login tokens are in use
+# CLERK_JWT_KEY=...                      # optional: Clerk JWT public key, verifies tokens without a network call
+# DIAGNOSTICS_KEY=...                    # optional: protects /gemini-test (call /gemini-test?key=...)
 ```
 
 Then `cd backend && npm install` and restart.
@@ -93,6 +100,24 @@ Server log lines to collect:
 - `[LATENCY][translate] <session>:host→English: translated audio started 1234ms after the speaker started talking`. This is the number to report: speech start → first translated audio.
 - `[liveTranslate] ... ready (Xms)`: connection time to Gemini.
 - `[translatorBot] ... receiving host mic`: the bot is hearing each phone.
+
+## Echo protection (loudspeaker)
+
+Two layers stop a phone's loudspeaker from being picked up by its own mic and translated again:
+
+1. **On the phone (Android):** `patches/@livekit+react-native+3.0.0.patch` makes LiveKit use WebRTC's software echo canceller (AEC3) instead of the phone's hardware one, whose quality varies by brand. `patch-package` applies it automatically on `npm install` (`postinstall`), so EAS builds include it. A new app build is needed. iOS already uses Apple's voice-processing echo canceller.
+2. **On the server:** `backend/echoGuard.js`. While the server is playing translation to someone (plus a short tail), it replaces that person's mic with silence before it reaches Gemini. If they clearly talk over the translation, their voice gets through (barge-in), including their first words.
+
+Server log: `[echoGuard] <session>:host: guarded N mic frames during playback, let M barge-in frames through (echo level ~X)`.
+
+Tuning (backend `.env`, all optional):
+
+| Variable | Default | When to change |
+|---|---|---|
+| `ECHO_GUARD` | on | `off` to disable it for comparison |
+| `ECHO_GUARD_TAIL_MS` | 700 | Raise (for example to 1000) if echo still leaks right after a translation ends |
+| `ECHO_GUARD_BARGE_RMS` | 2500 | Raise if echo still gets through as "barge-in"; lower if people can't interrupt |
+| `ECHO_GUARD_BARGE_RATIO` | 3 | How much louder than the measured echo real speech must be |
 
 ## Known limits of this branch
 
