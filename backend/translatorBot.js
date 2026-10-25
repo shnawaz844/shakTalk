@@ -32,6 +32,7 @@ try {
   console.warn('[translatorBot] Warning: livekit-server-sdk is not installed or failed to load:', err.message);
 }
 const { LiveTranslateStream } = require('./liveTranslate');
+const { EchoGuard } = require('./echoGuard');
 
 /**
  * LiveKit call engine
@@ -100,9 +101,13 @@ class TranslatorBot {
     this.outputs = {}; // role → { source, chain }
     this.streams = {}; // role → LiveTranslateStream
     this.readers = {}; // role → ReadableStreamDefaultReader
-    // Hardware AEC (Android MODE_IN_COMMUNICATION / iOS VPIO voiceChat) eliminates
-    // the loudspeaker→mic feedback path at the device level, so no server-side
-    // acoustic gate is needed here.
+    // Phone echo cancellation removes most loudspeaker leakage; the EchoGuard
+    // catches what's left. role → EchoGuard for that person's mic (guards it
+    // only while AUDIBLE translation plays to them — see echoGuard.js).
+    this.guards = {
+      host: new EchoGuard(`${roomName.slice(0, 8)}:host`),
+      guest: new EchoGuard(`${roomName.slice(0, 8)}:guest`),
+    };
   }
 
   partnerOf(role) {
@@ -242,7 +247,8 @@ class TranslatorBot {
         const { value: frame, done } = await reader.read();
         if (done || this.closed) break;
         const d = frame.data;
-        translate.feed(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
+        const pcm = this.guards[role].filter(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
+        if (pcm.length) translate.feed(pcm);
       }
     } catch (err) {
       if (!this.closed) console.warn(`[translatorBot] ${this.roomName}: ${role} mic stream ended: ${err.message}`);
@@ -258,6 +264,8 @@ class TranslatorBot {
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
 
+    // The listener is the one hearing this: guard their mic while it plays.
+    this.guards[listener].onPlayback(samples, OUTPUT_RATE);
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
         const part = samples.slice(i, i + FRAME_SAMPLES);
