@@ -19,14 +19,14 @@
  *                             speaker delay)
  *   ECHO_GUARD_BARGE_RMS=2500 absolute minimum mic level (int16 RMS) that
  *                             counts as the listener really talking
- *   ECHO_GUARD_BARGE_RATIO=4  ...and it must also be this many times louder
+ *   ECHO_GUARD_BARGE_RATIO=3  ...and it must also be this many times louder
  *                             than the echo level measured during playback
  */
 
 const ENABLED = process.env.ECHO_GUARD !== 'off';
 const TAIL_MS = Number(process.env.ECHO_GUARD_TAIL_MS || 700);
 const BARGE_RMS = Number(process.env.ECHO_GUARD_BARGE_RMS || 2500);
-const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 4);
+const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 3);
 // Barge-in must last this long before the mic opens (a cough or a click doesn't count).
 const BARGE_HOLD_MS = 200;
 // Translated audio quieter than this (int16 RMS per 20ms) is treated as silence.

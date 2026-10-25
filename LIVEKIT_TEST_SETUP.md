@@ -58,7 +58,14 @@ GEMINI_TRANSLATE_MODEL=gemini-3.5-live-translate-preview
 GEMINI_TRANSLATE_BACKEND=vertex          # or "apikey"
 # GEMINI_TRANSLATE_LOCATION=asia-south1  # defaults to GOOGLE_CLOUD_LOCATION
 # GEMINI_API_KEY=...                     # only for GEMINI_TRANSLATE_BACKEND=apikey
-# GEMINI_TRANSLATE_ECHO=false            # true = also speak words already in the listener's language
+# GEMINI_TRANSLATE_ECHO_TARGET=true      # default true: also speak words already in the listener's language
+#                                        # (replaces the old GEMINI_TRANSLATE_ECHO, whose value was read inverted)
+# GEMINI_TRANSLATE_SKIP_SILENCE=false    # true = don't stream silence to Gemini (saves input cost)
+
+# Login checks (see backend/auth.js)
+# AUTH_ENFORCE=true                      # set false ONLY while old app builds without login tokens are in use
+# CLERK_JWT_KEY=...                      # optional: Clerk JWT public key, verifies tokens without a network call
+# DIAGNOSTICS_KEY=...                    # optional: protects /gemini-test (call /gemini-test?key=...)
 ```
 
 Then `cd backend && npm install` and restart.
@@ -110,7 +117,7 @@ Tuning (backend `.env`, all optional):
 | `ECHO_GUARD` | on | `off` to disable it for comparison |
 | `ECHO_GUARD_TAIL_MS` | 700 | Raise (for example to 1000) if echo still leaks right after a translation ends |
 | `ECHO_GUARD_BARGE_RMS` | 2500 | Raise if echo still gets through as "barge-in"; lower if people can't interrupt |
-| `ECHO_GUARD_BARGE_RATIO` | 4 | How much louder than the measured echo real speech must be |
+| `ECHO_GUARD_BARGE_RATIO` | 3 | How much louder than the measured echo real speech must be |
 
 ## Known limits of this branch
 

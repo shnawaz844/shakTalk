@@ -39,14 +39,15 @@ const { EchoGuard } = require('./echoGuard');
  * ───────────────────
  * Both phones join a LiveKit room (WebRTC, like a WhatsApp/Teams call) and
  * publish their microphone with the platform's echo cancellation and noise
- * suppression. Each listener hears the partner's real voice directly
- * (~200–300ms), turned down, with the translation on top.
+ * suppression. Each listener hears ONLY the translation of their partner:
+ * raw microphones are never delivered to the other phone (blocked by the app
+ * via track subscription permissions, and by this bot as a backup).
  *
  * This bot joins the same room as a third participant ("translator"):
  *   host mic  → Gemini Live Translate (→ guest's language) → track "translation-of-host"
  *   guest mic → Gemini Live Translate (→ host's language)  → track "translation-of-guest"
- * Each phone subscribes only to its partner's mic and to the translation of
- * its partner, so nobody hears their own translation.
+ * Each phone subscribes only to the translation of its partner, so nobody
+ * hears their own translation.
  *
  * Because the translation is played through the call (WebRTC), the phone's
  * echo canceller removes it from the mic — no mic gating is needed.
@@ -119,16 +120,32 @@ class TranslatorBot {
     const room = new Room();
     this.room = room;
 
+    // Each (listener, track, on/off) subscription change only needs to be sent
+    // to LiveKit once. Before, the same calls were repeated on every
+    // TrackPublished / ParticipantConnected / TrackSubscribed event (4–8 HTTP
+    // requests each time). The app now also blocks raw-mic subscriptions at the
+    // source (setTrackSubscriptionPermissions in useLiveKitCall.ts); this is the
+    // server-side backup.
+    const applied = new Set();
+    const setSubscribed = async (listener, trackSid, subscribe) => {
+      const svc = getRoomService();
+      const key = `${listener}|${trackSid}|${subscribe}`;
+      if (!svc || !trackSid || applied.has(key)) return false;
+      applied.add(key); // mark first, so events arriving together don't repeat the call
+      applied.delete(`${listener}|${trackSid}|${!subscribe}`);
+      try {
+        await svc.updateSubscriptions(this.roomName, listener, [trackSid], subscribe);
+        return true;
+      } catch (err) {
+        applied.delete(key); // the participant may not have joined yet; the next event retries
+        return false;
+      }
+    };
+
     const muteRawMicToPartner = async (role, trackSid) => {
       const listener = this.partnerOf(role);
-      const svc = getRoomService();
-      if (svc && trackSid) {
-        try {
-          await svc.updateSubscriptions(this.roomName, listener, [trackSid], false);
-          console.log(`[translatorBot] ${this.roomName}: unsubscribed ${listener} from ${role} raw mic (${trackSid})`);
-        } catch (err) {
-          console.warn(`[translatorBot] ${this.roomName}: updateSubscriptions failed for ${listener}: ${err.message}`);
-        }
+      if (await setSubscribed(listener, trackSid, false)) {
+        console.log(`[translatorBot] ${this.roomName}: unsubscribed ${listener} from ${role} raw mic (${trackSid})`);
       }
     };
 
@@ -140,13 +157,13 @@ class TranslatorBot {
 
       if (hostTransSid) {
         // Translation of Host speech goes to Guest
-        await svc.updateSubscriptions(this.roomName, 'guest', [hostTransSid], true).catch(() => {});
-        await svc.updateSubscriptions(this.roomName, 'host', [hostTransSid], false).catch(() => {});
+        await setSubscribed('guest', hostTransSid, true);
+        await setSubscribed('host', hostTransSid, false);
       }
       if (guestTransSid) {
         // Translation of Guest speech goes to Host
-        await svc.updateSubscriptions(this.roomName, 'host', [guestTransSid], true).catch(() => {});
-        await svc.updateSubscriptions(this.roomName, 'guest', [guestTransSid], false).catch(() => {});
+        await setSubscribed('host', guestTransSid, true);
+        await setSubscribed('guest', guestTransSid, false);
       }
     };
     this.syncSubscriptions = syncSubscriptions;
@@ -201,7 +218,11 @@ class TranslatorBot {
       const pub = await room.localParticipant.publishTrack(track, options);
       this.outputs[role] = { source, track, pub, chain: Promise.resolve() };
     }
-    await syncSubscriptions();
+    // Not awaited: these LiveKit API calls are a backup (the app itself only
+    // lets the translator receive its mic), and calls about a phone that
+    // hasn't joined yet can take many seconds to fail. Awaiting them delayed
+    // "translator ready" on the phones by up to ~24s.
+    syncSubscriptions().catch(() => {});
 
     // Participants who joined (and were subscribed) before our handler ran.
     for (const participant of room.remoteParticipants.values()) {
@@ -214,7 +235,7 @@ class TranslatorBot {
         }
       }
     }
-    await syncSubscriptions();
+    syncSubscriptions().catch(() => {}); // backup, not awaited (see above)
     console.log(`[translatorBot] ${this.roomName}: joined, translating host(${this.langs.host}) ↔ guest(${this.langs.guest})`);
   }
 
