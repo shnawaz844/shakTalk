@@ -175,6 +175,27 @@ const httpServer = http.createServer(async (req, res) => {
     return;
   }
 
+  // GET /user/plan — returns active plan engine and model for current user
+  if (req.method === 'GET' && req.url === '/user/plan') {
+    try {
+      const userId = await requireUser(req);
+      if (!isValidUserId(userId)) throw new AuthError('Login required.');
+      const { data, error } = await supabase
+        .from('user_plans')
+        .select('plan_engine, model_id, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      const engine = data?.plan_engine || 'legacy';
+      const modelId = data?.model_id || (engine === 'livekit' ? 'gemini-3.5-live-translate-preview' : 'gemini-live-2.5-flash-native-audio');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, engine, modelId, tier: engine === 'livekit' ? 'pro' : 'starter' }));
+    } catch (err) {
+      sendHttpError(res, err, '/user/plan');
+    }
+    return;
+  }
+
 
   if (req.method === 'GET' && req.url?.match(/^\/conversations(\?.*)?$/)) {
     try {
