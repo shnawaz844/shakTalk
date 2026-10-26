@@ -53,7 +53,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                     engine === 'legacy' ? styles.btnTitleActiveLegacy : styles.btnTitleInactive,
                   ]}
                 >
-                  2.5 Flash
+                  Base Plan
                 </Text>
               </View>
               {engine === 'legacy' && (
@@ -62,7 +62,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                 </View>
               )}
             </View>
-            <Text style={styles.btnSubtitle}>Vertex AI • Stable (~$0.06/m)</Text>
+            <Text style={styles.btnSubtitle}>Turn-by-Turn Translation</Text>
           </View>
         </TouchableOpacity>
 
@@ -90,7 +90,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                     engine === 'livekit' ? styles.btnTitleActiveLive : styles.btnTitleInactive,
                   ]}
                 >
-                  3.5 Live
+                  Pro Plan
                 </Text>
               </View>
               {engine === 'livekit' && (
@@ -99,7 +99,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                 </View>
               )}
             </View>
-            <Text style={styles.btnSubtitle}>LiveKit • Simultaneous (~$0.10/m)</Text>
+            <Text style={styles.btnSubtitle}>Real-time Translation</Text>
           </View>
         </TouchableOpacity>
       </View>

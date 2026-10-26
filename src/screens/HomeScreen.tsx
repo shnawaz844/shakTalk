@@ -185,7 +185,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
 
-  const { status, sessionId, partnerLang, role: wsRole, callEngine, createSession, joinSession, endSession } = useWebSocket({
+  const { status, sessionId, myLang: wsMyLang, partnerLang, role: wsRole, callEngine, createSession, joinSession, endSession } = useWebSocket({
     onError: (msg) => {
       setErrorMsg(msg);
       setConnectingMsg(null);
@@ -199,9 +199,10 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     const resolvedRole = wsRole || roleRef.current;
     if (status === 'connected' && sessionId && partnerLang && resolvedRole) {
       setConnectingMsg(null);
-      onSessionReady({ sessionId, role: resolvedRole, myLang, partnerLang, engine: callEngine });
+      const effectiveMyLang = wsMyLang || myLang;
+      onSessionReady({ sessionId, role: resolvedRole, myLang: effectiveMyLang, partnerLang, engine: callEngine });
     }
-  }, [status, sessionId, partnerLang, wsRole, callEngine]);
+  }, [status, sessionId, wsMyLang, myLang, partnerLang, wsRole, callEngine]);
 
   const handleJoinFromUrl = async (url: string | null) => {
     if (!url) return;

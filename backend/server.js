@@ -1044,8 +1044,22 @@ wss.on('connection', (ws) => {
       const waitTime = session.createdAt ? guestJoinAt - session.createdAt : 0;
       console.log(`[LATENCY][CALL_CONNECT] Guest joined session: ${sessionId} [engine=${session.engine}] (${waitTime}ms after host creation)`);
 
-      send(session.host, { type: 'session_ready', role: 'host', sessionId, partnerLang: session.guestLang, engine: session.engine });
-      send(session.guest, { type: 'session_ready', role: 'guest', sessionId, partnerLang: session.hostLang, engine: session.engine });
+      send(session.host, {
+        type: 'session_ready',
+        role: 'host',
+        sessionId,
+        myLang: session.hostLang,
+        partnerLang: session.guestLang,
+        engine: session.engine
+      });
+      send(session.guest, {
+        type: 'session_ready',
+        role: 'guest',
+        sessionId,
+        myLang: session.guestLang,
+        partnerLang: session.hostLang,
+        engine: session.engine
+      });
 
       if (session.engine === 'livekit') {
         startLiveKitCall(session, sessionId);
