@@ -24,12 +24,10 @@ import { QRScanner } from '../components/QRScanner';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth, useUser } from '@clerk/clerk-expo';
-import { useAuthFetch } from '../utils/authFetch';
 import { useRef } from 'react';
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_NAME } from '../config';
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
-import { CallEngine, getStoredEngine, subscribeEngineChange } from '../utils/enginePreference';
 
 interface HomeScreenProps {
   onSessionReady: (params: {
@@ -54,53 +52,34 @@ interface RecentConversation {
   messageCount: number;
 }
 
-interface SessionInviteDetails {
-  sessionId: string;
-  hostLang?: string;
-}
-
-function extractSessionDetailsFromUrl(url: string | null): SessionInviteDetails | null {
+function extractSessionIdFromUrl(url: string | null): string | null {
   if (!url) return null;
   try {
-    const cleanUrl = url.trim();
-    let sessionId: string | null = null;
-
     // 1. UUID pattern check (standard v4 UUID: 8-4-4-4-12 hex digits)
-    const uuidMatch = cleanUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    const uuidMatch = url.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     if (uuidMatch) {
-      sessionId = uuidMatch[0];
-    } else {
-      // 2. /join/<id> pattern
-      const joinMatch = cleanUrl.match(/\/join\/([^/?#]+)/i);
-      if (joinMatch && joinMatch[1]) {
-        sessionId = decodeURIComponent(joinMatch[1]);
-      } else {
-        // 3. Query parameter: ?sessionId=... or ?session=... or ?sid=...
-        const queryMatch = cleanUrl.match(/[?&](?:sessionId|session|sid)=([^&#]+)/i);
-        if (queryMatch && queryMatch[1]) {
-          sessionId = decodeURIComponent(queryMatch[1]);
-        }
-      }
+      return uuidMatch[0];
     }
 
-    if (!sessionId) return null;
-
-    let hostLang: string | undefined;
-    const hostLangMatch = cleanUrl.match(/[?&]hostLang=([^&#]+)/i);
-    if (hostLangMatch && hostLangMatch[1]) {
-      hostLang = decodeURIComponent(hostLangMatch[1]);
+    // 2. /join/<id> pattern
+    const joinMatch = url.match(/\/join\/([^/?#]+)/i);
+    if (joinMatch && joinMatch[1]) {
+      return decodeURIComponent(joinMatch[1]);
     }
 
-    return { sessionId, hostLang };
+    // 3. Query parameter: ?sessionId=... or ?session=... or ?sid=...
+    const queryMatch = url.match(/[?&](?:sessionId|session|sid)=([^&#]+)/i);
+    if (queryMatch && queryMatch[1]) {
+      return decodeURIComponent(queryMatch[1]);
+    }
   } catch (e) {
-    console.warn('[extractSessionDetailsFromUrl] Error parsing URL:', url, e);
+    console.warn('[extractSessionIdFromUrl] Error parsing URL:', url, e);
   }
   return null;
 }
 
 export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, onOpenRecordings }: HomeScreenProps) {
   const { signOut } = useAuth();
-  const authFetch = useAuthFetch();
   const { user } = useUser();
   // Voice profile from Clerk metadata — used for Gemini voice warm-up at session start
   const meta = user?.unsafeMetadata as any;
@@ -112,13 +91,6 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const isDesktop = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
 
   const [myLang, setMyLang] = useState('English');
-  const [engine, setEngine] = useState<CallEngine>('legacy');
-
-  useEffect(() => {
-    getStoredEngine().then(setEngine);
-    const unsub = subscribeEngineChange(setEngine);
-    return unsub;
-  }, []);
 
   // Default to the user's native language (set in their profile) until they
   // explicitly pick a different language here — an explicit pick, once made,
@@ -164,13 +136,12 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     if (!userId) return;
     const httpUrl = WS_URL.replace(/^ws(s)?:\/\//, 'http$1://');
     setLoadingConvs(true);
-    // Login token proves who we are; ?userId= only helps servers still in rollout mode.
-    authFetch(`${httpUrl}/conversations?userId=${encodeURIComponent(userId)}`)
+    fetch(`${httpUrl}/conversations?userId=${encodeURIComponent(userId)}`)
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setRecentConversations(data); })
       .catch(e => console.warn('[HomeScreen] Failed to load conversations:', e))
       .finally(() => setLoadingConvs(false));
-  }, [userId, authFetch]);
+  }, [userId]);
 
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
@@ -193,40 +164,16 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     }
   }, [status, sessionId, partnerLang, wsRole, callEngine]);
 
-  const [incomingInvite, setIncomingInvite] = useState<SessionInviteDetails | null>(null);
-
   const handleJoinFromUrl = async (url: string | null) => {
     if (!url) return;
-    const details = extractSessionDetailsFromUrl(url);
-    if (!details) return;
-    const { sessionId: incomingSid, hostLang } = details;
-
-    // Avoid self-joining if host accidentally taps their own shared link
-    if (sessionId === incomingSid && roleRef.current === 'host') {
-      console.log('[HomeScreen] User is already hosting session', incomingSid);
-      return;
-    }
+    const incomingSid = extractSessionIdFromUrl(url);
+    if (!incomingSid) return;
 
     if (pendingJoinRef.current === incomingSid || sessionId === incomingSid) {
       return;
     }
 
-    // Refresh myLang from storage so it never defaults to stale 'English' on deep link launch
-    try {
-      const saved = await storage.getItem(MY_LANG_KEY);
-      if (saved) setMyLang(saved);
-    } catch (_) {}
-
-    // Open confirmation modal so guest can confirm/change their speaking language
-    setIncomingInvite({ sessionId: incomingSid, hostLang });
-  };
-
-  const handleConfirmJoinInvite = async () => {
-    if (!incomingInvite) return;
-    const sidToJoin = incomingInvite.sessionId;
-    setIncomingInvite(null);
-
-    pendingJoinRef.current = sidToJoin;
+    pendingJoinRef.current = incomingSid;
     setConnectingMsg('Connecting to call from invite link…');
     setErrorMsg(null);
 
@@ -239,8 +186,8 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
     roleRef.current = 'guest';
     try {
-      console.log('[HomeScreen] Joining session from link:', sidToJoin, 'speaking:', myLang);
-      await joinSession(sidToJoin, myLang, userId, speakerGender, speakerAge);
+      console.log('[HomeScreen] Joining session from link:', incomingSid);
+      await joinSession(incomingSid, myLang, userId, speakerGender, speakerAge);
     } catch (err: any) {
       console.error('[HomeScreen] Error joining from link:', err);
       setErrorMsg(err?.message || 'Failed to join call from link.');
@@ -304,7 +251,14 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   const handleShareWhatsApp = async (sid: string) => {
     const msg = buildShareMessage(sid);
-    await Share.share({ message: msg, title: `Join my ${APP_NAME} call` });
+    const waUrl = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+    const canOpen = await Linking.canOpenURL(waUrl);
+    if (canOpen) {
+      await Linking.openURL(waUrl);
+    } else {
+      // Fallback: native share sheet (works even if WhatsApp not installed)
+      await Share.share({ message: msg });
+    }
   };
 
   const handleShareNative = async (sid: string) => {
@@ -330,7 +284,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
       return;
     }
     // Extract session ID from code or URL
-    const sid = extractSessionDetailsFromUrl(code)?.sessionId || code;
+    const sid = extractSessionIdFromUrl(code) || code;
     setManualCodeError(null);
     setShowManualJoin(false);
     setManualCode('');
@@ -382,32 +336,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                 {APP_NAME_SUFFIX ? <Text style={styles.titleGreen}>{APP_NAME_SUFFIX}</Text> : null}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              {/* Selected AI Model Badge */}
-              <TouchableOpacity
-                onPress={onOpenProfile}
-                style={[
-                  styles.modelHeaderBadge,
-                  { borderColor: engine === 'livekit' ? 'rgba(47,224,168,0.35)' : 'rgba(57,255,20,0.35)' },
-                ]}
-                activeOpacity={0.8}
-              >
-                <View
-                  style={[
-                    styles.modelHeaderDot,
-                    { backgroundColor: engine === 'livekit' ? '#2FE0A8' : '#39FF14' },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.modelHeaderText,
-                    { color: engine === 'livekit' ? '#2FE0A8' : '#39FF14' },
-                  ]}
-                >
-                  {engine === 'livekit' ? '3.5 Live' : '2.5 Flash'}
-                </Text>
-              </TouchableOpacity>
-
+            <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity onPress={onOpenProfile} style={styles.profileBtn}>
                 {user?.imageUrl ? (
                   <Image source={{ uri: user.imageUrl }} style={styles.profileAvatar} />
@@ -554,16 +483,14 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                       </Text>
                     </View>
                   </TouchableOpacity>
-                  {/* Recordings button: only in Gemini 2.5 Flash where audio is saved */}
-                  {engine === 'legacy' && (
-                    <TouchableOpacity
-                      style={styles.recordingsBtn}
-                      onPress={() => onOpenRecordings(conv.id, userId || '', conv.myLang, conv.partnerLang || '')}
-                      activeOpacity={0.75}
-                    >
-                      <Feather name="headphones" size={15} color={colors.signal} />
-                    </TouchableOpacity>
-                  )}
+                  {/* Recordings button */}
+                  <TouchableOpacity
+                    style={styles.recordingsBtn}
+                    onPress={() => onOpenRecordings(conv.id, userId || '', conv.myLang, conv.partnerLang || '')}
+                    activeOpacity={0.75}
+                  >
+                    <Feather name="headphones" size={15} color={colors.signal} />
+                  </TouchableOpacity>
                 </View>
               ))}
             </View>
@@ -719,55 +646,6 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
           </View>
         </View>
       </Modal>
-
-      {/* Incoming Call Invite Confirmation Modal */}
-      <Modal visible={!!incomingInvite} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, isDesktop && styles.modalCardDesktop]}>
-            <View style={styles.manualModalHeader}>
-              <View style={[styles.manualIconWrap, { backgroundColor: 'rgba(57,255,20,0.12)' }]}>
-                <Feather name="phone-call" size={22} color={colors.signal} />
-              </View>
-              <Text style={styles.modalTitle}>Join Translation Call</Text>
-              <Text style={styles.modalSubtitle}>
-                {incomingInvite?.hostLang
-                  ? `Your partner speaks ${incomingInvite.hostLang}.`
-                  : 'You have been invited to a live translation call.'}
-              </Text>
-            </View>
-
-            {incomingInvite?.hostLang && (
-              <View style={styles.hostLangBanner}>
-                <Feather name="globe" size={14} color={colors.signal} />
-                <Text style={styles.hostLangBannerText}>
-                  Partner's language: <Text style={{ color: '#fff', fontWeight: '700' }}>{incomingInvite.hostLang}</Text>
-                </Text>
-              </View>
-            )}
-
-            <View style={{ width: '100%', marginVertical: 12 }}>
-              <Text style={[styles.cardTitle, { marginBottom: 8 }]}>YOU'LL SPEAK</Text>
-              <LanguageSelector label="" selected={myLang} onSelect={handleSetMyLang} />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.primaryBtn, { width: '100%', marginTop: 8 }]}
-              onPress={handleConfirmJoinInvite}
-              activeOpacity={0.85}
-            >
-              <Feather name="phone-incoming" size={18} color={colors.ink} style={{ marginRight: 8 }} />
-              <Text style={styles.primaryBtnText}>Join Call Now</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={() => setIncomingInvite(null)}
-            >
-              <Text style={styles.cancelBtnText}>Decline</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -817,27 +695,6 @@ const styles = StyleSheet.create({
     borderColor: colors.hair,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modelHeaderBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
-  },
-  modelHeaderDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  modelHeaderText: {
-    fontSize: 11,
-    fontWeight: '700',
-    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
-    letterSpacing: 0.5,
   },
   profileAvatar: {
     width: 24,
@@ -923,12 +780,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     borderWidth: 1, borderColor: colors.hair,
     padding: 28, alignItems: 'center', paddingBottom: 48,
-  },
-  modalCardDesktop: {
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
-    borderRadius: 28,
   },
   modalTitle: { color: colors.warm, fontSize: 20, fontWeight: '700', marginBottom: 4 },
   modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 20, textAlign: 'center' },
@@ -1089,23 +940,6 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: colors.hair,
   },
   cancelBtnText: { color: colors.muted, fontSize: 14 },
-  hostLangBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(57,255,20,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(57,255,20,0.2)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    width: '100%',
-    marginBottom: 8,
-  },
-  hostLangBannerText: {
-    color: colors.signal,
-    fontSize: 13,
-  },
 
   // Recent Conversations
   recentSection: { marginTop: 32 },

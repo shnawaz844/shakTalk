@@ -54,8 +54,6 @@ const TARGET_CODES = {
   Ukrainian: 'uk',
 };
 
-const SUPPORTED_LANGUAGES = Object.keys(TARGET_CODES);
-
 function targetCodeFor(languageName) {
   return TARGET_CODES[languageName] || 'en';
 }
@@ -356,4 +354,4 @@ class LiveTranslateStream {
   }
 }
 
-module.exports = { LiveTranslateStream, targetCodeFor, MODEL, SUPPORTED_LANGUAGES };
+module.exports = { LiveTranslateStream, targetCodeFor, MODEL };
