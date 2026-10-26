@@ -293,10 +293,9 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   // ── WhatsApp / native share ───────────────────────────────────────────────
   const buildShareMessage = (sid: string) => {
-    const joinUrl = `${JOIN_BASE_URL}/${sid}?hostLang=${encodeURIComponent(myLang)}`;
+    const joinUrl = `${JOIN_BASE_URL}/${sid}`;
     return (
       `Hey! Join my ${APP_NAME} live-translation call 🌐\n\n` +
-      `🗣️ I'll speak: ${myLang}\n` +
       `👉 Tap to join: ${joinUrl}\n\n` +
       `Or open the app → "Scan to join" → scan the QR code I'll show you.\n\n` +
       `Session code: ${sid}`
@@ -305,19 +304,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   const handleShareWhatsApp = async (sid: string) => {
     const msg = buildShareMessage(sid);
-    const waScheme = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    const waApi = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
-    try {
-      // Directly open whatsapp:// without canOpenURL check (canOpenURL returns false on Android 11+ without package queries)
-      await Linking.openURL(waScheme);
-    } catch (_) {
-      try {
-        await Linking.openURL(waApi);
-      } catch (err) {
-        // Fallback to native share sheet if WhatsApp is not installed
-        await Share.share({ message: msg });
-      }
-    }
+    await Share.share({ message: msg, title: `Join my ${APP_NAME} call` });
   };
 
   const handleShareNative = async (sid: string) => {
@@ -626,14 +613,10 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
                 {/* Share invite row with WhatsApp & Share icons in front */}
                 <View style={styles.shareCard}>
-                  <TouchableOpacity
-                    style={styles.shareLabelGroup}
-                    onPress={() => handleShareWhatsApp(sessionId)}
-                    activeOpacity={0.7}
-                  >
+                  <View style={styles.shareLabelGroup}>
                     <Feather name="send" size={14} color={colors.signal} style={{ marginRight: 8 }} />
                     <Text style={styles.shareCardText}>Share invite to join</Text>
-                  </TouchableOpacity>
+                  </View>
                   <View style={styles.shareActions}>
                     <TouchableOpacity
                       style={styles.waBtn}
