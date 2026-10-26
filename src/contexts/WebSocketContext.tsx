@@ -279,7 +279,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setLiveKit(null);
       const engine = preferredEngine || await getStoredEngine();
       setCallEngine(engine);
-      const authToken = await getToken().catch(() => null);
+      const authToken = await getToken({ skipCache: true }).catch(() => getToken().catch(() => null));
       websocketService.send({
         type: 'create_session', authToken: authToken || undefined, lang, userId, engine,
         ...(speakerGender ? { speakerGender } : {}),
@@ -306,7 +306,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setLiveKit(null);
       const engine = preferredEngine || await getStoredEngine();
       setCallEngine(engine);
-      const authToken = await getToken().catch(() => null);
+      const authToken = await getToken({ skipCache: true }).catch(() => getToken().catch(() => null));
       websocketService.send({
         type: 'join_session', authToken: authToken || undefined, sessionId: sid, lang, userId, engine,
         ...(speakerGender ? { speakerGender } : {}),
