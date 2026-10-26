@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -95,6 +95,9 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
     }
   };
 
+  const isLiveKit = engine === 'livekit';
+  const accentColor = isLiveKit ? '#2FE0A8' : '#39FF14';
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.topGlow} />
@@ -129,8 +132,61 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
           <Text style={styles.emailText}>{user?.primaryEmailAddress?.emailAddress}</Text>
         </View>
 
+        {/* Selected AI Model Showcase Card */}
+        <View style={[styles.modelHeroCard, { borderColor: isLiveKit ? 'rgba(47,224,168,0.3)' : 'rgba(57,255,20,0.3)' }]}>
+          <View style={styles.modelHeroTopRow}>
+            <View style={styles.modelStatusBadge}>
+              <View style={[styles.modelStatusDot, { backgroundColor: accentColor }]} />
+              <Text style={[styles.modelStatusText, { color: accentColor }]}>
+                ACTIVE TRANSLATION MODEL
+              </Text>
+            </View>
+            <View style={[styles.tierBadge, { borderColor: accentColor }]}>
+              <Text style={[styles.tierBadgeText, { color: accentColor }]}>
+                {isLiveKit ? 'PRO TIER' : 'STARTER TIER'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.modelHeroContent}>
+            <View style={[styles.modelIconCircle, { backgroundColor: isLiveKit ? 'rgba(47,224,168,0.12)' : 'rgba(57,255,20,0.12)' }]}>
+              <Feather
+                name={isLiveKit ? 'activity' : 'zap'}
+                size={22}
+                color={accentColor}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.modelHeroTitle}>
+                {isLiveKit ? 'Gemini 3.5 Live' : 'Gemini 2.5 Flash'}
+              </Text>
+              <Text style={styles.modelHeroEngine}>
+                {isLiveKit ? 'LiveKit Engine • Real-Time Voice' : 'Vertex AI • Turn-Based Audio'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.modelHeroDivider} />
+
+          <View style={styles.modelMetaRow}>
+            <Text style={styles.modelMetaLabel}>MODEL ID:</Text>
+            <Text style={styles.modelMetaValue}>
+              {isLiveKit ? 'gemini-3.5-live-translate-preview' : 'gemini-live-2.5-flash-native-audio'}
+            </Text>
+          </View>
+        </View>
+
         {/* Form */}
         <View style={styles.form}>
+          {/* Switcher Option */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>SWITCH AI MODEL</Text>
+            <Text style={styles.hint}>
+              Select between simultaneous continuous translation or crisp turn-based translation.
+            </Text>
+            <ModelSwitcher />
+          </View>
+
           <View style={styles.inputGroup}>
             <Text style={styles.label}>FIRST NAME</Text>
             <View style={styles.inputContainer}>
