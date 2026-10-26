@@ -218,6 +218,7 @@ class TranslatorBot {
       options.source = TrackSource.SOURCE_MICROPHONE;
       const pub = await room.localParticipant.publishTrack(track, options);
       this.outputs[role] = { source, track, pub, chain: Promise.resolve() };
+      console.log(`[translatorBot] ${this.roomName}: published track translation-of-${role} (sid=${pub.sid})`);
     }
     // Not awaited: these LiveKit API calls are a backup (the app itself only
     // lets the translator receive its mic), and calls about a phone that
@@ -286,6 +287,8 @@ class TranslatorBot {
     // odd byte offset) and push it into the call in 20ms frames, in order.
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
+
+    console.log(`[translatorBot] ${this.roomName}: queueing ${samples.length} samples (${Math.round(samples.length / OUTPUT_RATE * 1000)}ms) for ${listener} on track translation-of-${role}`);
 
     // The listener is the one hearing this: guard their mic while it plays.
     this.guards[listener].onPlayback(samples, OUTPUT_RATE);

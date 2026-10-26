@@ -69,7 +69,10 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
       // an unnamed or differently named translator track could be the
       // translation of my own voice, and must never play on my phone.
       if (p.identity === TRANSLATOR_IDENTITY) {
-        return pub.trackName === translationTrackName;
+        if (pub.trackName) {
+          return pub.trackName === translationTrackName || pub.trackName.includes(partnerIdentity);
+        }
+        return true;
       }
       return false;
     };
