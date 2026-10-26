@@ -26,24 +26,7 @@ const { GoogleGenAI, Modality } = require('google-genai-v2');
 
 const MODEL = process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview';
 const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase();
-// echoTargetLanguage: when the speaker says something that is ALREADY in the
-// listener's language (e.g. English words in Hinglish, or a Hindi speaker
-// switching to English), should the model still speak it? Partners no longer
-// hear each other's original voice, so this must be ON or those words are lost.
-//   GEMINI_TRANSLATE_ECHO_TARGET=true|false   (new, clear name; default true)
-//   GEMINI_TRANSLATE_ECHO                     (old name; its value was read
-//     inverted — "false" meant ON. Still honoured as before so nothing changes
-//     on deploy, but please switch to the new name.)
-const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO_TARGET !== undefined
-  ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'true'
-  : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'true' : false);
-
-// Optional cost saving: stop streaming the mic to Gemini while nobody is
-// talking (input audio is billed per second). Off by default; see
-// _shouldSend below. Turn on with GEMINI_TRANSLATE_SKIP_SILENCE=true.
-const SKIP_SILENCE = process.env.GEMINI_TRANSLATE_SKIP_SILENCE === 'true';
-const SILENCE_HANGOVER_MS = 1500; // keep sending this long after the last speech
-const PRE_ROLL_FRAMES = 3;        // ~300ms kept back so the start of a word isn't clipped
+const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO === 'false';
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 
@@ -71,29 +54,6 @@ const TARGET_CODES = {
   Ukrainian: 'uk',
 };
 
-// Every language name the app can send (used by server.js to reject anything else).
-const SUPPORTED_LANGUAGES = Object.keys(TARGET_CODES);
-
-// Accuracy check: the writing system each target language should come back in.
-// Latin-script languages are skipped (English/Spanish/French/German can't be
-// told apart by script alone).
-const TARGET_SCRIPTS = {
-  hi: /[\u0900-\u097F]/,           // Devanagari
-  ar: /[\u0600-\u06FF]/, ur: /[\u0600-\u06FF]/, // Arabic script
-  'zh-Hans': /[\u4E00-\u9FFF]/, 'zh-Hant': /[\u4E00-\u9FFF]/, // Han
-  ru: /[\u0400-\u04FF]/, uk: /[\u0400-\u04FF]/, // Cyrillic
-};
-
-/** True when `text` clearly isn't written in the target language's script. */
-function looksLikeWrongLanguage(text, targetCode) {
-  const script = TARGET_SCRIPTS[targetCode];
-  if (!script) return false;
-  const letters = (text.match(/\p{L}/gu) || []).length;
-  if (letters < 8) return false; // too short to judge
-  const inScript = (text.match(new RegExp(script.source, 'gu')) || []).length;
-  return inScript < letters * 0.3;
-}
-
 function targetCodeFor(languageName) {
   return TARGET_CODES[languageName] || 'en';
 }
@@ -117,8 +77,8 @@ function getClient() {
 // How long transcription text must stop changing before the current
 // subtitle line is treated as finished (for the transcript + database).
 const SEGMENT_IDLE_MS = 1200;
-// Speech onset for latency logs: RMS above ~-32 dBFS after 1.5s of quiet.
-const SPEECH_RMS = 800;
+// Speech onset for latency logs: RMS above ~-36 dBFS after 1.5s of quiet.
+const SPEECH_RMS = 500;
 const SPEECH_GAP_MS = 1500;
 // Audio kept while (re)connecting: ~2s of 100ms frames.
 const MAX_PENDING_FRAMES = 20;
@@ -129,6 +89,7 @@ class LiveTranslateStream {
    * @param {string} opts.label            for logs, e.g. "session:host→Hindi"
    * @param {string} opts.inputLanguage    app language name of the SPEAKER (used for mismatch detection)
    * @param {string} opts.targetLanguage   app language name of the LISTENER
+   * @param {object} [opts.voiceProfile]   speaker voice profile (gender etc.)
    * @param {(pcm24k: Buffer) => void} opts.onAudio
    * @param {(seg: {segId:string, originalText:string, translatedText:string, isFinal:boolean}) => void} opts.onText
    * @param {(err: Error) => void} [opts.onError]
@@ -140,7 +101,6 @@ class LiveTranslateStream {
     this.targetCode = targetCodeFor(targetLanguage);
     this.voiceProfile = voiceProfile || {};
     const gender = (this.voiceProfile.gender || '').toLowerCase();
-    // Male -> 'Puck', Female -> 'Aoede', Default -> 'Puck'
     this.voiceName = gender === 'female' ? 'Aoede' : 'Puck';
     this.onAudio = onAudio;
     this.onText = onText;
@@ -158,8 +118,6 @@ class LiveTranslateStream {
     this.failures = 0;
 
     this._newSegment();
-    this.stats = { segments: 0, wrongLanguage: 0 };
-    this.preRoll = []; // recent quiet frames, only used with SKIP_SILENCE
 
     // Latency bookkeeping, from the audio itself: when the speaker starts
     // talking after a quiet spell, how long until translated audio comes back.
@@ -343,13 +301,6 @@ class LiveTranslateStream {
 
   _finishSegment() {
     const { segId, originalText, translatedText } = this.seg;
-    if (translatedText.trim() && looksLikeWrongLanguage(translatedText, this.targetCode)) {
-      // Known preview-model issue: sometimes answers in the wrong language.
-      // Logged so we can measure how often it happens per language pair.
-      this.stats.wrongLanguage++;
-      console.warn(`[accuracy] ${this.label}: translation does not look like ${this.targetCode} (${this.stats.wrongLanguage}/${this.stats.segments + 1} segments): "${translatedText.trim().slice(0, 80)}"`);
-    }
-    if (translatedText.trim()) this.stats.segments++;
     if (originalText.trim() || translatedText.trim()) {
       this.onText({ segId, originalText: originalText.trim(), translatedText: translatedText.trim(), isFinal: true });
     }
@@ -370,7 +321,6 @@ class LiveTranslateStream {
     if (this.closed) return;
     const buf = Buffer.isBuffer(pcm16k) ? pcm16k : Buffer.from(pcm16k);
     this._trackSpeech(buf);
-    if (SKIP_SILENCE && !this._shouldSend(buf)) return;
     const b64 = buf.toString('base64');
     if (this.session) { this._send(b64); return; }
     this.pending.push(b64);
@@ -394,32 +344,6 @@ class LiveTranslateStream {
     }
   }
 
-  /**
-   * SKIP_SILENCE only: decide whether this frame goes to Gemini.
-   * Sends while someone spoke in the last SILENCE_HANGOVER_MS; otherwise keeps
-   * the last PRE_ROLL_FRAMES frames aside and, when speech starts again, sends
-   * them first so the beginning of the first word isn't cut off.
-   */
-  _shouldSend(buf) {
-    const speaking = Date.now() - this.lastLoudAt < SILENCE_HANGOVER_MS;
-    if (speaking) {
-      if (this.preRoll.length) {
-        const held = this.preRoll; this.preRoll = [];
-        for (const b of held) this._sendOrQueue(b.toString('base64'));
-      }
-      return true;
-    }
-    this.preRoll.push(buf);
-    if (this.preRoll.length > PRE_ROLL_FRAMES) this.preRoll.shift();
-    return false;
-  }
-
-  _sendOrQueue(b64) {
-    if (this.session) { this._send(b64); return; }
-    this.pending.push(b64);
-    if (this.pending.length > MAX_PENDING_FRAMES) this.pending.shift();
-  }
-
   close() {
     this.closed = true;
     if (this.segTimer) clearTimeout(this.segTimer);
@@ -430,4 +354,4 @@ class LiveTranslateStream {
   }
 }
 
-module.exports = { LiveTranslateStream, targetCodeFor, looksLikeWrongLanguage, SUPPORTED_LANGUAGES, MODEL };
+module.exports = { LiveTranslateStream, targetCodeFor, MODEL };
