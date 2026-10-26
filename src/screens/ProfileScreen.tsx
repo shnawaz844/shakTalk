@@ -16,6 +16,7 @@ import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { ModelSwitcher } from '../components/ModelSwitcher';
+import { CallEngine, getStoredEngine, subscribeEngineChange } from '../utils/enginePreference';
 import type { Gender } from './OnboardingScreen';
 
 interface ProfileScreenProps {
@@ -37,6 +38,13 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const [age, setAge] = useState(String(meta?.age ?? ''));
   const [nativeLanguage, setNativeLanguage] = useState<string>(meta?.nativeLanguage || 'English');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [engine, setEngine] = useState<CallEngine>('legacy');
+
+  React.useEffect(() => {
+    getStoredEngine().then(setEngine);
+    const unsub = subscribeEngineChange(setEngine);
+    return unsub;
+  }, []);
 
   const handleUpdateProfile = async () => {
     if (!user) return;
@@ -193,8 +201,49 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
             <LanguageSelector label="" selected={nativeLanguage} onSelect={setNativeLanguage} />
           </View>
 
-          <View style={{ marginVertical: 14 }}>
-            <ModelSwitcher />
+          {/* Active Translation Model Section */}
+          <View style={styles.activeModelShowcase}>
+            <View style={styles.activeModelTopRow}>
+              <View style={styles.activeModelBadge}>
+                <View style={[styles.activeDot, { backgroundColor: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]} />
+                <Text style={[styles.activeModelTag, { color: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]}>
+                  ACTIVE TRANSLATION MODEL
+                </Text>
+              </View>
+              <View style={[styles.tierTag, { borderColor: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]}>
+                <Text style={[styles.tierTagText, { color: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]}>
+                  {engine === 'livekit' ? '3.5 LIVE' : '2.5 FLASH'}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.activeModelTitle}>
+              {engine === 'livekit' ? 'Gemini 3.5 Live Translate' : 'Gemini 2.5 Flash Native Audio'}
+            </Text>
+            <Text style={styles.activeModelSubtitle}>
+              {engine === 'livekit'
+                ? 'Ultra-low latency simultaneous speech translation over LiveKit WebRTC.'
+                : 'Turn-by-turn conversational translation over Vertex AI with full audio recording.'}
+            </Text>
+
+            <View style={styles.modelFeatureList}>
+              <View style={styles.modelFeatureItem}>
+                <Feather name="check-circle" size={12} color={engine === 'livekit' ? '#2FE0A8' : '#39FF14'} />
+                <Text style={styles.modelFeatureText}>
+                  {engine === 'livekit' ? 'Engine: LiveKit WebRTC Streaming' : 'Engine: Vertex AI Native Audio'}
+                </Text>
+              </View>
+              <View style={styles.modelFeatureItem}>
+                <Feather name="check-circle" size={12} color={engine === 'livekit' ? '#2FE0A8' : '#39FF14'} />
+                <Text style={styles.modelFeatureText}>
+                  {`Voice: Locked to ${gender === 'female' ? 'Female (Aoede)' : 'Male (Puck)'}`}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ marginTop: 14 }}>
+              <ModelSwitcher />
+            </View>
           </View>
 
           <TouchableOpacity
@@ -291,4 +340,75 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#000', fontSize: 16, fontWeight: '800' },
+
+  activeModelShowcase: {
+    backgroundColor: '#121714',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+  },
+  activeModelTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  activeModelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  activeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
+  activeModelTag: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+  },
+  tierTag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+  },
+  tierTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  activeModelTitle: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  activeModelSubtitle: {
+    color: '#8A9793',
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginBottom: 14,
+  },
+  modelFeatureList: {
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.04)',
+  },
+  modelFeatureItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  modelFeatureText: {
+    color: '#D1DBD7',
+    fontSize: 12,
+    fontWeight: '500',
+  },
 });

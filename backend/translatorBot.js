@@ -90,9 +90,10 @@ class TranslatorBot {
    * @param {(role: 'host'|'guest', seg: object) => void} opts.onText   transcription of what `role` said
    * @param {(err: Error) => void} [opts.onError]
    */
-  constructor({ roomName, langs, onText, onError }) {
+  constructor({ roomName, langs, voiceProfiles, onText, onError }) {
     this.roomName = roomName;
     this.langs = langs;
+    this.voiceProfiles = voiceProfiles || {};
     this.onText = onText;
     this.onError = onError || (() => {});
     this.room = null;
@@ -220,6 +221,7 @@ class TranslatorBot {
       label: `${this.roomName.slice(0, 8)}:${role}→${this.langs[listener]}`,
       inputLanguage: this.langs[role],
       targetLanguage: this.langs[listener],
+      voiceProfile: this.voiceProfiles[role] || {},
       onAudio: (pcm) => this._play(role, pcm),
       onText: (seg) => this.onText(role, seg),
       onError: (err) => this.onError(err),
