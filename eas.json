@@ -11,7 +11,7 @@
       "env": {
         "EXPO_PUBLIC_WS_URL": "wss://www.shaktalk.com",
         "EXPO_PUBLIC_APP_DOMAIN": "www.shaktalk.com",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZGFybGluZy1saXphcmQtMzYwMC5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cHJvcGVyLWphZ3Vhci04NS5jbGVyay5hY2NvdW50cy5kZXYk",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
@@ -25,7 +25,7 @@
       "env": {
         "EXPO_PUBLIC_WS_URL": "wss://www.shaktalk.com",
         "EXPO_PUBLIC_APP_DOMAIN": "www.shaktalk.com",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZGFybGluZy1saXphcmQtMzYwMC5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cHJvcGVyLWphZ3Vhci04NS5jbGVyay5hY2NvdW50cy5kZXYk",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     },
@@ -35,7 +35,7 @@
       "env": {
         "EXPO_PUBLIC_WS_URL": "wss://www.shaktalk.com",
         "EXPO_PUBLIC_APP_DOMAIN": "www.shaktalk.com",
-        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_ZGFybGluZy1saXphcmQtMzYwMC5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cHJvcGVyLWphZ3Vhci04NS5jbGVyay5hY2NvdW50cy5kZXYk",
         "NPM_CONFIG_LEGACY_PEER_DEPS": "true"
       }
     }

@@ -495,10 +495,16 @@ class LiveTranslationSession {
   }
 
   _buildVoiceName() {
-    const gender = (this.voiceProfile?.gender || '').toLowerCase();
-    if (gender === 'female') return 'Aoede';
+    const { gender } = this.voiceProfile;
+    // Gemini Live API prebuilt voices are discrete IDs, not a pitch/age
+    // continuum, and Google doesn't publish per-voice age characteristics —
+    // so gender picks the voice ID, and age instead shapes delivery via the
+    // system prompt (see _buildAgeInstruction), which native-audio models
+    // can actually act on since they synthesize speech generatively rather
+    // than picking from a fixed recorded bank.
     if (gender === 'male') return 'Puck';
-    return 'Puck'; // fallback male voice
+    if (gender === 'female') return 'Aoede';
+    return 'Aoede'; // neutral fallback
   }
 
   _buildAgeInstruction() {

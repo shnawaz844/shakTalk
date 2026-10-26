@@ -47,14 +47,10 @@ async function verifyClerkToken(token) {
       jwtKey: process.env.CLERK_JWT_KEY || undefined,
     });
   } catch (err) {
-    console.error('[auth] verifyToken error:', err?.message || err);
     throw new AuthError('Invalid or expired login token.');
   }
   // @clerk/backend returns { data } or { errors } depending on version.
-  if (result && result.errors && result.errors.length) {
-    console.error('[auth] verifyToken result errors:', result.errors);
-    throw new AuthError('Invalid or expired login token.');
-  }
+  if (result && result.errors && result.errors.length) throw new AuthError('Invalid or expired login token.');
   const payload = (result && result.data) || result;
   const userId = payload && payload.sub;
   if (!isValidUserId(userId)) throw new AuthError('Login token has no valid user.');
@@ -75,8 +71,10 @@ function bearerToken(req) {
 /**
  * Who is calling this HTTP endpoint?
  *   - valid token          → their verified user id
- *   - invalid/forged token → AuthError (unless AUTH_ENFORCE=false rollout fallback)
- *   - no token             → fallback if AUTH_ENFORCE=false, else AuthError
+ *   - invalid/forged token → AuthError (always)
+ *   - no token             → AuthError, unless AUTH_ENFORCE=false (rollout),
+ *                            in which case `fallbackUserId` is used if it is a
+ *                            well-formed id (old app builds)
  */
 async function requireUser(req, fallbackUserId) {
   const token = bearerToken(req);
@@ -85,7 +83,7 @@ async function requireUser(req, fallbackUserId) {
       return await verifyClerkToken(token);
     } catch (err) {
       if (!AUTH_ENFORCE && isValidUserId(fallbackUserId)) {
-        console.warn(`[auth] Rollout fallback for HTTP: using userId ${fallbackUserId}`);
+        console.warn(`[auth] Clerk token verification failed, falling back to query userId: ${fallbackUserId}`);
         return fallbackUserId;
       }
       throw err;

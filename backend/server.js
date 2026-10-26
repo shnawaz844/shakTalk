@@ -103,11 +103,12 @@ async function updateClerkMetadata(userId, metadata) {
   return res.json();
 }
 
-// ── HTTP Server ───────────────────────────────────────────────────────────────
+// ── HTTP.. Server ───────────────────────────────────────────────────────────────
 
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -158,10 +159,10 @@ const httpServer = http.createServer(async (req, res) => {
         .from('user_plans')
         .upsert(
           {
-            user_id:     userId,
+            user_id: userId,
             plan_engine: engine,
-            model_id:    modelId,
-            updated_at:  new Date().toISOString(),
+            model_id: modelId,
+            updated_at: new Date().toISOString(),
           },
           { onConflict: 'user_id' }
         );
@@ -171,27 +172,6 @@ const httpServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
       sendHttpError(res, err, '/user/set-plan');
-    }
-    return;
-  }
-
-  // GET /user/plan — returns active plan engine and model for current user
-  if (req.method === 'GET' && req.url === '/user/plan') {
-    try {
-      const userId = await requireUser(req);
-      if (!isValidUserId(userId)) throw new AuthError('Login required.');
-      const { data, error } = await supabase
-        .from('user_plans')
-        .select('plan_engine, model_id, updated_at')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (error) throw error;
-      const engine = data?.plan_engine || 'legacy';
-      const modelId = data?.model_id || (engine === 'livekit' ? 'gemini-3.5-live-translate-preview' : 'gemini-live-2.5-flash-native-audio');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, engine, modelId, tier: engine === 'livekit' ? 'pro' : 'starter' }));
-    } catch (err) {
-      sendHttpError(res, err, '/user/plan');
     }
     return;
   }
@@ -220,29 +200,31 @@ const httpServer = http.createServer(async (req, res) => {
 
       if (error) throw error;
 
-      const result = (conversations || []).map(conv => {
-        const msgs = (conv.messages || []).sort((a, b) =>
-          new Date(a.sent_at) - new Date(b.sent_at)
-        );
-        const lastMsg = msgs[msgs.length - 1] || null;
-        const partnerRole = conv.host_user_id === userId ? 'guest' : 'host';
-        const partnerLang = partnerRole === 'guest' ? conv.guest_lang : conv.host_lang;
-        const myLang = partnerRole === 'guest' ? conv.host_lang : conv.guest_lang;
-        return {
-          id: conv.id,
-          sessionId: conv.session_id,
-          myLang,
-          partnerLang,
-          startedAt: conv.started_at,
-          endedAt: conv.ended_at,
-          lastMessage: lastMsg ? {
-            text: lastMsg.sender_user_id === userId ? lastMsg.original_text : lastMsg.translated_text,
-            sentAt: lastMsg.sent_at,
-            isMe: lastMsg.sender_user_id === userId,
-          } : null,
-          messageCount: msgs.length,
-        };
-      });
+      const result = (conversations || [])
+        .filter(conv => conv.messages && conv.messages.length > 0)
+        .map(conv => {
+          const msgs = (conv.messages || []).sort((a, b) =>
+            new Date(a.sent_at) - new Date(b.sent_at)
+          );
+          const lastMsg = msgs[msgs.length - 1] || null;
+          const partnerRole = conv.host_user_id === userId ? 'guest' : 'host';
+          const partnerLang = partnerRole === 'guest' ? conv.guest_lang : conv.host_lang;
+          const myLang = partnerRole === 'guest' ? conv.host_lang : conv.guest_lang;
+          return {
+            id: conv.id,
+            sessionId: conv.session_id,
+            myLang,
+            partnerLang,
+            startedAt: conv.started_at,
+            endedAt: conv.ended_at,
+            lastMessage: lastMsg ? {
+              text: lastMsg.sender_user_id === userId ? lastMsg.original_text : lastMsg.translated_text,
+              sentAt: lastMsg.sent_at,
+              isMe: lastMsg.sender_user_id === userId,
+            } : null,
+            messageCount: msgs.length,
+          };
+        });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
@@ -872,10 +854,6 @@ async function startLiveKitCall(session, sessionId) {
     const bot = new TranslatorBot({
       roomName: sessionId,
       langs: { host: session.hostLang, guest: session.guestLang },
-      voiceProfiles: {
-        host: session.hostVoiceProfile || {},
-        guest: session.guestVoiceProfile || {},
-      },
       onText: (role, seg) => relayTranslationText(session, sessionId, role, seg),
       onError: (err) => console.error(`[translatorBot] ${sessionId}: ${err.message}`),
     });
@@ -931,7 +909,7 @@ function cleanupSession(sessionId, disconnectedRole) {
 
   closeSession(sessionId, 'host');
   closeSession(sessionId, 'guest');
-  if (session.bot) session.bot.close().catch(() => {});
+  if (session.bot) session.bot.close().catch(() => { });
 
   dbEndConversation(sessionId)
     .catch(e => console.error('[db] endConversation failed:', e.message))
@@ -951,17 +929,7 @@ function cleanupSession(sessionId, disconnectedRole) {
  *                            old builds): then the app's userId is used if well-formed
  */
 async function wsCaller(message) {
-  if (message.authToken) {
-    try {
-      return await verifyClerkToken(message.authToken);
-    } catch (err) {
-      if (!AUTH_ENFORCE && isValidUserId(message.userId)) {
-        console.warn(`[auth] WebSocket token verification failed (${err.message}), using fallback userId ${message.userId} because AUTH_ENFORCE=false`);
-        return message.userId;
-      }
-      throw err;
-    }
-  }
+  if (message.authToken) return verifyClerkToken(message.authToken);
   if (!AUTH_ENFORCE) return isValidUserId(message.userId) ? message.userId : null;
   throw new AuthError('Please log in again to start a call.');
 }
