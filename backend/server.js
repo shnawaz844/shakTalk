@@ -7,6 +7,9 @@ const { supabase } = require('./supabaseClient');
 const { uploadAudio } = require('./storageService');
 const { APP_NAME } = require('./app-config');
 const { TranslatorBot, createToken, LIVEKIT_ENABLED, LIVEKIT_URL } = require('./translatorBot');
+const { verifyClerkToken, requireUser, bearerToken, isValidUserId, AuthError, AUTH_ENFORCE } = require('./auth');
+const { signedUrlFor } = require('./storageService');
+const { SUPPORTED_LANGUAGES } = require('./liveTranslate');
 
 const PORT = process.env.PORT || 8080;
 const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://expo.dev/accounts/shahahmad/projects/shak-translate/builds/bb9de5af-858f-4444-948e-8a1a54ca988f';
@@ -24,19 +27,64 @@ if (!CLERK_SECRET_KEY) {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function verifyClerkToken(token) {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) throw new Error('Malformed JWT — expected 3 parts');
-    const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
-    const payload = JSON.parse(payloadJson);
-    if (!payload.sub) throw new Error('JWT has no sub claim');
-    const nowSec = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < nowSec) throw new Error('Token has expired');
-    return payload.sub;
-  } catch (err) {
-    throw new Error('Invalid token: ' + err.message);
+// Login tokens are verified in auth.js (signature checked with Clerk).
+// The old local verifyClerkToken only decoded the token, so anyone could
+// create a token for any user — never decode-only again.
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MAX_BODY_BYTES = 64 * 1024;
+
+/** Reads a JSON request body, refusing anything larger than MAX_BODY_BYTES. */
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    let tooBig = false;
+    req.on('data', (chunk) => {
+      if (tooBig) return; // keep draining, but stop storing: memory stays bounded
+      data += chunk;
+      if (data.length > MAX_BODY_BYTES) { tooBig = true; data = ''; }
+    });
+    req.on('end', () => {
+      if (tooBig) { reject(Object.assign(new Error('Request body too large.'), { status: 413 })); return; }
+      try { resolve(data ? JSON.parse(data) : {}); } catch (e) { reject(Object.assign(new Error('Invalid JSON body.'), { status: 400 })); }
+    });
+    req.on('error', reject);
+  });
+}
+
+/** Sends a JSON error. Internal error details stay in the server log, not in the response. */
+function sendHttpError(res, err, where) {
+  const status = err.status || (err instanceof AuthError ? 401 : 500);
+  if (status >= 500) console.error(`[server] ${where} error:`, err.message);
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: status >= 500 ? 'Server error.' : err.message }));
+}
+
+/**
+ * Returns the conversation if `userId` took part in it, otherwise throws 404.
+ * (404 rather than 403 so outsiders can't tell which conversation ids exist.)
+ * When AUTH_ENFORCE=false and the request had no token (old app builds),
+ * userId is null and the check is skipped — rollout mode only.
+ */
+async function requireConversationMember(convId, userId) {
+  if (!UUID_RE.test(convId)) throw Object.assign(new Error('Conversation not found.'), { status: 404 });
+  const { data: conv, error } = await supabase
+    .from('conversations')
+    .select('id, host_user_id, guest_user_id')
+    .eq('id', convId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!conv) throw Object.assign(new Error('Conversation not found.'), { status: 404 });
+  if (userId && conv.host_user_id !== userId && conv.guest_user_id !== userId) {
+    throw Object.assign(new Error('Conversation not found.'), { status: 404 });
   }
+  return conv;
+}
+
+/** Caller's verified user id; null only in rollout mode for old app builds without a token. */
+async function callerOrLegacy(req) {
+  if (bearerToken(req) || AUTH_ENFORCE) return requireUser(req);
+  return null;
 }
 
 async function updateClerkMetadata(userId, metadata) {
@@ -71,34 +119,22 @@ const httpServer = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'CLERK_SECRET_KEY not configured on server.' }));
         return;
       }
-      const body = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', chunk => { data += chunk; });
-        req.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
-        req.on('error', reject);
-      });
+      const body = await readJsonBody(req);
       const { age, gender } = body;
-      if (!age || !gender) {
+      const ageNum = Number(age);
+      if (!Number.isFinite(ageNum) || ageNum < 1 || ageNum > 120 || typeof gender !== 'string' || gender.length > 20) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'age and gender are required.' }));
         return;
       }
-      const authHeader = req.headers['authorization'] ?? '';
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-      if (!token) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Missing Authorization header.' }));
-        return;
-      }
-      const userId = await verifyClerkToken(token);
-      await updateClerkMetadata(userId, { age: Number(age), gender, onboardingComplete: true });
-      console.log(`[server] Updated Clerk metadata for user ${userId}: age=${age}, gender=${gender}`);
+      // Signature-verified: the user id comes from Clerk, not from the request.
+      const userId = await verifyClerkToken(bearerToken(req));
+      await updateClerkMetadata(userId, { age: ageNum, gender, onboardingComplete: true });
+      console.log(`[server] Updated Clerk metadata for user ${userId}: age=${ageNum}, gender=${gender}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
-      console.error('[server] /clerk/update-profile error:', err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendHttpError(res, err, '/clerk/update-profile');
     }
     return;
   }
@@ -109,26 +145,15 @@ const httpServer = http.createServer(async (req, res) => {
   // Header: Authorization: Bearer <clerk_token>
   if (req.method === 'POST' && req.url === '/user/set-plan') {
     try {
-      const body = await new Promise((resolve, reject) => {
-        let data = '';
-        req.on('data', chunk => { data += chunk; });
-        req.on('end', () => { try { resolve(JSON.parse(data)); } catch (e) { reject(e); } });
-        req.on('error', reject);
-      });
+      const body = await readJsonBody(req);
       const { engine, modelId, tier } = body;
-      if (!engine || !modelId) {
+      if (!['legacy', 'livekit'].includes(engine) || typeof modelId !== 'string' || !modelId || modelId.length > 100) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'engine and modelId are required.' }));
         return;
       }
-      const authHeader = req.headers['authorization'] ?? '';
-      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-      if (!token) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Missing Authorization header.' }));
-        return;
-      }
-      const userId = verifyClerkToken(token);
+      // Signature-verified: the user id comes from Clerk, not from the request.
+      const userId = await verifyClerkToken(bearerToken(req));
       const { error } = await supabase
         .from('user_plans')
         .upsert(
@@ -145,9 +170,28 @@ const httpServer = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
-      console.error('[server] /user/set-plan error:', err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendHttpError(res, err, '/user/set-plan');
+    }
+    return;
+  }
+
+  // GET /user/plan — returns active plan engine and model for current user
+  if (req.method === 'GET' && req.url === '/user/plan') {
+    try {
+      const userId = await requireUser(req);
+      if (!isValidUserId(userId)) throw new AuthError('Login required.');
+      const { data, error } = await supabase
+        .from('user_plans')
+        .select('plan_engine, model_id, updated_at')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      const engine = data?.plan_engine || 'legacy';
+      const modelId = data?.model_id || (engine === 'livekit' ? 'gemini-3.5-live-translate-preview' : 'gemini-live-2.5-flash-native-audio');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, engine, modelId, tier: engine === 'livekit' ? 'pro' : 'starter' }));
+    } catch (err) {
+      sendHttpError(res, err, '/user/plan');
     }
     return;
   }
@@ -156,12 +200,13 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url?.match(/^\/conversations(\?.*)?$/)) {
     try {
       const url = new URL(req.url, `http://localhost`);
-      const userId = url.searchParams.get('userId');
-      if (!userId) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'userId is required' }));
-        return;
-      }
+      // Who is asking comes from the verified login token. The ?userId= query
+      // parameter is only used in rollout mode (AUTH_ENFORCE=false) for old
+      // app builds, and only if it is a well-formed Clerk id: it is pasted
+      // into the database filter below, so anything else is rejected (this
+      // used to allow "?userId=x,host_user_id.neq.x" to list everyone's calls).
+      const userId = await requireUser(req, url.searchParams.get('userId'));
+      if (!isValidUserId(userId)) throw new AuthError('Login required.');
 
       const { data: conversations, error } = await supabase
         .from('conversations')
@@ -202,9 +247,7 @@ const httpServer = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
     } catch (err) {
-      console.error('[server] /conversations error:', err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendHttpError(res, err, '/conversations');
     }
     return;
   }
@@ -212,10 +255,12 @@ const httpServer = http.createServer(async (req, res) => {
   // ── GET /conversations/:id/messages ───────────────────────────────────────
   if (req.method === 'GET' && /^\/conversations\/[^/]+\/messages$/.test(req.url)) {
     try {
-      const convId = req.url.split('/')[2];
+      const convId = decodeURIComponent(req.url.split('/')[2]);
+      // Only people who were on this call may read it.
+      await requireConversationMember(convId, await callerOrLegacy(req));
       const { data: messages, error } = await supabase
         .from('messages')
-        .select('*')
+        .select('id, conversation_id, sender_user_id, role, original_text, translated_text, sent_at')
         .eq('conversation_id', convId)
         .order('sent_at', { ascending: true });
 
@@ -223,9 +268,7 @@ const httpServer = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(messages || []));
     } catch (err) {
-      console.error('[server] /conversations/:id/messages error:', err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendHttpError(res, err, '/conversations/:id/messages');
     }
     return;
   }
@@ -233,7 +276,8 @@ const httpServer = http.createServer(async (req, res) => {
   // ── GET /conversations/:id/recordings ─────────────────────────────────────
   if (req.method === 'GET' && /^\/conversations\/[^/]+\/recordings$/.test(req.url)) {
     try {
-      const convId = req.url.split('/')[2];
+      const convId = decodeURIComponent(req.url.split('/')[2]);
+      await requireConversationMember(convId, await callerOrLegacy(req));
       const { data: messages, error } = await supabase
         .from('messages')
         .select('id, sender_user_id, role, original_text, translated_text, original_audio_url, translated_audio_url, original_audio_offset_ms, sent_at')
@@ -241,12 +285,17 @@ const httpServer = http.createServer(async (req, res) => {
         .order('sent_at', { ascending: true });
 
       if (error) throw error;
+      // Recordings are served as short-lived signed links (1 hour), so the
+      // storage bucket can be private. Works for old rows that stored a public URL too.
+      const signed = await Promise.all((messages || []).map(async (m) => ({
+        ...m,
+        original_audio_url: await signedUrlFor(m.original_audio_url),
+        translated_audio_url: await signedUrlFor(m.translated_audio_url),
+      })));
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(messages || []));
+      res.end(JSON.stringify(signed));
     } catch (err) {
-      console.error('[server] /conversations/:id/recordings error:', err.message);
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      sendHttpError(res, err, '/conversations/:id/recordings');
     }
     return;
   }
@@ -257,7 +306,13 @@ const httpServer = http.createServer(async (req, res) => {
   // ── GET /gemini-test ───────────────────────────────────────────────────────
   // Quick connectivity check: tries to open a Gemini Live session and
   // immediately closes it, reporting success or the exact error.
-  if (req.method === 'GET' && req.url === '/gemini-test') {
+  if (req.method === 'GET' && (req.url === '/gemini-test' || req.url.startsWith('/gemini-test?'))) {
+    // Opens a paid Gemini session, so when DIAGNOSTICS_KEY is set it requires
+    // /gemini-test?key=<DIAGNOSTICS_KEY>.
+    const diagKey = process.env.DIAGNOSTICS_KEY;
+    if (diagKey && new URL(req.url, 'http://localhost').searchParams.get('key') !== diagKey) {
+      res.writeHead(404); res.end('Not found'); return;
+    }
     const { warmupSession, closeSession } = require('./geminiService');
     const testId = 'health-check-' + Date.now();
     try {
@@ -288,6 +343,9 @@ const httpServer = http.createServer(async (req, res) => {
   // ── GET /join/:sessionId ───────────────────────────────────────────────────
   if (req.method === 'GET' && /^\/join\/[^/]+$/.test(req.url)) {
     const sessionId = req.url.split('/')[2];
+    // The id is written into the HTML page below, so only accept a real
+    // session id (UUID). Anything else could inject markup into the page.
+    if (!UUID_RE.test(sessionId)) { res.writeHead(404); res.end('Not found'); return; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     res.end(`<!DOCTYPE html>
 <html>
@@ -506,7 +564,9 @@ const httpServer = http.createServer(async (req, res) => {
 
 // ── WebSocket Server ──────────────────────────────────────────────────────────
 
-const wss = new WebSocketServer({ server: httpServer });
+// maxPayload: the biggest real message is a ~150ms audio chunk (~7 KB base64).
+// Without a limit, ws accepts messages up to 100 MB, which can exhaust memory.
+const wss = new WebSocketServer({ server: httpServer, maxPayload: 512 * 1024 });
 
 /**
  * ARCHITECTURE: Continuous streaming, not per-sentence request/response.
@@ -536,13 +596,18 @@ function getPartnerSocket(session, role) {
 
 // ── Supabase helpers ─────────────────────────────────────────────────────────
 
+// sessionId → conversations.id, so saving each transcript line is one query
+// (insert) instead of two (look up the conversation, then insert).
+const conversationIds = new Map();
+
 async function dbCreateConversation(sessionId, hostUserId, hostLang) {
-  const { error } = await supabase.from('conversations').insert({
+  const { data, error } = await supabase.from('conversations').insert({
     session_id: sessionId,
     host_user_id: hostUserId,
     host_lang: hostLang,
-  });
+  }).select('id').single();
   if (error) console.error('[db] createConversation error:', error.message);
+  else if (data) conversationIds.set(sessionId, data.id);
 }
 
 async function dbUpdateConversationGuest(sessionId, guestUserId, guestLang) {
@@ -565,16 +630,20 @@ async function dbInsertMessage(sessionId, senderUserId, role, originalText, tran
     return;
   }
 
-  const { data: conv } = await supabase
-    .from('conversations')
-    .select('id')
-    .eq('session_id', sessionId)
-    .single();
-
-  if (!conv) return;
+  let convId = conversationIds.get(sessionId);
+  if (!convId) {
+    const { data: conv } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('session_id', sessionId)
+      .maybeSingle();
+    if (!conv) return;
+    convId = conv.id;
+    conversationIds.set(sessionId, convId);
+  }
 
   const { error } = await supabase.from('messages').insert({
-    conversation_id: conv.id,
+    conversation_id: convId,
     sender_user_id: senderUserId,
     role,
     original_text: originalText || '',
@@ -803,6 +872,10 @@ async function startLiveKitCall(session, sessionId) {
     const bot = new TranslatorBot({
       roomName: sessionId,
       langs: { host: session.hostLang, guest: session.guestLang },
+      voiceProfiles: {
+        host: session.hostVoiceProfile || {},
+        guest: session.guestVoiceProfile || {},
+      },
       onText: (role, seg) => relayTranslationText(session, sessionId, role, seg),
       onError: (err) => console.error(`[translatorBot] ${sessionId}: ${err.message}`),
     });
@@ -860,12 +933,51 @@ function cleanupSession(sessionId, disconnectedRole) {
   closeSession(sessionId, 'guest');
   if (session.bot) session.bot.close().catch(() => {});
 
-  dbEndConversation(sessionId).catch(e => console.error('[db] endConversation failed:', e.message));
+  dbEndConversation(sessionId)
+    .catch(e => console.error('[db] endConversation failed:', e.message))
+    .finally(() => conversationIds.delete(sessionId));
   sessions.delete(sessionId);
   console.log(`[server] Session ${sessionId} cleaned up (${disconnectedRole} disconnected).`);
 }
 
 // ── WebSocket message handler ─────────────────────────────────────────────────
+
+/**
+ * Who is this caller? Verifies `authToken` (Clerk session token) from a
+ * create_session / join_session message.
+ *   valid token            → verified user id
+ *   invalid/forged token   → throws (always)
+ *   no token               → throws, unless AUTH_ENFORCE=false (rollout for
+ *                            old builds): then the app's userId is used if well-formed
+ */
+async function wsCaller(message) {
+  if (message.authToken) {
+    try {
+      return await verifyClerkToken(message.authToken);
+    } catch (err) {
+      if (!AUTH_ENFORCE && isValidUserId(message.userId)) {
+        console.warn(`[auth] WebSocket token verification failed (${err.message}), using fallback userId ${message.userId} because AUTH_ENFORCE=false`);
+        return message.userId;
+      }
+      throw err;
+    }
+  }
+  if (!AUTH_ENFORCE) return isValidUserId(message.userId) ? message.userId : null;
+  throw new AuthError('Please log in again to start a call.');
+}
+
+/** Language names are written into the AI's instructions, so only accept known ones. */
+function isSupportedLanguage(lang) {
+  return typeof lang === 'string' && SUPPORTED_LANGUAGES.includes(lang);
+}
+
+/** The role this socket has in the session, or null if it isn't part of it. */
+function roleOf(session, ws) {
+  if (!session) return null;
+  if (ws === session.host) return 'host';
+  if (ws === session.guest) return 'guest';
+  return null;
+}
 
 wss.on('connection', (ws) => {
   console.log('[server] New WebSocket connection');
@@ -881,7 +993,13 @@ wss.on('connection', (ws) => {
 
     // ── CREATE SESSION (Host) ────────────────────────────────────────────────
     if (type === 'create_session') {
-      const { lang, userId, speakerGender, speakerAge } = message;
+      const { lang, speakerGender, speakerAge } = message;
+      // Same connection starting a new call (e.g. cancelled and retried): close the old one first.
+      if (currentSessionId && sessions.has(currentSessionId)) { cleanupSession(currentSessionId, currentRole); currentSessionId = null; currentRole = null; }
+      if (!isSupportedLanguage(lang)) { send(ws, { type: 'error', message: 'Unsupported language.' }); return; }
+      let userId;
+      try { userId = await wsCaller(message); }
+      catch (err) { send(ws, { type: 'error', message: err.message }); return; }
       const sessionId = uuidv4();
       const hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       sessions.set(sessionId, {
@@ -914,11 +1032,23 @@ wss.on('connection', (ws) => {
 
     // ── JOIN SESSION (Guest) ─────────────────────────────────────────────────
     if (type === 'join_session') {
-      const { sessionId, lang, userId, speakerGender, speakerAge } = message;
+      const { sessionId, lang, speakerGender, speakerAge } = message;
       const session = sessions.get(sessionId);
 
-      if (!session) { send(ws, { type: 'error', message: `Session "${sessionId}" not found.` }); return; }
+      if (!session) { send(ws, { type: 'error', message: 'Call not found. Ask your partner for a new invite.' }); return; }
       if (session.host === ws) { send(ws, { type: 'error', message: `Cannot join your own session as guest on the same connection.` }); return; }
+      // A call has exactly two people. Without this check a third person with
+      // the invite link replaced the guest, a second translator bot was
+      // started and the first bot's Gemini sessions kept running (and billing).
+      if (session.guest) { send(ws, { type: 'error', message: 'This call already has two people.' }); return; }
+      // Same connection starting a new call (e.g. cancelled and retried): close the old one first.
+      if (currentSessionId && sessions.has(currentSessionId)) { cleanupSession(currentSessionId, currentRole); currentSessionId = null; currentRole = null; }
+      if (!isSupportedLanguage(lang)) { send(ws, { type: 'error', message: 'Unsupported language.' }); return; }
+      let userId;
+      try { userId = await wsCaller(message); }
+      catch (err) { send(ws, { type: 'error', message: err.message }); return; }
+      // Re-check after the await: someone else may have joined meanwhile.
+      if (session.guest || !sessions.has(sessionId)) { send(ws, { type: 'error', message: 'This call already has two people.' }); return; }
       // Guest joins: automatically adopt the host's selected engine
       session.engine = session.hostEngine || DEFAULT_CALL_ENGINE;
       if (session.engine === 'livekit' && !LIVEKIT_ENABLED) {
@@ -993,11 +1123,11 @@ wss.on('connection', (ws) => {
 
     // ── PAUSE QUEUE (mute / barge-in) ──────────────────────────────────────
     if (type === 'pause_queue') {
-      const { sessionId, role } = message;
+      const { sessionId } = message;
       const session = sessions.get(sessionId);
       if (!session) return;
-      const senderRole = ws === session.host ? 'host' : (ws === session.guest ? 'guest' : role);
-      if (session.roleState[senderRole]) {
+      const senderRole = roleOf(session, ws); // never trust `role` from the message
+      if (senderRole && session.roleState[senderRole]) {
         session.roleState[senderRole].paused = true;
         console.log(`[server] Paused/muted for ${senderRole} in ${sessionId}`);
       }
@@ -1006,11 +1136,11 @@ wss.on('connection', (ws) => {
 
     // ── RESUME QUEUE (unmute) ──────────────────────────────────────────────
     if (type === 'resume_queue') {
-      const { sessionId, role } = message;
+      const { sessionId } = message;
       const session = sessions.get(sessionId);
       if (!session) return;
-      const senderRole = ws === session.host ? 'host' : (ws === session.guest ? 'guest' : role);
-      const rs = session.roleState[senderRole];
+      const senderRole = roleOf(session, ws); // never trust `role` from the message
+      const rs = senderRole && session.roleState[senderRole];
       if (rs) {
         rs.paused = false;
         console.log(`[server] Resumed/unmuted for ${senderRole} in ${sessionId}`);
@@ -1022,11 +1152,11 @@ wss.on('connection', (ws) => {
 
     // ── CANCEL QUEUE (backward compat — kept as alias for clear+resume) ──────
     if (type === 'cancel_queue') {
-      const { sessionId, role } = message;
+      const { sessionId } = message;
       const session = sessions.get(sessionId);
       if (!session) return;
-      const senderRole = ws === session.host ? 'host' : (ws === session.guest ? 'guest' : role);
-      if (session.roleState[senderRole]) {
+      const senderRole = roleOf(session, ws); // never trust `role` from the message
+      if (senderRole && session.roleState[senderRole]) {
         session.roleState[senderRole].paused = false;
         send(ws, { type: 'queue_cancelled' });
       }
@@ -1036,15 +1166,16 @@ wss.on('connection', (ws) => {
     // ── STREAMED AUDIO CHUNK (continuous, ~100-250ms of raw PCM) ────────────
     if (type === 'audio_stream_chunk') {
       if (!AI_TRANSLATION_ENABLED) return;
-      const { sessionId, role, audioBase64, mimeType, clientSentAt } = message;
+      const { sessionId, audioBase64, mimeType, clientSentAt } = message;
       const session = sessions.get(sessionId);
 
       if (!session) { send(ws, { type: 'error', message: 'Session not found.' }); return; }
+      if (typeof audioBase64 !== 'string' || mimeType !== 'audio/pcm;rate=16000') return;
       if (!session.host || !session.guest) return; // not fully connected yet — drop silently
       if (session.engine === 'livekit') return; // audio travels over LiveKit, not this socket
 
       // Authoritative socket-based role resolution:
-      const senderRole = ws === session.host ? 'host' : (ws === session.guest ? 'guest' : role);
+      const senderRole = roleOf(session, ws); // never trust `role` from the message
       if (!senderRole) return;
 
       const rs = session.roleState[senderRole];
@@ -1061,9 +1192,10 @@ wss.on('connection', (ws) => {
 
     // ── WEBRTC SIGNALING (pure relay — server never touches the audio) ──────
     if (type === 'webrtc_offer' || type === 'webrtc_answer' || type === 'webrtc_ice_candidate' || type === 'webrtc_ready') {
-      const { sessionId, role } = message;
+      const { sessionId } = message;
       const session = sessions.get(sessionId);
-      if (!session) { console.log(`[webrtc] ${type} from ${role}: no session ${sessionId}`); return; }
+      const role = roleOf(session, ws); // only the two people on the call may signal
+      if (!role) return;
       const partnerSocket = getPartnerSocket(session, role);
       console.log(`[webrtc] ${type} from ${role} in ${sessionId}: partner socket ${partnerSocket ? 'found' : 'MISSING'}`);
       if (partnerSocket) send(partnerSocket, message);
@@ -1072,8 +1204,9 @@ wss.on('connection', (ws) => {
 
     // ── END SESSION ──────────────────────────────────────────────────────────
     if (type === 'end_session') {
-      const { sessionId, role } = message;
-      cleanupSession(sessionId, role);
+      const { sessionId } = message;
+      const role = roleOf(sessions.get(sessionId), ws); // only someone on the call can end it
+      if (role) cleanupSession(sessionId, role);
       return;
     }
 

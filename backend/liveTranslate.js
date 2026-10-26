@@ -89,15 +89,19 @@ class LiveTranslateStream {
    * @param {string} opts.label            for logs, e.g. "session:host→Hindi"
    * @param {string} opts.inputLanguage    app language name of the SPEAKER (used for mismatch detection)
    * @param {string} opts.targetLanguage   app language name of the LISTENER
+   * @param {object} [opts.voiceProfile]   speaker voice profile (gender etc.)
    * @param {(pcm24k: Buffer) => void} opts.onAudio
    * @param {(seg: {segId:string, originalText:string, translatedText:string, isFinal:boolean}) => void} opts.onText
    * @param {(err: Error) => void} [opts.onError]
    */
-  constructor({ label, inputLanguage, targetLanguage, onAudio, onText, onError }) {
+  constructor({ label, inputLanguage, targetLanguage, voiceProfile, onAudio, onText, onError }) {
     this.label = label;
     this.inputLanguage = inputLanguage || 'Unknown';
     this.targetLanguage = targetLanguage;
     this.targetCode = targetCodeFor(targetLanguage);
+    this.voiceProfile = voiceProfile || {};
+    const gender = (this.voiceProfile.gender || '').toLowerCase();
+    this.voiceName = gender === 'female' ? 'Aoede' : 'Puck';
     this.onAudio = onAudio;
     this.onText = onText;
     this.onError = onError || (() => { });
@@ -131,6 +135,13 @@ class LiveTranslateStream {
   _config(handle) {
     const config = {
       responseModalities: [Modality.AUDIO],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName: this.voiceName,
+          },
+        },
+      },
       inputAudioTranscription: {},
       outputAudioTranscription: {},
       translationConfig: {
@@ -153,7 +164,7 @@ class LiveTranslateStream {
     const gen = ++this._gen;
     const handle = this.resumeHandle;
     const openedAt = Date.now();
-    console.log(`[liveTranslate] ${this.label}: connecting (target=${this.targetCode}${handle ? ', resuming' : ''})`);
+    console.log(`[liveTranslate] ${this.label}: connecting (target=${this.targetCode}, voice=${this.voiceName}${handle ? ', resuming' : ''})`);
 
     this.connectPromise = new Promise((resolve, reject) => {
       let settled = false;

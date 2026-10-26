@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useAuthFetch } from '../utils/authFetch';
 import {
   View,
   Text,
@@ -28,13 +29,14 @@ interface Message {
 }
 
 export function ConversationDetailScreen({ conversationId, myUserId, onBack }: ConversationDetailScreenProps) {
+  const authFetch = useAuthFetch();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const httpUrl = WS_URL.replace(/^ws(s)?:\/\//, 'http$1://');
-    fetch(`${httpUrl}/conversations/${encodeURIComponent(conversationId)}/messages`)
+    authFetch(`${httpUrl}/conversations/${encodeURIComponent(conversationId)}/messages`)
       .then(r => {
         if (!r.ok) throw new Error('Failed to load messages');
         return r.json();
@@ -44,7 +46,7 @@ export function ConversationDetailScreen({ conversationId, myUserId, onBack }: C
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [conversationId]);
+  }, [conversationId, authFetch]);
 
   const renderItem = ({ item }: { item: Message }) => {
     const isMe = item.sender_user_id === myUserId;

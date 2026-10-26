@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useAuthFetch } from '../utils/authFetch';
 import {
   View,
   Text,
@@ -95,6 +96,7 @@ export function AudioRecordingsScreen({
   partnerLang,
   onBack,
 }: AudioRecordingsScreenProps) {
+  const authFetch = useAuthFetch();
   const [messages, setMessages] = useState<RecordingMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -134,7 +136,7 @@ export function AudioRecordingsScreen({
 
   useEffect(() => {
     const httpUrl = WS_URL.replace(/^ws(s)?:\/\//, 'http$1://');
-    fetch(`${httpUrl}/conversations/${encodeURIComponent(conversationId)}/recordings`)
+    authFetch(`${httpUrl}/conversations/${encodeURIComponent(conversationId)}/recordings`)
       .then(async r => {
         if (!r.ok) {
           const body = await r.json().catch(() => ({}));
@@ -148,7 +150,7 @@ export function AudioRecordingsScreen({
       })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, [conversationId]);
+  }, [conversationId, authFetch]);
 
   const buildPlaylist = (data: RecordingMessage[]) => {
     const list: PlaylistEntry[] = [];
@@ -424,8 +426,8 @@ export function AudioRecordingsScreen({
           />
         )}
 
-        {/* Unified Player Bar */}
-        {messages.length > 0 && (
+        {/* Unified Player Bar — only shown if the conversation has recorded audio */}
+        {messages.some(m => !!(m.original_audio_url || m.translated_audio_url)) && (
           <BlurView intensity={60} tint="dark" style={styles.playerBar}>
             <View 
               style={styles.scrubberContainer}
