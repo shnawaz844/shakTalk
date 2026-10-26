@@ -54,28 +54,46 @@ interface RecentConversation {
   messageCount: number;
 }
 
-function extractSessionIdFromUrl(url: string | null): string | null {
+interface SessionInviteDetails {
+  sessionId: string;
+  hostLang?: string;
+}
+
+function extractSessionDetailsFromUrl(url: string | null): SessionInviteDetails | null {
   if (!url) return null;
   try {
+    const cleanUrl = url.trim();
+    let sessionId: string | null = null;
+
     // 1. UUID pattern check (standard v4 UUID: 8-4-4-4-12 hex digits)
-    const uuidMatch = url.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+    const uuidMatch = cleanUrl.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     if (uuidMatch) {
-      return uuidMatch[0];
+      sessionId = uuidMatch[0];
+    } else {
+      // 2. /join/<id> pattern
+      const joinMatch = cleanUrl.match(/\/join\/([^/?#]+)/i);
+      if (joinMatch && joinMatch[1]) {
+        sessionId = decodeURIComponent(joinMatch[1]);
+      } else {
+        // 3. Query parameter: ?sessionId=... or ?session=... or ?sid=...
+        const queryMatch = cleanUrl.match(/[?&](?:sessionId|session|sid)=([^&#]+)/i);
+        if (queryMatch && queryMatch[1]) {
+          sessionId = decodeURIComponent(queryMatch[1]);
+        }
+      }
     }
 
-    // 2. /join/<id> pattern
-    const joinMatch = url.match(/\/join\/([^/?#]+)/i);
-    if (joinMatch && joinMatch[1]) {
-      return decodeURIComponent(joinMatch[1]);
+    if (!sessionId) return null;
+
+    let hostLang: string | undefined;
+    const hostLangMatch = cleanUrl.match(/[?&]hostLang=([^&#]+)/i);
+    if (hostLangMatch && hostLangMatch[1]) {
+      hostLang = decodeURIComponent(hostLangMatch[1]);
     }
 
-    // 3. Query parameter: ?sessionId=... or ?session=... or ?sid=...
-    const queryMatch = url.match(/[?&](?:sessionId|session|sid)=([^&#]+)/i);
-    if (queryMatch && queryMatch[1]) {
-      return decodeURIComponent(queryMatch[1]);
-    }
+    return { sessionId, hostLang };
   } catch (e) {
-    console.warn('[extractSessionIdFromUrl] Error parsing URL:', url, e);
+    console.warn('[extractSessionDetailsFromUrl] Error parsing URL:', url, e);
   }
   return null;
 }
@@ -175,16 +193,40 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     }
   }, [status, sessionId, partnerLang, wsRole, callEngine]);
 
+  const [incomingInvite, setIncomingInvite] = useState<SessionInviteDetails | null>(null);
+
   const handleJoinFromUrl = async (url: string | null) => {
     if (!url) return;
-    const incomingSid = extractSessionIdFromUrl(url);
-    if (!incomingSid) return;
+    const details = extractSessionDetailsFromUrl(url);
+    if (!details) return;
+    const { sessionId: incomingSid, hostLang } = details;
+
+    // Avoid self-joining if host accidentally taps their own shared link
+    if (sessionId === incomingSid && roleRef.current === 'host') {
+      console.log('[HomeScreen] User is already hosting session', incomingSid);
+      return;
+    }
 
     if (pendingJoinRef.current === incomingSid || sessionId === incomingSid) {
       return;
     }
 
-    pendingJoinRef.current = incomingSid;
+    // Refresh myLang from storage so it never defaults to stale 'English' on deep link launch
+    try {
+      const saved = await storage.getItem(MY_LANG_KEY);
+      if (saved) setMyLang(saved);
+    } catch (_) {}
+
+    // Open confirmation modal so guest can confirm/change their speaking language
+    setIncomingInvite({ sessionId: incomingSid, hostLang });
+  };
+
+  const handleConfirmJoinInvite = async () => {
+    if (!incomingInvite) return;
+    const sidToJoin = incomingInvite.sessionId;
+    setIncomingInvite(null);
+
+    pendingJoinRef.current = sidToJoin;
     setConnectingMsg('Connecting to call from invite link…');
     setErrorMsg(null);
 
@@ -197,8 +239,8 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
     roleRef.current = 'guest';
     try {
-      console.log('[HomeScreen] Joining session from link:', incomingSid);
-      await joinSession(incomingSid, myLang, userId, speakerGender, speakerAge);
+      console.log('[HomeScreen] Joining session from link:', sidToJoin, 'speaking:', myLang);
+      await joinSession(sidToJoin, myLang, userId, speakerGender, speakerAge);
     } catch (err: any) {
       console.error('[HomeScreen] Error joining from link:', err);
       setErrorMsg(err?.message || 'Failed to join call from link.');
@@ -251,9 +293,10 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   // ── WhatsApp / native share ───────────────────────────────────────────────
   const buildShareMessage = (sid: string) => {
-    const joinUrl = `${JOIN_BASE_URL}/${sid}`;
+    const joinUrl = `${JOIN_BASE_URL}/${sid}?hostLang=${encodeURIComponent(myLang)}`;
     return (
       `Hey! Join my ${APP_NAME} live-translation call 🌐\n\n` +
+      `🗣️ I'll speak: ${myLang}\n` +
       `👉 Tap to join: ${joinUrl}\n\n` +
       `Or open the app → "Scan to join" → scan the QR code I'll show you.\n\n` +
       `Session code: ${sid}`
@@ -262,13 +305,18 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   const handleShareWhatsApp = async (sid: string) => {
     const msg = buildShareMessage(sid);
-    const waUrl = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    const canOpen = await Linking.canOpenURL(waUrl);
-    if (canOpen) {
-      await Linking.openURL(waUrl);
-    } else {
-      // Fallback: native share sheet (works even if WhatsApp not installed)
-      await Share.share({ message: msg });
+    const waScheme = `whatsapp://send?text=${encodeURIComponent(msg)}`;
+    const waApi = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
+    try {
+      // Directly open whatsapp:// without canOpenURL check (canOpenURL returns false on Android 11+ without package queries)
+      await Linking.openURL(waScheme);
+    } catch (_) {
+      try {
+        await Linking.openURL(waApi);
+      } catch (err) {
+        // Fallback to native share sheet if WhatsApp is not installed
+        await Share.share({ message: msg });
+      }
     }
   };
 
@@ -295,7 +343,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
       return;
     }
     // Extract session ID from code or URL
-    const sid = extractSessionIdFromUrl(code) || code;
+    const sid = extractSessionDetailsFromUrl(code)?.sessionId || code;
     setManualCodeError(null);
     setShowManualJoin(false);
     setManualCode('');
@@ -578,10 +626,14 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
                 {/* Share invite row with WhatsApp & Share icons in front */}
                 <View style={styles.shareCard}>
-                  <View style={styles.shareLabelGroup}>
+                  <TouchableOpacity
+                    style={styles.shareLabelGroup}
+                    onPress={() => handleShareWhatsApp(sessionId)}
+                    activeOpacity={0.7}
+                  >
                     <Feather name="send" size={14} color={colors.signal} style={{ marginRight: 8 }} />
                     <Text style={styles.shareCardText}>Share invite to join</Text>
-                  </View>
+                  </TouchableOpacity>
                   <View style={styles.shareActions}>
                     <TouchableOpacity
                       style={styles.waBtn}
@@ -680,6 +732,55 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
               onPress={() => { setShowManualJoin(false); setManualCode(''); setManualCodeError(null); }}
             >
               <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Incoming Call Invite Confirmation Modal */}
+      <Modal visible={!!incomingInvite} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, isDesktop && styles.modalCardDesktop]}>
+            <View style={styles.manualModalHeader}>
+              <View style={[styles.manualIconWrap, { backgroundColor: 'rgba(57,255,20,0.12)' }]}>
+                <Feather name="phone-call" size={22} color={colors.signal} />
+              </View>
+              <Text style={styles.modalTitle}>Join Translation Call</Text>
+              <Text style={styles.modalSubtitle}>
+                {incomingInvite?.hostLang
+                  ? `Your partner speaks ${incomingInvite.hostLang}.`
+                  : 'You have been invited to a live translation call.'}
+              </Text>
+            </View>
+
+            {incomingInvite?.hostLang && (
+              <View style={styles.hostLangBanner}>
+                <Feather name="globe" size={14} color={colors.signal} />
+                <Text style={styles.hostLangBannerText}>
+                  Partner's language: <Text style={{ color: '#fff', fontWeight: '700' }}>{incomingInvite.hostLang}</Text>
+                </Text>
+              </View>
+            )}
+
+            <View style={{ width: '100%', marginVertical: 12 }}>
+              <Text style={[styles.cardTitle, { marginBottom: 8 }]}>YOU'LL SPEAK</Text>
+              <LanguageSelector label="" selected={myLang} onSelect={handleSetMyLang} />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.primaryBtn, { width: '100%', marginTop: 8 }]}
+              onPress={handleConfirmJoinInvite}
+              activeOpacity={0.85}
+            >
+              <Feather name="phone-incoming" size={18} color={colors.ink} style={{ marginRight: 8 }} />
+              <Text style={styles.primaryBtnText}>Join Call Now</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={() => setIncomingInvite(null)}
+            >
+              <Text style={styles.cancelBtnText}>Decline</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -840,6 +941,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.hair,
     padding: 28, alignItems: 'center', paddingBottom: 48,
   },
+  modalCardDesktop: {
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
+    borderRadius: 28,
+  },
   modalTitle: { color: colors.warm, fontSize: 20, fontWeight: '700', marginBottom: 4 },
   modalSubtitle: { color: colors.muted, fontSize: 13, marginBottom: 20, textAlign: 'center' },
   connectedMsg: {
@@ -999,6 +1106,23 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: colors.hair,
   },
   cancelBtnText: { color: colors.muted, fontSize: 14 },
+  hostLangBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(57,255,20,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(57,255,20,0.2)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+    marginBottom: 8,
+  },
+  hostLangBannerText: {
+    color: colors.signal,
+    fontSize: 13,
+  },
 
   // Recent Conversations
   recentSection: { marginTop: 32 },
