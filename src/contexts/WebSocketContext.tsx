@@ -40,6 +40,7 @@ interface WebSocketContextType {
   status: ConnectionStatus;
   role: 'host' | 'guest' | null;
   sessionId: string | null;
+  myLang: string | null;
   partnerLang: string | null;
   isProcessing: boolean;
   isGeminiReady: boolean;
@@ -98,6 +99,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [role, setRole] = useState<'host' | 'guest' | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [myLang, setMyLang] = useState<string | null>(null);
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
   const [callEngine, setCallEngine] = useState<CallEngine>(getCurrentEngine());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -141,6 +143,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setIsGeminiReady(false); // reset — gemini_ready will follow once both sessions are open
       if (message.role) {
         setRole(message.role);
+      }
+      if (message.myLang) {
+        setMyLang(message.myLang);
       }
       const effectiveEngine = (message.engine === 'livekit' ? 'livekit' : 'legacy') as CallEngine;
       setCallEngine(effectiveEngine);
@@ -277,6 +282,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
       setLiveKit(null);
+      setMyLang(lang);
       const engine = preferredEngine || await getStoredEngine();
       setCallEngine(engine);
       const authToken = await getToken({ skipCache: true }).catch(() => getToken().catch(() => null));
@@ -304,6 +310,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
       setLiveKit(null);
+      setMyLang(lang);
       const engine = preferredEngine || await getStoredEngine();
       setCallEngine(engine);
       const authToken = await getToken({ skipCache: true }).catch(() => getToken().catch(() => null));
@@ -379,6 +386,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setStatus('idle');
     setRole(null);
     setSessionId(null);
+    setMyLang(null);
     setPartnerLang(null);
     setIsProcessing(false);
     setQueueDepth(0);
@@ -398,6 +406,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         status,
         role,
         sessionId,
+        myLang,
         partnerLang,
         callEngine,
         isProcessing,
