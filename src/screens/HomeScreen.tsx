@@ -304,14 +304,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   const handleShareWhatsApp = async (sid: string) => {
     const msg = buildShareMessage(sid);
-    const waUrl = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    const canOpen = await Linking.canOpenURL(waUrl);
-    if (canOpen) {
-      await Linking.openURL(waUrl);
-    } else {
-      // Fallback: native share sheet (works even if WhatsApp not installed)
-      await Share.share({ message: msg });
-    }
+    await Share.share({ message: msg, title: `Join my ${APP_NAME} call` });
   };
 
   const handleShareNative = async (sid: string) => {
