@@ -218,8 +218,8 @@ export default function App() {
             height: '100%',
             backgroundColor: '#182527',
             zIndex: 99999,
+            pointerEvents: 'none',
           }}
-          pointerEvents="none"
         >
           <StatusBar hidden={true} />
           <Image

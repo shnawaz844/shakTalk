@@ -1,3 +1,4 @@
+import { useAuth } from '@clerk/clerk-expo';
 import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import { websocketService } from '../services/websocketService';
 import { WS_URL, CALL_ENGINE } from '../config';
@@ -92,6 +93,8 @@ interface WebSocketCallbacks {
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Login token sent with create/join so the server can verify who is calling.
+  const { getToken } = useAuth();
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [role, setRole] = useState<'host' | 'guest' | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -276,8 +279,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setLiveKit(null);
       const engine = preferredEngine || await getStoredEngine();
       setCallEngine(engine);
+      const authToken = await getToken().catch(() => null);
       websocketService.send({
-        type: 'create_session', lang, userId, engine,
+        type: 'create_session', authToken: authToken || undefined, lang, userId, engine,
         ...(speakerGender ? { speakerGender } : {}),
         ...(speakerAge !== undefined ? { speakerAge } : {}),
       });
@@ -285,7 +289,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setStatus('error');
       callbacksMap.current.forEach(c => c.onError?.('Failed to connect to server.'));
     }
-  }, [handleMessage]);
+  }, [handleMessage, getToken]);
 
   const joinSession = useCallback(async (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => {
     connectStartTimeRef.current = Date.now();
@@ -302,8 +306,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setLiveKit(null);
       const engine = preferredEngine || await getStoredEngine();
       setCallEngine(engine);
+      const authToken = await getToken().catch(() => null);
       websocketService.send({
-        type: 'join_session', sessionId: sid, lang, userId, engine,
+        type: 'join_session', authToken: authToken || undefined, sessionId: sid, lang, userId, engine,
         ...(speakerGender ? { speakerGender } : {}),
         ...(speakerAge !== undefined ? { speakerAge } : {}),
       });
@@ -313,7 +318,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setStatus('error');
       callbacksMap.current.forEach(c => c.onError?.('Failed to connect to server.'));
     }
-  }, [handleMessage]);
+  }, [handleMessage, getToken]);
 
   const sendAudioStreamChunk = useCallback(
     (audioBase64: string, mimeType: string, role: string, sid: string, clientSentAt?: number) => {
