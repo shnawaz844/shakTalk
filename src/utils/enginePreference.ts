@@ -64,3 +64,8 @@ export async function setStoredPlanTier(tier: PlanTier): Promise<void> {
 export function getCurrentPlanTier(): PlanTier {
   return currentPlanTier;
 }
+
+export function subscribePlanTierChange(cb: (tier: PlanTier) => void): () => void {
+  tierListeners.add(cb);
+  return () => tierListeners.delete(cb);
+}

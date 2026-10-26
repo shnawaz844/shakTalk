@@ -47,6 +47,7 @@ async function verifyClerkToken(token) {
       jwtKey: process.env.CLERK_JWT_KEY || undefined,
     });
   } catch (err) {
+    console.warn('[auth] verifyToken failed:', err.message);
     throw new AuthError('Invalid or expired login token.');
   }
   // @clerk/backend returns { data } or { errors } depending on version.

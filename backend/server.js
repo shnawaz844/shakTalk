@@ -929,7 +929,17 @@ function cleanupSession(sessionId, disconnectedRole) {
  *                            old builds): then the app's userId is used if well-formed
  */
 async function wsCaller(message) {
-  if (message.authToken) return verifyClerkToken(message.authToken);
+  if (message.authToken) {
+    try {
+      return await verifyClerkToken(message.authToken);
+    } catch (err) {
+      if (!AUTH_ENFORCE && isValidUserId(message.userId)) {
+        console.warn(`[ws] Clerk token verification failed, falling back to message.userId: ${message.userId}`);
+        return message.userId;
+      }
+      throw err;
+    }
+  }
   if (!AUTH_ENFORCE) return isValidUserId(message.userId) ? message.userId : null;
   throw new AuthError('Please log in again to start a call.');
 }

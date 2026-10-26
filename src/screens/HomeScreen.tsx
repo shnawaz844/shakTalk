@@ -29,6 +29,14 @@ import { useRef } from 'react';
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_NAME } from '../config';
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
+import {
+  getStoredPlanTier,
+  subscribePlanTierChange,
+  PlanTier,
+  getStoredEngine,
+  subscribeEngineChange,
+  CallEngine,
+} from '../utils/enginePreference';
 
 interface HomeScreenProps {
   onSessionReady: (params: {
@@ -93,6 +101,29 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const isDesktop = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
 
   const [myLang, setMyLang] = useState('English');
+  const [currentTier, setCurrentTier] = useState<PlanTier>('pro');
+  const [currentEngineState, setCurrentEngineState] = useState<CallEngine>('livekit');
+
+  useEffect(() => {
+    getStoredPlanTier().then(setCurrentTier);
+    getStoredEngine().then(setCurrentEngineState);
+    const unsubTier = subscribePlanTierChange(setCurrentTier);
+    const unsubEngine = subscribeEngineChange(setCurrentEngineState);
+    return () => {
+      unsubTier();
+      unsubEngine();
+    };
+  }, []);
+
+  const planInfo = (() => {
+    if (currentTier === 'starter' || currentEngineState === 'legacy') {
+      return { label: 'Base Model', color: '#39FF14', icon: 'zap' as const };
+    }
+    if (currentTier === 'business') {
+      return { label: 'Both Models', color: '#E6A23C', icon: 'layers' as const };
+    }
+    return { label: 'Pro Model', color: '#2FE0A8', icon: 'activity' as const };
+  })();
 
   // Default to the user's native language (set in their profile) until they
   // explicitly pick a different language here — an explicit pick, once made,
@@ -345,7 +376,25 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                 {APP_NAME_SUFFIX ? <Text style={styles.titleGreen}>{APP_NAME_SUFFIX}</Text> : null}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Active Model / Plan Chip */}
+              <TouchableOpacity
+                onPress={onOpenProfile}
+                style={[
+                  styles.modelBadge,
+                  {
+                    borderColor: planInfo.color + '45',
+                    backgroundColor: planInfo.color + '14',
+                  },
+                ]}
+                activeOpacity={0.75}
+              >
+                <Feather name={planInfo.icon} size={11} color={planInfo.color} style={{ marginRight: 4 }} />
+                <Text style={[styles.modelBadgeText, { color: planInfo.color }]}>
+                  {planInfo.label}
+                </Text>
+              </TouchableOpacity>
+
               <TouchableOpacity onPress={onOpenProfile} style={styles.profileBtn}>
                 {user?.imageUrl ? (
                   <Image source={{ uri: user.imageUrl }} style={styles.profileAvatar} />
@@ -691,6 +740,19 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.warm, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   titleGreen: { color: colors.signal },
+  modelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  modelBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   signOutBtn: {
     padding: 8,
     backgroundColor: colors.surface2,

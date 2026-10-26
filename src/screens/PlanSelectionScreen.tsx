@@ -30,69 +30,40 @@ interface MonthlyBundle {
   subtitle: string;
   price: string;
   billingPeriod: string;
-  minutes: string;
-  ratePerMin: string;
-  badge: string;
-  badgeColor: string;
   accentColor: string;
   bgColor: string;
   borderColor: string;
   iconName: 'zap' | 'activity' | 'layers';
-  features: string[];
 }
 
 const MONTHLY_BUNDLES: MonthlyBundle[] = [
   {
     id: 'starter',
     engine: 'legacy',
-    name: '2.5 Flash Plan',
-    modelName: 'Gemini 2.5 Flash Native Audio',
+    name: 'Base Plan',
+    modelName: 'Gemini 2.5 Flash',
     modelId: 'live-2.5-flash-native-audio',
-    subtitle: 'Vertex AI • Stable & Turn-Based',
+    subtitle: 'Turn-by-Turn Translation (One-by-One)',
     price: '$9.99',
     billingPeriod: '/month',
-    minutes: '150 Minutes Included',
-    ratePerMin: '~$0.066 / min',
-    badge: 'STABLE',
-    badgeColor: '#39FF14',
     accentColor: '#39FF14',
     bgColor: '#0D1F10',
     borderColor: '#39FF14',
     iconName: 'zap',
-    features: [
-      'Model: live-2.5-flash-native-audio',
-      '150 monthly voice translation minutes',
-      'Turn-based crisp speech translation',
-      'Powered by Google Vertex AI infrastructure',
-      'Full audio WAV recordings & transcripts',
-      'Reliable low-latency connection',
-    ],
   },
   {
     id: 'pro',
     engine: 'livekit',
-    name: '3.5 Live Plan',
-    modelName: 'Gemini 3.5 Live Translate',
+    name: 'Pro Plan',
+    modelName: 'Gemini 3.5 Live',
     modelId: 'gemini-3.5-live-translate-preview',
-    subtitle: 'LiveKit • Real-Time Simultaneous Voice',
+    subtitle: 'Real-Time Live Translation (Simultaneous)',
     price: '$24.99',
     billingPeriod: '/month',
-    minutes: '250 Minutes Included',
-    ratePerMin: '~$0.100 / min',
-    badge: 'PREVIEW • LIVE',
-    badgeColor: '#2FE0A8',
     accentColor: '#2FE0A8',
     bgColor: '#0A1E1A',
     borderColor: '#2FE0A8',
     iconName: 'activity',
-    features: [
-      'Model: gemini-3.5-live-translate-preview',
-      '250 monthly voice translation minutes',
-      'Real-time simultaneous two-way translation',
-      'Speak & listen simultaneously (zero waiting)',
-      'LiveKit SFU high-speed audio pipeline',
-      'Dual-track cloud recordings & transcripts',
-    ],
   },
   {
     id: 'business',
@@ -100,25 +71,13 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
     name: 'Dual AI All-Access',
     modelName: 'Both Gemini 3.5 Live & 2.5 Flash',
     modelId: 'gemini-3.5-live + live-2.5-flash',
-    subtitle: 'Switch Between Both Engines Anytime',
+    subtitle: 'Both Turn-by-Turn & Live Translation',
     price: '$49.99',
     billingPeriod: '/month',
-    minutes: '500 Minutes Included',
-    ratePerMin: '~$0.099 / min',
-    badge: 'ALL-ACCESS',
-    badgeColor: '#E6A23C',
     accentColor: '#E6A23C',
     bgColor: '#1D170A',
     borderColor: '#E6A23C',
     iconName: 'layers',
-    features: [
-      'Access both 3.5 Live & 2.5 Flash models',
-      '500 monthly voice translation minutes',
-      'Switch between models on-the-fly during calls',
-      'Dedicated AWS high-bandwidth media routes',
-      'Priority 24/7 technical customer support',
-      'Unlimited cloud recordings storage',
-    ],
   },
 ];
 
@@ -200,97 +159,26 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
                   <View style={styles.cardRight}>
                     <View
                       style={[
-                        styles.badge,
-                        { borderColor: bundle.badgeColor + '70' },
+                        styles.checkCircle,
+                        isActive && {
+                          backgroundColor: bundle.accentColor,
+                          borderColor: bundle.accentColor,
+                        },
                       ]}
                     >
-                      <Text style={[styles.badgeText, { color: bundle.badgeColor }]}>
-                        {bundle.badge}
-                      </Text>
+                      {isActive && <Feather name="check" size={13} color="#000" />}
                     </View>
-                    {isActive && (
-                      <View style={[styles.checkCircle, { backgroundColor: bundle.accentColor }]}>
-                        <Feather name="check" size={12} color="#000" />
-                      </View>
-                    )}
                   </View>
                 </View>
-
-                {/* Model ID Chip */}
-                <View style={styles.modelChipRow}>
-                  <Feather name="cpu" size={11} color={isActive ? bundle.accentColor : 'rgba(255,255,255,0.4)'} />
-                  <Text style={[styles.modelChipText, isActive && { color: bundle.accentColor }]}>
-                    {bundle.modelId}
-                  </Text>
-                </View>
-
-                {/* Divider */}
-                <View
-                  style={[
-                    styles.cardDivider,
-                    isActive && { backgroundColor: bundle.accentColor + '30' },
-                  ]}
-                />
 
                 {/* Pricing Row */}
                 <View style={styles.costRow}>
-                  <View>
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-                      <Text style={[styles.costAmount, isActive && { color: bundle.accentColor }]}>
-                        {bundle.price}
-                      </Text>
-                      <Text style={styles.costPeriodLabel}>{bundle.billingPeriod}</Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.minutesLabel,
-                        { color: isActive ? bundle.accentColor : '#fff' },
-                      ]}
-                    >
-                      {bundle.minutes}
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                    <Text style={[styles.costAmount, isActive && { color: bundle.accentColor }]}>
+                      {bundle.price}
                     </Text>
+                    <Text style={styles.costPeriodLabel}>{bundle.billingPeriod}</Text>
                   </View>
-
-                  <View
-                    style={[
-                      styles.costBadge,
-                      {
-                        backgroundColor: bundle.accentColor + '18',
-                        borderColor: bundle.accentColor + '40',
-                      },
-                    ]}
-                  >
-                    <Feather name="clock" size={10} color={bundle.accentColor} />
-                    <Text style={[styles.costBadgeText, { color: bundle.accentColor }]}>
-                      {bundle.ratePerMin}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Features List */}
-                <View style={styles.featureList}>
-                  {bundle.features.map((feat, i) => (
-                    <View key={i} style={styles.featureRow}>
-                      <View
-                        style={[
-                          styles.featureDot,
-                          {
-                            backgroundColor: isActive
-                              ? bundle.accentColor
-                              : 'rgba(255,255,255,0.25)',
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.featureText,
-                          isActive && { color: 'rgba(255,255,255,0.9)' },
-                        ]}
-                      >
-                        {feat}
-                      </Text>
-                    </View>
-                  ))}
                 </View>
               </TouchableOpacity>
             );
@@ -384,56 +272,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
-  cardSubtitle: { color: 'rgba(255,255,255,0.4)', fontSize: 11, marginTop: 2 },
-  cardRight: { alignItems: 'flex-end', gap: 6 },
-  badge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
-  badgeText: { fontSize: 8.5, fontWeight: '800', letterSpacing: 0.8 },
-  checkCircle: { width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-
-  modelChipRow: {
-    flexDirection: 'row',
+  cardSubtitle: { color: 'rgba(255,255,255,0.48)', fontSize: 12, marginTop: 3 },
+  cardRight: { justifyContent: 'center', alignItems: 'center' },
+  checkCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginBottom: 12,
+    justifyContent: 'center',
   },
-  modelChipText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 10.5,
-    fontFamily: 'monospace',
-    fontWeight: '600',
-  },
-
-  cardDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.06)', marginBottom: 12 },
 
   costRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+    alignItems: 'baseline',
+    marginTop: 10,
   },
   costAmount: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   costPeriodLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '500' },
-  minutesLabel: { fontSize: 12.5, fontWeight: '700', marginTop: 3 },
-  costBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  costBadgeText: { fontSize: 10.5, fontWeight: '700' },
 
-  featureList: { gap: 8 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  featureDot: { width: 5, height: 5, borderRadius: 3 },
-  featureText: { color: 'rgba(255,255,255,0.55)', fontSize: 12, flex: 1 },
 
   continueBtn: {
     flexDirection: 'row',

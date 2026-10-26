@@ -26,20 +26,8 @@ const { GoogleGenAI, Modality } = require('google-genai-v2');
 
 const MODEL = process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview';
 const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase();
-// echoTargetLanguage: when the speaker says something that is ALREADY in the
-// listener's language (e.g. English words in Hinglish, or a Hindi speaker
-// switching to English), should the model still speak it? Partners no longer
-// hear each other's original voice, so this must be ON or those words are lost.
-//   GEMINI_TRANSLATE_ECHO_TARGET=true|false   (new, clear name; default true)
-//   GEMINI_TRANSLATE_ECHO                     (old name; its value was read
-//     inverted — "false" meant ON. Still honoured as before so nothing changes
-//     on deploy, but please switch to the new name.)
-const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO_TARGET !== undefined
-  ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'true'
-  : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'false' : true);
-if (process.env.GEMINI_TRANSLATE_ECHO !== undefined && process.env.GEMINI_TRANSLATE_ECHO_TARGET === undefined) {
-  console.warn(`[liveTranslate] GEMINI_TRANSLATE_ECHO is deprecated (its value is read inverted). Replace it with GEMINI_TRANSLATE_ECHO_TARGET=${ECHO_TARGET}`);
-}
+const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO === 'false';
+
 
 // Optional cost saving: stop streaming the mic to Gemini while nobody is
 // talking (input audio is billed per second). Off by default; see
