@@ -35,7 +35,7 @@ const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase()
 //     inverted — "false" meant ON. Still honoured as before so nothing changes
 //     on deploy, but please switch to the new name.)
 const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO_TARGET !== undefined
-  ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'true'
+  ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'false'
   : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'false' : true);
 if (process.env.GEMINI_TRANSLATE_ECHO !== undefined && process.env.GEMINI_TRANSLATE_ECHO_TARGET === undefined) {
   console.warn(`[liveTranslate] GEMINI_TRANSLATE_ECHO is deprecated (its value is read inverted). Replace it with GEMINI_TRANSLATE_ECHO_TARGET=${ECHO_TARGET}`);
