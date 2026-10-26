@@ -9,6 +9,7 @@
       "policy": "appVersion"
     },
     "updates": {
+      "url": "https://u.expo.dev/96f33856-71d1-4146-9a64-7f00a2625437",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -23,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cis.shaktranslate",
-      "buildNumber": "60",
+      "buildNumber": "61",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -37,7 +38,7 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "versionCode": 19,
+      "versionCode": 20,
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "cover",
