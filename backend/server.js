@@ -103,7 +103,7 @@ async function updateClerkMetadata(userId, metadata) {
   return res.json();
 }
 
-// ── HTTP Server ───────────────────────────────────────────────────────────────
+// ── HTTP.. Server ───────────────────────────────────────────────────────────────
 
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -159,10 +159,10 @@ const httpServer = http.createServer(async (req, res) => {
         .from('user_plans')
         .upsert(
           {
-            user_id:     userId,
+            user_id: userId,
             plan_engine: engine,
-            model_id:    modelId,
-            updated_at:  new Date().toISOString(),
+            model_id: modelId,
+            updated_at: new Date().toISOString(),
           },
           { onConflict: 'user_id' }
         );
@@ -204,27 +204,27 @@ const httpServer = http.createServer(async (req, res) => {
         .filter(conv => conv.messages && conv.messages.length > 0)
         .map(conv => {
           const msgs = (conv.messages || []).sort((a, b) =>
-          new Date(a.sent_at) - new Date(b.sent_at)
-        );
-        const lastMsg = msgs[msgs.length - 1] || null;
-        const partnerRole = conv.host_user_id === userId ? 'guest' : 'host';
-        const partnerLang = partnerRole === 'guest' ? conv.guest_lang : conv.host_lang;
-        const myLang = partnerRole === 'guest' ? conv.host_lang : conv.guest_lang;
-        return {
-          id: conv.id,
-          sessionId: conv.session_id,
-          myLang,
-          partnerLang,
-          startedAt: conv.started_at,
-          endedAt: conv.ended_at,
-          lastMessage: lastMsg ? {
-            text: lastMsg.sender_user_id === userId ? lastMsg.original_text : lastMsg.translated_text,
-            sentAt: lastMsg.sent_at,
-            isMe: lastMsg.sender_user_id === userId,
-          } : null,
-          messageCount: msgs.length,
-        };
-      });
+            new Date(a.sent_at) - new Date(b.sent_at)
+          );
+          const lastMsg = msgs[msgs.length - 1] || null;
+          const partnerRole = conv.host_user_id === userId ? 'guest' : 'host';
+          const partnerLang = partnerRole === 'guest' ? conv.guest_lang : conv.host_lang;
+          const myLang = partnerRole === 'guest' ? conv.host_lang : conv.guest_lang;
+          return {
+            id: conv.id,
+            sessionId: conv.session_id,
+            myLang,
+            partnerLang,
+            startedAt: conv.started_at,
+            endedAt: conv.ended_at,
+            lastMessage: lastMsg ? {
+              text: lastMsg.sender_user_id === userId ? lastMsg.original_text : lastMsg.translated_text,
+              sentAt: lastMsg.sent_at,
+              isMe: lastMsg.sender_user_id === userId,
+            } : null,
+            messageCount: msgs.length,
+          };
+        });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
@@ -909,7 +909,7 @@ function cleanupSession(sessionId, disconnectedRole) {
 
   closeSession(sessionId, 'host');
   closeSession(sessionId, 'guest');
-  if (session.bot) session.bot.close().catch(() => {});
+  if (session.bot) session.bot.close().catch(() => { });
 
   dbEndConversation(sessionId)
     .catch(e => console.error('[db] endConversation failed:', e.message))
