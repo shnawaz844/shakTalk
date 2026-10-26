@@ -968,7 +968,11 @@ async function wsCaller(message) {
 
 /** Language names are written into the AI's instructions, so only accept known ones. */
 function isSupportedLanguage(lang) {
-  return typeof lang === 'string' && SUPPORTED_LANGUAGES.includes(lang);
+  if (typeof lang !== 'string') return false;
+  if (Array.isArray(SUPPORTED_LANGUAGES) && SUPPORTED_LANGUAGES.length) {
+    return SUPPORTED_LANGUAGES.includes(lang);
+  }
+  return true;
 }
 
 /** The role this socket has in the session, or null if it isn't part of it. */
