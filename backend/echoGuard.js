@@ -24,15 +24,15 @@
  */
 
 const ENABLED = process.env.ECHO_GUARD !== 'off';
-const TAIL_MS = Number(process.env.ECHO_GUARD_TAIL_MS || 700);
-const BARGE_RMS = Number(process.env.ECHO_GUARD_BARGE_RMS || 2500);
-const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 3);
+const TAIL_MS = Number(process.env.ECHO_GUARD_TAIL_MS || 1200);
+const BARGE_RMS = Number(process.env.ECHO_GUARD_BARGE_RMS || 3500);
+const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 3.5);
 // Barge-in must last this long before the mic opens (a cough or a click doesn't count).
-const BARGE_HOLD_MS = 200;
+const BARGE_HOLD_MS = 350;
 // Translated audio quieter than this (int16 RMS per 20ms) is treated as silence.
 // Gemini Live Translate streams continuously and can send silent chunks; those
 // must not keep the mic guarded, or it would stay muted indefinitely.
-const AUDIBLE_RMS = Number(process.env.ECHO_GUARD_AUDIBLE_RMS || 300);
+const AUDIBLE_RMS = Number(process.env.ECHO_GUARD_AUDIBLE_RMS || 150);
 
 function rmsOf(pcm) {
   const n = pcm.length >> 1;
@@ -77,7 +77,8 @@ class EchoGuard {
   }
 
   isGuarding() {
-    return ENABLED && this.now() < this.audibleEndAt + TAIL_MS;
+    const end = Math.max(this.audibleEndAt, this.playEndAt);
+    return ENABLED && this.now() < end + TAIL_MS;
   }
 
   /**
