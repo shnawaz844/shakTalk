@@ -32,22 +32,20 @@ try {
   console.warn('[translatorBot] Warning: livekit-server-sdk is not installed or failed to load:', err.message);
 }
 const { LiveTranslateStream } = require('./liveTranslate');
-const { EchoGuard } = require('./echoGuard');
 
 /**
  * LiveKit call engine
  * ───────────────────
  * Both phones join a LiveKit room (WebRTC, like a WhatsApp/Teams call) and
  * publish their microphone with the platform's echo cancellation and noise
- * suppression. Each listener hears ONLY the translation of their partner:
- * raw microphones are never delivered to the other phone (blocked by the app
- * via track subscription permissions, and by this bot as a backup).
+ * suppression. Each listener hears the partner's real voice directly
+ * (~200–300ms), turned down, with the translation on top.
  *
  * This bot joins the same room as a third participant ("translator"):
  *   host mic  → Gemini Live Translate (→ guest's language) → track "translation-of-host"
  *   guest mic → Gemini Live Translate (→ host's language)  → track "translation-of-guest"
- * Each phone subscribes only to the translation of its partner, so nobody
- * hears their own translation.
+ * Each phone subscribes only to its partner's mic and to the translation of
+ * its partner, so nobody hears their own translation.
  *
  * Because the translation is played through the call (WebRTC), the phone's
  * echo canceller removes it from the mic — no mic gating is needed.
@@ -92,10 +90,9 @@ class TranslatorBot {
    * @param {(role: 'host'|'guest', seg: object) => void} opts.onText   transcription of what `role` said
    * @param {(err: Error) => void} [opts.onError]
    */
-  constructor({ roomName, langs, voiceProfiles, onText, onError }) {
+  constructor({ roomName, langs, onText, onError }) {
     this.roomName = roomName;
     this.langs = langs;
-    this.voiceProfiles = voiceProfiles || {};
     this.onText = onText;
     this.onError = onError || (() => {});
     this.room = null;
@@ -103,13 +100,9 @@ class TranslatorBot {
     this.outputs = {}; // role → { source, chain }
     this.streams = {}; // role → LiveTranslateStream
     this.readers = {}; // role → ReadableStreamDefaultReader
-    // Phone echo cancellation removes most loudspeaker leakage; the EchoGuard
-    // catches what's left. role → EchoGuard for that person's mic (guards it
-    // only while AUDIBLE translation plays to them — see echoGuard.js).
-    this.guards = {
-      host: new EchoGuard(`${roomName.slice(0, 8)}:host`),
-      guest: new EchoGuard(`${roomName.slice(0, 8)}:guest`),
-    };
+    // Hardware AEC (Android MODE_IN_COMMUNICATION / iOS VPIO voiceChat) eliminates
+    // the loudspeaker→mic feedback path at the device level, so no server-side
+    // acoustic gate is needed here.
   }
 
   partnerOf(role) {
@@ -121,32 +114,16 @@ class TranslatorBot {
     const room = new Room();
     this.room = room;
 
-    // Each (listener, track, on/off) subscription change only needs to be sent
-    // to LiveKit once. Before, the same calls were repeated on every
-    // TrackPublished / ParticipantConnected / TrackSubscribed event (4–8 HTTP
-    // requests each time). The app now also blocks raw-mic subscriptions at the
-    // source (setTrackSubscriptionPermissions in useLiveKitCall.ts); this is the
-    // server-side backup.
-    const applied = new Set();
-    const setSubscribed = async (listener, trackSid, subscribe) => {
-      const svc = getRoomService();
-      const key = `${listener}|${trackSid}|${subscribe}`;
-      if (!svc || !trackSid || applied.has(key)) return false;
-      applied.add(key); // mark first, so events arriving together don't repeat the call
-      applied.delete(`${listener}|${trackSid}|${!subscribe}`);
-      try {
-        await svc.updateSubscriptions(this.roomName, listener, [trackSid], subscribe);
-        return true;
-      } catch (err) {
-        applied.delete(key); // the participant may not have joined yet; the next event retries
-        return false;
-      }
-    };
-
     const muteRawMicToPartner = async (role, trackSid) => {
       const listener = this.partnerOf(role);
-      if (await setSubscribed(listener, trackSid, false)) {
-        console.log(`[translatorBot] ${this.roomName}: unsubscribed ${listener} from ${role} raw mic (${trackSid})`);
+      const svc = getRoomService();
+      if (svc && trackSid) {
+        try {
+          await svc.updateSubscriptions(this.roomName, listener, [trackSid], false);
+          console.log(`[translatorBot] ${this.roomName}: unsubscribed ${listener} from ${role} raw mic (${trackSid})`);
+        } catch (err) {
+          console.warn(`[translatorBot] ${this.roomName}: updateSubscriptions failed for ${listener}: ${err.message}`);
+        }
       }
     };
 
@@ -158,13 +135,13 @@ class TranslatorBot {
 
       if (hostTransSid) {
         // Translation of Host speech goes to Guest
-        await setSubscribed('guest', hostTransSid, true);
-        await setSubscribed('host', hostTransSid, false);
+        await svc.updateSubscriptions(this.roomName, 'guest', [hostTransSid], true).catch(() => {});
+        await svc.updateSubscriptions(this.roomName, 'host', [hostTransSid], false).catch(() => {});
       }
       if (guestTransSid) {
         // Translation of Guest speech goes to Host
-        await setSubscribed('host', guestTransSid, true);
-        await setSubscribed('guest', guestTransSid, false);
+        await svc.updateSubscriptions(this.roomName, 'host', [guestTransSid], true).catch(() => {});
+        await svc.updateSubscriptions(this.roomName, 'guest', [guestTransSid], false).catch(() => {});
       }
     };
     this.syncSubscriptions = syncSubscriptions;
@@ -218,13 +195,8 @@ class TranslatorBot {
       options.source = TrackSource.SOURCE_MICROPHONE;
       const pub = await room.localParticipant.publishTrack(track, options);
       this.outputs[role] = { source, track, pub, chain: Promise.resolve() };
-      console.log(`[translatorBot] ${this.roomName}: published track translation-of-${role} (sid=${pub.sid})`);
     }
-    // Not awaited: these LiveKit API calls are a backup (the app itself only
-    // lets the translator receive its mic), and calls about a phone that
-    // hasn't joined yet can take many seconds to fail. Awaiting them delayed
-    // "translator ready" on the phones by up to ~24s.
-    syncSubscriptions().catch(() => {});
+    await syncSubscriptions();
 
     // Participants who joined (and were subscribed) before our handler ran.
     for (const participant of room.remoteParticipants.values()) {
@@ -237,7 +209,7 @@ class TranslatorBot {
         }
       }
     }
-    syncSubscriptions().catch(() => {}); // backup, not awaited (see above)
+    await syncSubscriptions();
     console.log(`[translatorBot] ${this.roomName}: joined, translating host(${this.langs.host}) ↔ guest(${this.langs.guest})`);
   }
 
@@ -248,7 +220,6 @@ class TranslatorBot {
       label: `${this.roomName.slice(0, 8)}:${role}→${this.langs[listener]}`,
       inputLanguage: this.langs[role],
       targetLanguage: this.langs[listener],
-      voiceProfile: this.voiceProfiles[role] || {},
       onAudio: (pcm) => this._play(role, pcm),
       onText: (seg) => this.onText(role, seg),
       onError: (err) => this.onError(err),
@@ -271,8 +242,7 @@ class TranslatorBot {
         const { value: frame, done } = await reader.read();
         if (done || this.closed) break;
         const d = frame.data;
-        const pcm = this.guards[role].filter(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
-        if (pcm.length) translate.feed(pcm);
+        translate.feed(Buffer.from(d.buffer, d.byteOffset, d.byteLength));
       }
     } catch (err) {
       if (!this.closed) console.warn(`[translatorBot] ${this.roomName}: ${role} mic stream ended: ${err.message}`);
@@ -288,10 +258,6 @@ class TranslatorBot {
     const samples = new Int16Array(pcm.length >> 1);
     for (let i = 0; i < samples.length; i++) samples[i] = pcm.readInt16LE(i * 2);
 
-    console.log(`[translatorBot] ${this.roomName}: queueing ${samples.length} samples (${Math.round(samples.length / OUTPUT_RATE * 1000)}ms) for ${listener} on track translation-of-${role}`);
-
-    // The listener is the one hearing this: guard their mic while it plays.
-    this.guards[listener].onPlayback(samples, OUTPUT_RATE);
     out.chain = out.chain.then(async () => {
       for (let i = 0; i < samples.length && !this.closed; i += FRAME_SAMPLES) {
         const part = samples.slice(i, i + FRAME_SAMPLES);

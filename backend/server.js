@@ -108,6 +108,7 @@ async function updateClerkMetadata(userId, metadata) {
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -175,27 +176,6 @@ const httpServer = http.createServer(async (req, res) => {
     return;
   }
 
-  // GET /user/plan — returns active plan engine and model for current user
-  if (req.method === 'GET' && req.url === '/user/plan') {
-    try {
-      const userId = await requireUser(req);
-      if (!isValidUserId(userId)) throw new AuthError('Login required.');
-      const { data, error } = await supabase
-        .from('user_plans')
-        .select('plan_engine, model_id, updated_at')
-        .eq('user_id', userId)
-        .maybeSingle();
-      if (error) throw error;
-      const engine = data?.plan_engine || 'legacy';
-      const modelId = data?.model_id || (engine === 'livekit' ? 'gemini-3.5-live-translate-preview' : 'gemini-live-2.5-flash-native-audio');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, engine, modelId, tier: engine === 'livekit' ? 'pro' : 'starter' }));
-    } catch (err) {
-      sendHttpError(res, err, '/user/plan');
-    }
-    return;
-  }
-
 
   if (req.method === 'GET' && req.url?.match(/^\/conversations(\?.*)?$/)) {
     try {
@@ -220,8 +200,10 @@ const httpServer = http.createServer(async (req, res) => {
 
       if (error) throw error;
 
-      const result = (conversations || []).map(conv => {
-        const msgs = (conv.messages || []).sort((a, b) =>
+      const result = (conversations || [])
+        .filter(conv => conv.messages && conv.messages.length > 0)
+        .map(conv => {
+          const msgs = (conv.messages || []).sort((a, b) =>
           new Date(a.sent_at) - new Date(b.sent_at)
         );
         const lastMsg = msgs[msgs.length - 1] || null;
@@ -872,10 +854,6 @@ async function startLiveKitCall(session, sessionId) {
     const bot = new TranslatorBot({
       roomName: sessionId,
       langs: { host: session.hostLang, guest: session.guestLang },
-      voiceProfiles: {
-        host: session.hostVoiceProfile || {},
-        guest: session.guestVoiceProfile || {},
-      },
       onText: (role, seg) => relayTranslationText(session, sessionId, role, seg),
       onError: (err) => console.error(`[translatorBot] ${sessionId}: ${err.message}`),
     });
@@ -951,28 +929,14 @@ function cleanupSession(sessionId, disconnectedRole) {
  *                            old builds): then the app's userId is used if well-formed
  */
 async function wsCaller(message) {
-  if (message.authToken) {
-    try {
-      return await verifyClerkToken(message.authToken);
-    } catch (err) {
-      if (!AUTH_ENFORCE && isValidUserId(message.userId)) {
-        console.warn(`[auth] WebSocket token verification failed (${err.message}), using fallback userId ${message.userId} because AUTH_ENFORCE=false`);
-        return message.userId;
-      }
-      throw err;
-    }
-  }
+  if (message.authToken) return verifyClerkToken(message.authToken);
   if (!AUTH_ENFORCE) return isValidUserId(message.userId) ? message.userId : null;
   throw new AuthError('Please log in again to start a call.');
 }
 
 /** Language names are written into the AI's instructions, so only accept known ones. */
 function isSupportedLanguage(lang) {
-  if (typeof lang !== 'string') return false;
-  if (Array.isArray(SUPPORTED_LANGUAGES) && SUPPORTED_LANGUAGES.length > 0) {
-    return SUPPORTED_LANGUAGES.includes(lang);
-  }
-  return true;
+  return typeof lang === 'string' && SUPPORTED_LANGUAGES.includes(lang);
 }
 
 /** The role this socket has in the session, or null if it isn't part of it. */

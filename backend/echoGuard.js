@@ -23,15 +23,16 @@
  *                             than the echo level measured during playback
  */
 
-const ENABLED = process.env.ECHO_GUARD === 'on';
-const TAIL_MS = Number(process.env.ECHO_GUARD_TAIL_MS || 300);
-const BARGE_RMS = Number(process.env.ECHO_GUARD_BARGE_RMS || 1200);
-const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 2.0);
-// Barge-in must last this long before the mic opens.
-const BARGE_HOLD_MS = 100;
+const ENABLED = process.env.ECHO_GUARD !== 'off';
+const TAIL_MS = Number(process.env.ECHO_GUARD_TAIL_MS || 700);
+const BARGE_RMS = Number(process.env.ECHO_GUARD_BARGE_RMS || 2500);
+const BARGE_RATIO = Number(process.env.ECHO_GUARD_BARGE_RATIO || 3);
+// Barge-in must last this long before the mic opens (a cough or a click doesn't count).
+const BARGE_HOLD_MS = 200;
 // Translated audio quieter than this (int16 RMS per 20ms) is treated as silence.
+// Gemini Live Translate streams continuously and can send silent chunks; those
+// must not keep the mic guarded, or it would stay muted indefinitely.
 const AUDIBLE_RMS = Number(process.env.ECHO_GUARD_AUDIBLE_RMS || 300);
-const MAX_ECHO_LEVEL = 800;
 
 function rmsOf(pcm) {
   const n = pcm.length >> 1;
@@ -97,17 +98,20 @@ class EchoGuard {
     if (rms >= threshold) {
       if (!this.loudSince) this.loudSince = t;
       if (t - this.loudSince >= BARGE_HOLD_MS) {
+        // The listener is really talking over the translation: release the
+        // held frames too, so their first words aren't lost.
         this.stats.passedBargeIn++;
         if (this.held.length) { const out = Buffer.concat([...this.held, pcm]); this.held = []; return out; }
         return pcm;
       }
       this.held.push(pcm);
-      return Buffer.alloc(0);
+      return Buffer.alloc(0); // wait: send nothing until we know
     } else {
       this.loudSince = 0;
+      // A short loud blip that didn't last: it was echo or a click, drop it as silence.
       if (this.held.length) { const out = Buffer.alloc(this.held.reduce((n, b) => n + b.length, 0) + pcm.length); this.held = []; this.stats.guarded++; return out; }
-      const newEcho = rms > this.echoLevel ? 0.5 * this.echoLevel + 0.5 * rms : 0.98 * this.echoLevel + 0.02 * rms;
-      this.echoLevel = Math.min(MAX_ECHO_LEVEL, newEcho);
+      // Learn the echo level from quiet-ish frames during playback; rise fast, fall slowly.
+      this.echoLevel = rms > this.echoLevel ? 0.5 * this.echoLevel + 0.5 * rms : 0.98 * this.echoLevel + 0.02 * rms;
     }
 
     this.stats.guarded++;
@@ -115,7 +119,7 @@ class EchoGuard {
       this.lastLogAt = t;
       console.log(`[echoGuard] ${this.label}: guarded ${this.stats.guarded} mic frames during playback, let ${this.stats.passedBargeIn} barge-in frames through (echo level ~${Math.round(this.echoLevel)})`);
     }
-    return Buffer.alloc(pcm.length);
+    return Buffer.alloc(pcm.length); // silence keeps Gemini's timing intact
   }
 }
 

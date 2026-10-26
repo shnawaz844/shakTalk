@@ -426,8 +426,8 @@ export function AudioRecordingsScreen({
           />
         )}
 
-        {/* Unified Player Bar — only shown if the conversation has recorded audio */}
-        {messages.some(m => !!(m.original_audio_url || m.translated_audio_url)) && (
+        {/* Unified Player Bar */}
+        {messages.length > 0 && (
           <BlurView intensity={60} tint="dark" style={styles.playerBar}>
             <View 
               style={styles.scrubberContainer}

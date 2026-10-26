@@ -35,7 +35,7 @@ interface SessionParams {
 
 const publishableKey =
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
-  'pk_test_ZGFybGluZy1saXphcmQtMzYwMC5jbGVyay5hY2NvdW50cy5kZXYk';
+  'pk_test_cHJvcGVyLWphZ3Vhci04NS5jbGVyay5hY2NvdW50cy5kZXYk';
 
 function MainApp() {
   const { user } = useUser();
@@ -218,8 +218,8 @@ export default function App() {
             height: '100%',
             backgroundColor: '#182527',
             zIndex: 99999,
-            pointerEvents: 'none',
           }}
+          pointerEvents="none"
         >
           <StatusBar hidden={true} />
           <Image

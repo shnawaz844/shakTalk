@@ -1,15 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useAuth } from '@clerk/clerk-expo';
-import { API_URL } from '../config';
-import {
-  CallEngine,
-  getStoredEngine,
-  setStoredEngine,
-  subscribeEngineChange,
-  setStoredPlanTier,
-} from '../utils/enginePreference';
+import { CallEngine, getStoredEngine, setStoredEngine, subscribeEngineChange } from '../utils/enginePreference';
 
 interface ModelSwitcherProps {
   style?: ViewStyle;
@@ -17,68 +9,23 @@ interface ModelSwitcherProps {
 
 export function ModelSwitcher({ style }: ModelSwitcherProps) {
   const [engine, setEngine] = useState<CallEngine>('legacy');
-  const { getToken } = useAuth();
 
   useEffect(() => {
     getStoredEngine().then(setEngine);
     const unsubscribe = subscribeEngineChange(setEngine);
-
-    // Sync from backend on mount if user is logged in
-    (async () => {
-      try {
-        const token = await getToken();
-        if (token) {
-          const res = await fetch(`${API_URL}/user/plan`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.engine && (data.engine === 'legacy' || data.engine === 'livekit')) {
-              setEngine(data.engine);
-              setStoredEngine(data.engine);
-              if (data.tier) setStoredPlanTier(data.tier);
-            }
-          }
-        }
-      } catch (_) {}
-    })();
-
     return unsubscribe;
-  }, [getToken]);
+  }, []);
 
-  const handleSelect = async (choice: CallEngine) => {
+  const handleSelect = (choice: CallEngine) => {
     setEngine(choice);
-    await setStoredEngine(choice);
-    const tier = choice === 'livekit' ? 'pro' : 'starter';
-    await setStoredPlanTier(tier);
-
-    // Sync to backend user_plans table
-    try {
-      const token = await getToken();
-      if (token) {
-        const MODEL_MAP: Record<string, string> = {
-          legacy: 'gemini-live-2.5-flash-native-audio',
-          livekit: 'gemini-3.5-live-translate-preview',
-        };
-        await fetch(`${API_URL}/user/set-plan`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ engine: choice, modelId: MODEL_MAP[choice], tier }),
-        });
-      }
-    } catch (e) {
-      console.warn('[ModelSwitcher] Failed to sync plan to backend:', e);
-    }
+    setStoredEngine(choice);
   };
 
   return (
     <View style={[styles.container, style]}>
       <View style={styles.headerRow}>
         <Feather name="cpu" size={13} color="#2FE0A8" />
-        <Text style={styles.headerLabel}>SELECT TRANSLATION MODEL</Text>
+        <Text style={styles.headerLabel}>AI TRANSLATION MODEL</Text>
       </View>
 
       <View style={styles.switchWrapper}>
@@ -115,7 +62,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                 </View>
               )}
             </View>
-            <Text style={styles.btnSubtitle}>Vertex AI • Turn-Based</Text>
+            <Text style={styles.btnSubtitle}>Vertex AI • Stable (~$0.06/m)</Text>
           </View>
         </TouchableOpacity>
 
@@ -152,7 +99,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                 </View>
               )}
             </View>
-            <Text style={styles.btnSubtitle}>LiveKit • Real-Time Live</Text>
+            <Text style={styles.btnSubtitle}>LiveKit • Simultaneous (~$0.10/m)</Text>
           </View>
         </TouchableOpacity>
       </View>

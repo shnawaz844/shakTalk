@@ -24,6 +24,7 @@ import { QRScanner } from '../components/QRScanner';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { useAuthFetch } from '../utils/authFetch';
 import { useRef } from 'react';
 import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_NAME } from '../config';
@@ -80,6 +81,7 @@ function extractSessionIdFromUrl(url: string | null): string | null {
 
 export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, onOpenRecordings }: HomeScreenProps) {
   const { signOut } = useAuth();
+  const authFetch = useAuthFetch();
   const { user } = useUser();
   // Voice profile from Clerk metadata — used for Gemini voice warm-up at session start
   const meta = user?.unsafeMetadata as any;
@@ -136,12 +138,18 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     if (!userId) return;
     const httpUrl = WS_URL.replace(/^ws(s)?:\/\//, 'http$1://');
     setLoadingConvs(true);
-    fetch(`${httpUrl}/conversations?userId=${encodeURIComponent(userId)}`)
-      .then(r => r.json())
+    authFetch(`${httpUrl}/conversations?userId=${encodeURIComponent(userId)}`)
+      .then(async r => {
+        if (!r.ok) {
+          const errText = await r.text().catch(() => '');
+          throw new Error(`HTTP ${r.status}: ${errText}`);
+        }
+        return r.json();
+      })
       .then(data => { if (Array.isArray(data)) setRecentConversations(data); })
       .catch(e => console.warn('[HomeScreen] Failed to load conversations:', e))
       .finally(() => setLoadingConvs(false));
-  }, [userId]);
+  }, [userId, authFetch]);
 
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
@@ -310,7 +318,8 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     await joinSession(scannedId, myLang, userId, speakerGender, speakerAge);
   };
 
-  const showRecent = loadingConvs || recentConversations.length > 0;
+  const validConversations = recentConversations.filter(conv => conv.messageCount > 0);
+  const showRecent = (loadingConvs && recentConversations.length === 0) || validConversations.length > 0;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -457,8 +466,10 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                 <Feather name="message-square" size={13} color={colors.muted} />
                 <Text style={styles.recentTitle}> RECENT CONVERSATIONS</Text>
               </View>
-              {loadingConvs && <ActivityIndicator color={colors.signal} style={{ marginTop: 16 }} />}
-              {recentConversations.map(conv => (
+              {loadingConvs && validConversations.length === 0 ? (
+                <ActivityIndicator color={colors.signal} style={{ marginTop: 16 }} />
+              ) : null}
+              {validConversations.map(conv => (
                 <View key={conv.id} style={styles.convItemWrapper}>
                   {/* Chat transcript button */}
                   <TouchableOpacity

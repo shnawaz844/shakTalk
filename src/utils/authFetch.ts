@@ -15,9 +15,10 @@ export function useAuthFetch() {
   getTokenRef.current = getToken;
 
   return useCallback(async (url: string, init: RequestInit = {}) => {
-    const token = await getTokenRef.current().catch(() => null);
+    const token = await getTokenRef.current?.().catch(() => null);
     const headers = new Headers(init.headers);
     if (token) headers.set('Authorization', `Bearer ${token}`);
     return fetch(url, { ...init, headers });
   }, []);
 }
+
