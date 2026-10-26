@@ -872,6 +872,10 @@ async function startLiveKitCall(session, sessionId) {
     const bot = new TranslatorBot({
       roomName: sessionId,
       langs: { host: session.hostLang, guest: session.guestLang },
+      voiceProfiles: {
+        host: session.hostVoiceProfile || {},
+        guest: session.guestVoiceProfile || {},
+      },
       onText: (role, seg) => relayTranslationText(session, sessionId, role, seg),
       onError: (err) => console.error(`[translatorBot] ${sessionId}: ${err.message}`),
     });

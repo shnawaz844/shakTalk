@@ -16,11 +16,7 @@ import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { ModelSwitcher } from '../components/ModelSwitcher';
-import {
-  CallEngine,
-  getStoredEngine,
-  subscribeEngineChange,
-} from '../utils/enginePreference';
+import { CallEngine, getStoredEngine, subscribeEngineChange } from '../utils/enginePreference';
 import type { Gender } from './OnboardingScreen';
 
 interface ProfileScreenProps {
@@ -44,10 +40,10 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [engine, setEngine] = useState<CallEngine>('legacy');
 
-  useEffect(() => {
+  React.useEffect(() => {
     getStoredEngine().then(setEngine);
-    const unsubscribe = subscribeEngineChange(setEngine);
-    return unsubscribe;
+    const unsub = subscribeEngineChange(setEngine);
+    return unsub;
   }, []);
 
   const handleUpdateProfile = async () => {
@@ -261,6 +257,51 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
             <LanguageSelector label="" selected={nativeLanguage} onSelect={setNativeLanguage} />
           </View>
 
+          {/* Active Translation Model Section */}
+          <View style={styles.activeModelShowcase}>
+            <View style={styles.activeModelTopRow}>
+              <View style={styles.activeModelBadge}>
+                <View style={[styles.activeDot, { backgroundColor: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]} />
+                <Text style={[styles.activeModelTag, { color: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]}>
+                  ACTIVE TRANSLATION MODEL
+                </Text>
+              </View>
+              <View style={[styles.tierTag, { borderColor: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]}>
+                <Text style={[styles.tierTagText, { color: engine === 'livekit' ? '#2FE0A8' : '#39FF14' }]}>
+                  {engine === 'livekit' ? '3.5 LIVE' : '2.5 FLASH'}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.activeModelTitle}>
+              {engine === 'livekit' ? 'Gemini 3.5 Live Translate' : 'Gemini 2.5 Flash Native Audio'}
+            </Text>
+            <Text style={styles.activeModelSubtitle}>
+              {engine === 'livekit'
+                ? 'Ultra-low latency simultaneous speech translation over LiveKit WebRTC.'
+                : 'Turn-by-turn conversational translation over Vertex AI with full audio recording.'}
+            </Text>
+
+            <View style={styles.modelFeatureList}>
+              <View style={styles.modelFeatureItem}>
+                <Feather name="check-circle" size={12} color={engine === 'livekit' ? '#2FE0A8' : '#39FF14'} />
+                <Text style={styles.modelFeatureText}>
+                  {engine === 'livekit' ? 'Engine: LiveKit WebRTC Streaming' : 'Engine: Vertex AI Native Audio'}
+                </Text>
+              </View>
+              <View style={styles.modelFeatureItem}>
+                <Feather name="check-circle" size={12} color={engine === 'livekit' ? '#2FE0A8' : '#39FF14'} />
+                <Text style={styles.modelFeatureText}>
+                  {`Voice: Locked to ${gender === 'female' ? 'Female (Aoede)' : 'Male (Puck)'}`}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ marginTop: 14 }}>
+              <ModelSwitcher />
+            </View>
+          </View>
+
           <TouchableOpacity
             style={[styles.saveBtn, isUpdating && styles.saveBtnDisabled]}
             onPress={handleUpdateProfile}
@@ -355,90 +396,75 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#000', fontSize: 16, fontWeight: '800' },
-  modelHeroCard: {
+
+  activeModelShowcase: {
     backgroundColor: '#121714',
     borderRadius: 20,
     padding: 18,
-    marginBottom: 28,
-    borderWidth: 1.5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
-  modelHeroTopRow: {
+  activeModelTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  modelStatusBadge: {
+  activeModelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  modelStatusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  activeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
-  modelStatusText: {
-    fontSize: 10,
-    fontFamily: 'Courier',
+  activeModelTag: {
+    fontSize: 10.5,
     fontWeight: '700',
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
   },
-  tierBadge: {
+  tierTag: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
-  tierBadgeText: {
-    fontSize: 9.5,
-    fontFamily: 'Courier',
-    fontWeight: '700',
-    letterSpacing: 1,
+  tierTagText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
   },
-  modelHeroContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  modelIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modelHeroTitle: {
+  activeModelTitle: {
     color: '#FFFFFF',
     fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: -0.3,
+    fontWeight: '700',
+    marginBottom: 6,
   },
-  modelHeroEngine: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 12,
-    marginTop: 2,
+  activeModelSubtitle: {
+    color: '#8A9793',
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginBottom: 14,
   },
-  modelHeroDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    marginVertical: 14,
+  modelFeatureList: {
+    gap: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.04)',
   },
-  modelMetaRow: {
+  modelFeatureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: 7,
   },
-  modelMetaLabel: {
-    color: 'rgba(255, 255, 255, 0.3)',
-    fontSize: 10,
-    fontFamily: 'Courier',
-    letterSpacing: 1,
-  },
-  modelMetaValue: {
-    color: 'rgba(255, 255, 255, 0.7)',
-    fontSize: 11,
-    fontFamily: 'Courier',
+  modelFeatureText: {
+    color: '#D1DBD7',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

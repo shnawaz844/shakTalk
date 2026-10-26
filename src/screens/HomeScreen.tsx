@@ -519,14 +519,16 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                       </Text>
                     </View>
                   </TouchableOpacity>
-                  {/* Recordings button */}
-                  <TouchableOpacity
-                    style={styles.recordingsBtn}
-                    onPress={() => onOpenRecordings(conv.id, userId || '', conv.myLang, conv.partnerLang || '')}
-                    activeOpacity={0.75}
-                  >
-                    <Feather name="headphones" size={15} color={colors.signal} />
-                  </TouchableOpacity>
+                  {/* Recordings button: only in Gemini 2.5 Flash where audio is saved */}
+                  {engine === 'legacy' && (
+                    <TouchableOpacity
+                      style={styles.recordingsBtn}
+                      onPress={() => onOpenRecordings(conv.id, userId || '', conv.myLang, conv.partnerLang || '')}
+                      activeOpacity={0.75}
+                    >
+                      <Feather name="headphones" size={15} color={colors.signal} />
+                    </TouchableOpacity>
+                  )}
                 </View>
               ))}
             </View>
@@ -1038,4 +1040,25 @@ const styles = StyleSheet.create({
   convLangs: { color: colors.warm, fontSize: 14, fontWeight: '600' },
   convTime: { color: colors.muted, fontSize: 11 },
   convPreview: { color: colors.muted, fontSize: 13, marginTop: 4 },
+
+  modelHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    gap: 6,
+  },
+  modelHeaderDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  modelHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
 });
