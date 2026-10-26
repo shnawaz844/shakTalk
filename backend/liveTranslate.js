@@ -26,7 +26,9 @@ const { GoogleGenAI, Modality } = require('google-genai-v2');
 
 const MODEL = process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview';
 const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase();
-const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO === 'false';
+const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO_TARGET !== undefined
+  ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'true'
+  : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'false' : true);
 
 const INPUT_MIME = 'audio/pcm;rate=16000';
 
