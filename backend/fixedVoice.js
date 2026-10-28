@@ -12,7 +12,7 @@
  * The voice is chosen per listener language and the speaker's gender from
  * onboarding, so a male speaker always sounds like the same male voice.
  *
- * Trade-offs (why it is a switch, not the default):
+ * Trade-offs (TRANSLATION_VOICE=gemini switches back):
  *   + voice never changes during a call
  *   - adds roughly 0.3–0.8 s (text is spoken in phrases, plus TTS start-up)
  *   - the voice no longer sounds like the speaker
@@ -23,7 +23,7 @@
  * for the rest of the call, so a call never goes silent.
  *
  * Env:
- *   TRANSLATION_VOICE=fixed            turn this mode on (default: gemini = cloned voice)
+ *   TRANSLATION_VOICE=fixed|gemini     default fixed; gemini = Gemini's cloned voice
  *   TTS_VOICE_MALE=Charon              Chirp 3 HD voice names
  *   TTS_VOICE_FEMALE=Kore
  *   TTS_LOCATION / GOOGLE_CLOUD_PROJECT use the same service account as Vertex
@@ -37,7 +37,9 @@ try {
   // Only needed when TRANSLATION_VOICE=fixed; reported when used.
 }
 
-const FIXED_VOICE = (process.env.TRANSLATION_VOICE || 'gemini').toLowerCase() === 'fixed';
+// Default ON: Gemini's cloned voice was observed switching gender mid-call
+// (male speaker → female voice). TRANSLATION_VOICE=gemini restores the cloned voice.
+const FIXED_VOICE = (process.env.TRANSLATION_VOICE || 'fixed').toLowerCase() !== 'gemini';
 const VOICE_MALE = process.env.TTS_VOICE_MALE || 'Charon';
 const VOICE_FEMALE = process.env.TTS_VOICE_FEMALE || 'Kore';
 const OUTPUT_RATE = 24000;
