@@ -132,13 +132,16 @@ class LiveTranslateStream {
    * @param {(seg: {segId:string, originalText:string, translatedText:string, isFinal:boolean}) => void} opts.onText
    * @param {(err: Error) => void} [opts.onError]
    */
-  constructor({ label, inputLanguage, targetLanguage, onAudio, onText, onError }) {
+  constructor({ label, inputLanguage, targetLanguage, onAudio, onText, onError, onTranslationDelta, onTurnEnd }) {
     this.label = label;
     this.inputLanguage = inputLanguage || 'Unknown';
     this.targetLanguage = targetLanguage;
     this.targetCode = targetCodeFor(targetLanguage);
     this.onAudio = onAudio;
     this.onText = onText;
+    // Optional (fixed-voice mode): each new piece of translated text, and the end of a turn.
+    this.onTranslationDelta = onTranslationDelta || (() => { });
+    this.onTurnEnd = onTurnEnd || (() => { });
     this.onError = onError || (() => { });
 
     this.session = null;
@@ -343,6 +346,7 @@ class LiveTranslateStream {
     }
     if (sc.outputTranscription?.text) {
       this.seg.translatedText += sc.outputTranscription.text;
+      if (gen >= this.audioGen) this.onTranslationDelta(sc.outputTranscription.text);
       changed = true;
     }
     if (changed) {
@@ -351,6 +355,7 @@ class LiveTranslateStream {
       this.segTimer = setTimeout(() => this._finishSegment(), SEGMENT_IDLE_MS);
     }
     if (sc.turnComplete) {
+      this.onTurnEnd();
       this._finishSegment();
     }
   }

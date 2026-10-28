@@ -33,6 +33,7 @@ try {
 }
 const { LiveTranslateStream } = require('./liveTranslate');
 const { EchoGuard } = require('./echoGuard');
+const { FixedVoiceSpeaker, FIXED_VOICE } = require('./fixedVoice');
 // Server-side echo guard is OFF on this branch (phones' own echo cancellation
 // handles it). Set ECHO_GUARD=on to test it again, e.g. if the translated
 // voice starts to sound like the OTHER person (their translation leaking
@@ -117,9 +118,11 @@ class TranslatorBot {
    * @param {(role: 'host'|'guest', seg: object) => void} opts.onText   transcription of what `role` said
    * @param {(err: Error) => void} [opts.onError]
    */
-  constructor({ roomName, langs, onText, onError }) {
+  constructor({ roomName, langs, genders = {}, onText, onError }) {
     this.roomName = roomName;
     this.langs = langs;
+    this.genders = genders; // role → 'male' | 'female' | 'neutral' (onboarding), for fixed-voice mode
+    this.voices = {};       // role → FixedVoiceSpeaker (TRANSLATION_VOICE=fixed only)
     this.onText = onText;
     this.onError = onError || (() => {});
     this.room = null;
@@ -256,12 +259,26 @@ class TranslatorBot {
   _stream(role) {
     if (this.streams[role]) return this.streams[role];
     const listener = this.partnerOf(role);
+    if (FIXED_VOICE) {
+      this.voices[role] = new FixedVoiceSpeaker({
+        label: `${this.roomName.slice(0, 8)}:${role}→${this.langs[listener]}`,
+        languageName: this.langs[listener],
+        gender: this.genders[role],
+        onAudio: (pcm, rate) => this._play(role, pcm, rate),
+      });
+    }
     this.streams[role] = new LiveTranslateStream({
       label: `${this.roomName.slice(0, 8)}:${role}→${this.langs[listener]}`,
       inputLanguage: this.langs[role],
       targetLanguage: this.langs[listener],
-      onAudio: (pcm, rate) => this._play(role, pcm, rate),
+      // Gemini's cloned voice is played unless fixed-voice mode is on and working.
+      onAudio: (pcm, rate) => {
+        const v = this.voices[role];
+        if (!v || v.failed) this._play(role, pcm, rate);
+      },
       onText: (seg) => this.onText(role, seg),
+      onTranslationDelta: (text) => this.voices[role]?.push(text),
+      onTurnEnd: () => this.voices[role]?.flush(),
       onError: (err) => this.onError(err),
     });
     return this.streams[role];
@@ -388,6 +405,7 @@ class TranslatorBot {
     if (this.closed) return;
     this.closed = true;
     for (const s of Object.values(this.streams)) s.close();
+    for (const v of Object.values(this.voices)) v.close();
     for (const r of Object.values(this.readers)) { try { await r.cancel(); } catch (_) {} }
     try { await this.room?.disconnect(); } catch (_) {}
     console.log(`[translatorBot] ${this.roomName}: closed`);
