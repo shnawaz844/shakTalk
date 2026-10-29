@@ -253,6 +253,9 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (type === 'error') {
         setIsProcessing(false);
+        // A refused create/join (e.g. the call has ended) leaves no session: go
+        // back to idle so the Start button doesn't stay on "Connecting…".
+        setStatus(prev => (prev === 'connecting' ? 'idle' : prev));
         callbacks.onError?.(message.message);
       }
 
