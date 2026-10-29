@@ -27,14 +27,16 @@ const { GoogleGenAI, Modality } = require('google-genai-v2');
 const MODEL = process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview';
 const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase();
 // echoTargetLanguage: should the model also speak words that are ALREADY in
-// the listener's language (English words inside Hinglish, for example)? The
-// app blocks the partner's raw voice, so if this is off those words are lost.
-//   GEMINI_TRANSLATE_ECHO_TARGET=true|false  (clear name; default true)
+// the listener's language (English words inside Hinglish, for example)?
+// Default OFF: in two-phone tests (29 Oct 2026) turning it on made the model
+// mis-hear speech and output a different sentence. Trade-off when off: a
+// sentence spoken in the listener's own language is not repeated to them.
+//   GEMINI_TRANSLATE_ECHO_TARGET=true|false  (clear name; default false)
 //   GEMINI_TRANSLATE_ECHO                    (old name, value read inverted:
 //                                             "false" means ON) — still honoured
 const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO_TARGET !== undefined
   ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'true'
-  : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'false' : true);
+  : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'false' : false);
 
 
 // Optional cost saving: stop streaming the mic to Gemini while nobody is
