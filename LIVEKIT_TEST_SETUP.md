@@ -60,6 +60,9 @@ GEMINI_TRANSLATE_BACKEND=vertex          # or "apikey"
 # GEMINI_API_KEY=...                     # only for GEMINI_TRANSLATE_BACKEND=apikey
 # GEMINI_TRANSLATE_ECHO_TARGET=true      # default true: also speak words already in the listener's language
 #                                        # (replaces the old GEMINI_TRANSLATE_ECHO, whose value was read inverted)
+# TRANSLATION_VOICE=fixed                # default: one fixed voice per language + speaker gender (Cloud TTS);
+#                                        # needs "Cloud Text-to-Speech API" enabled. gemini = Gemini's cloned voice
+# TTS_VOICE_MALE=Charon / TTS_VOICE_FEMALE=Kore   # Chirp 3 HD voice names
 # GEMINI_TRANSLATE_SKIP_SILENCE=false    # true = don't stream silence to Gemini (saves input cost)
 
 # Login checks (see backend/auth.js)
