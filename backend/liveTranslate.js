@@ -26,7 +26,15 @@ const { GoogleGenAI, Modality } = require('google-genai-v2');
 
 const MODEL = process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview';
 const BACKEND = (process.env.GEMINI_TRANSLATE_BACKEND || 'vertex').toLowerCase();
-const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO === 'false';
+// echoTargetLanguage: should the model also speak words that are ALREADY in
+// the listener's language (English words inside Hinglish, for example)? The
+// app blocks the partner's raw voice, so if this is off those words are lost.
+//   GEMINI_TRANSLATE_ECHO_TARGET=true|false  (clear name; default true)
+//   GEMINI_TRANSLATE_ECHO                    (old name, value read inverted:
+//                                             "false" means ON) — still honoured
+const ECHO_TARGET = process.env.GEMINI_TRANSLATE_ECHO_TARGET !== undefined
+  ? process.env.GEMINI_TRANSLATE_ECHO_TARGET === 'true'
+  : (process.env.GEMINI_TRANSLATE_ECHO !== undefined ? process.env.GEMINI_TRANSLATE_ECHO === 'false' : true);
 
 
 // Optional cost saving: stop streaming the mic to Gemini while nobody is
@@ -124,13 +132,16 @@ class LiveTranslateStream {
    * @param {(seg: {segId:string, originalText:string, translatedText:string, isFinal:boolean}) => void} opts.onText
    * @param {(err: Error) => void} [opts.onError]
    */
-  constructor({ label, inputLanguage, targetLanguage, onAudio, onText, onError }) {
+  constructor({ label, inputLanguage, targetLanguage, onAudio, onText, onError, onTranslationDelta, onTurnEnd }) {
     this.label = label;
     this.inputLanguage = inputLanguage || 'Unknown';
     this.targetLanguage = targetLanguage;
     this.targetCode = targetCodeFor(targetLanguage);
     this.onAudio = onAudio;
     this.onText = onText;
+    // Optional (fixed-voice mode): each new piece of translated text, and the end of a turn.
+    this.onTranslationDelta = onTranslationDelta || (() => { });
+    this.onTurnEnd = onTurnEnd || (() => { });
     this.onError = onError || (() => { });
 
     this.session = null;
@@ -139,6 +150,8 @@ class LiveTranslateStream {
     this.generation = 0;
     this._gen = 0;
     this.resumeHandle = null;
+    this.audioGen = 0;   // which connection's audio is currently being played (see _onMessage)
+    this.lastRate = 24000;
     this.useResumption = process.env.GEMINI_TRANSLATE_RESUMPTION !== 'false';
     this.pending = [];
     this.retryAfter = 0;
@@ -289,6 +302,30 @@ class LiveTranslateStream {
     if (sc.modelTurn?.parts) {
       for (const part of sc.modelTurn.parts) {
         if (part.inlineData?.data) {
+          // After a goAway the old and the new Gemini connection are both open
+          // for a few seconds. Both can send audio, and playing both made the
+          // translation overlap/stretch ("slow motion") and switch voices back
+          // and forth. Rule: the old connection may finish its sentence until
+          // the new one produces its first audio; from then on only the newest
+          // connection is played.
+          if (gen < this.audioGen) continue;
+          if (gen > this.audioGen) {
+            if (this.audioGen) {
+              console.log(`[voice] ${this.label}: audio now comes from a new Gemini connection (#${gen}); the cloned voice can sound different for the first few seconds`);
+            }
+            this.audioGen = gen;
+          }
+
+          // Output sample rate: Gemini says it in the mimeType
+          // ("audio/pcm;rate=24000"). The call track is built for 24 kHz; any
+          // other rate would play at the wrong speed, so log it loudly.
+          const rateMatch = /rate=(\d+)/.exec(part.inlineData.mimeType || '');
+          const rate = rateMatch ? Number(rateMatch[1]) : 24000;
+          if (rate !== this.lastRate) {
+            if (rate !== 24000) console.warn(`[voice] ${this.label}: Gemini sent audio at ${rate} Hz (expected 24000) — mimeType "${part.inlineData.mimeType}"`);
+            this.lastRate = rate;
+          }
+
           const pcm = Buffer.from(part.inlineData.data, 'base64');
 
           if (this.awaitingFirstAudio) {
@@ -296,8 +333,8 @@ class LiveTranslateStream {
             console.log(`[LATENCY][translate] ${this.label}: translated audio started ${Date.now() - this.speechStartAt}ms after the speaker started talking`);
           }
 
-          // Directly stream translated audio to listener in real time (zero buffering)
-          this.onAudio(pcm);
+          // Stream translated audio to the listener (translatorBot paces it).
+          this.onAudio(pcm, rate);
         }
       }
     }
@@ -309,6 +346,7 @@ class LiveTranslateStream {
     }
     if (sc.outputTranscription?.text) {
       this.seg.translatedText += sc.outputTranscription.text;
+      if (gen >= this.audioGen) this.onTranslationDelta(sc.outputTranscription.text);
       changed = true;
     }
     if (changed) {
@@ -317,6 +355,7 @@ class LiveTranslateStream {
       this.segTimer = setTimeout(() => this._finishSegment(), SEGMENT_IDLE_MS);
     }
     if (sc.turnComplete) {
+      this.onTurnEnd();
       this._finishSegment();
     }
   }
