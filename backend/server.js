@@ -6,6 +6,7 @@ const { warmupSession, feedAudioChunk, closeSession } = require('./geminiService
 const { supabase } = require('./supabaseClient');
 const { uploadAudio } = require('./storageService');
 const { APP_NAME } = require('./app-config');
+const { serveWebsite, storeButtons } = require('./website');
 const { TranslatorBot, createToken, LIVEKIT_ENABLED, LIVEKIT_URL } = require('./translatorBot');
 const { verifyClerkToken, requireUser, bearerToken, isValidUserId, AuthError, AUTH_ENFORCE } = require('./auth');
 const { signedUrlFor } = require('./storageService');
@@ -444,6 +445,13 @@ const httpServer = http.createServer(async (req, res) => {
       cursor: pointer;
       white-space: nowrap;
     }
+    .store-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+    .store-btn { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 11px 16px; border-radius: 14px; background: #fff; color: #0A0D0C; text-decoration: none; text-align: left; }
+    .store-btn svg { width: 24px; height: 24px; flex: none; }
+    .store-btn small { display: block; font-size: 11px; opacity: .75; }
+    .store-btn strong { display: block; font-size: 16px; }
+    .store-btn.soon { background: transparent; color: #9BA8A4; border: 1px solid rgba(255,255,255,.12); }
+    .home-link { display: block; margin-top: 18px; color: #2FE0A8; font-size: 13px; text-decoration: none; }
     .instructions {
       color: #63726E;
       font-size: 13px;
@@ -463,22 +471,8 @@ const httpServer = http.createServer(async (req, res) => {
     </a>
 
     <div id="downloadSection" style="display:none;">
-      <div id="comingSoonBox" style="
-        background: rgba(47, 224, 168, 0.06);
-        border: 1px solid rgba(47, 224, 168, 0.2);
-        border-radius: 14px;
-        padding: 18px 16px;
-        margin-bottom: 12px;
-        text-align: center;
-      ">
-        <div style="font-size: 22px; margin-bottom: 8px;">🚀</div>
-        <div style="color: #2FE0A8; font-weight: 700; font-size: 15px; margin-bottom: 6px;">App Coming Soon!</div>
-        <div style="color: #9BA8A4; font-size: 13px; line-height: 1.5;">
-          <strong style="color:#fff;">${APP_NAME}</strong> will be available on the<br>
-          <strong style="color:#fff;">App Store</strong> &amp; <strong style="color:#fff;">Google Play Store</strong> shortly.<br><br>
-          Stay tuned - we'll be live soon! 🎉
-        </div>
-      </div>
+      <p style="color:#9BA8A4;font-size:14px;margin:0 0 14px;">Install <strong style="color:#fff;">${APP_NAME}</strong>, then tap the invite link again.</p>
+      ${storeButtons()}
     </div>
 
     <div class="divider"></div>
@@ -491,6 +485,7 @@ const httpServer = http.createServer(async (req, res) => {
     <div class="instructions">
       If you just installed the app, open it & tap <strong>"Enter code"</strong> or scan the host's QR code.
     </div>
+    <a class="home-link" href="/">What is ${APP_NAME}?</a>
   </div>
 
   <script>
@@ -527,7 +522,7 @@ const httpServer = http.createServer(async (req, res) => {
       if (!appOpened && !document.hidden) {
         var statusEl = document.getElementById("statusText");
         if (statusEl) {
-          statusEl.innerHTML = "Don't have <strong>${APP_NAME}</strong> installed yet?<br>The app will be available on the App Store &amp; Google Play soon!";
+          statusEl.innerHTML = "Don't have <strong>${APP_NAME}</strong> installed yet?";
         }
         var dlSection = document.getElementById("downloadSection");
         if (dlSection) {
@@ -540,6 +535,9 @@ const httpServer = http.createServer(async (req, res) => {
 </html>`);
     return;
   }
+
+  // Public website: landing page, privacy, terms, support, app-link files.
+  if (serveWebsite(req, res)) return;
 
   res.writeHead(404); res.end('Not found');
 });

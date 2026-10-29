@@ -34,7 +34,11 @@
         "UIBackgroundModes": [
           "audio"
         ]
-      }
+      },
+      "associatedDomains": [
+        "applinks:www.shaktalk.com",
+        "applinks:shaktalk.com"
+      ]
     },
     "android": {
       "usesCleartextTraffic": true,
