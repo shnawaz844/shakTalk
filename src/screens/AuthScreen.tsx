@@ -17,6 +17,7 @@ import { useSignIn, useSignUp, useOAuth } from '@clerk/clerk-expo';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { APP_NAME_LOWER, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO } from '../config';
+import { TERMS_URL, PRIVACY_URL, pendingAgreement } from '../legal/legal';
 WebBrowser.maybeCompleteAuthSession();
 
 export function AuthScreen() {
@@ -32,6 +33,13 @@ export function AuthScreen() {
   const [flowType, setFlowType] = useState<'signIn' | 'signUp' | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Terms must be accepted before signing up or in (email, Google or Apple).
+  const [agreed, setAgreed] = useState(false);
+  const requireAgreement = useCallback(() => {
+    if (agreed) { pendingAgreement.acceptedAt = new Date().toISOString(); return true; }
+    setErrorMsg('Please accept the Terms of Use and Privacy Policy to continue.');
+    return false;
+  }, [agreed]);
 
   // Warm up Android's Chrome Custom Tabs as soon as the auth screen appears.
   // Cold-starting Chrome Custom Tabs takes 2-4 seconds; pre-warming it here
@@ -46,6 +54,7 @@ export function AuthScreen() {
   }, []);
 
   const handleOAuth = useCallback(async (strategy: 'google' | 'apple') => {
+    if (!requireAgreement()) return;
     try {
       setLoading(true);
       setErrorMsg(null);
@@ -72,6 +81,7 @@ export function AuthScreen() {
   }, [startGoogleFlow, startAppleFlow]);
 
   const handleContinue = async () => {
+    if (!requireAgreement()) return;
     if (!isSignInLoaded || !isSignUpLoaded) return;
     if (!signIn || !signUp) {
       setErrorMsg('Auth not ready. Please restart the app.');
@@ -202,10 +212,30 @@ export function AuthScreen() {
 
           {!pendingVerification ? (
             <>
+              {/* Agreement: required before any sign-up / sign-in method */}
+              <TouchableOpacity
+                style={styles.agreeRow}
+                onPress={() => { setAgreed((a) => !a); setErrorMsg(null); }}
+                activeOpacity={0.8}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: agreed }}
+              >
+                <View style={[styles.agreeBox, agreed && styles.agreeBoxOn]}>
+                  {agreed && <Feather name="check" size={13} color="#04231A" />}
+                </View>
+                <Text style={styles.agreeText}>
+                  I am 18 or older and agree to the{' '}
+                  <Text style={styles.agreeLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>
+                  {' '}and{' '}
+                  <Text style={styles.agreeLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
+                  , including AI processing of my voice to translate calls.
+                </Text>
+              </TouchableOpacity>
+
               {/* OAuth Buttons */}
               <View style={styles.oauthContainer}>
                 <TouchableOpacity
-                  style={styles.oauthBtn}
+                  style={[styles.oauthBtn, !agreed && styles.dimmed]}
                   onPress={() => handleOAuth('google')}
                   disabled={loading}
                 >
@@ -214,7 +244,7 @@ export function AuthScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.oauthBtn, { marginTop: 12 }]}
+                  style={[styles.oauthBtn, { marginTop: 12 }, !agreed && styles.dimmed]}
                   onPress={() => handleOAuth('apple')}
                   disabled={loading}
                 >
@@ -251,7 +281,7 @@ export function AuthScreen() {
 
               {/* Continue Button */}
               <TouchableOpacity
-                style={styles.primaryBtn}
+                style={[styles.primaryBtn, !agreed && styles.dimmed]}
                 onPress={handleContinue}
                 disabled={loading}
                 activeOpacity={0.8}
@@ -315,6 +345,15 @@ export function AuthScreen() {
 }
 
 const styles = StyleSheet.create({
+  agreeRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 20, paddingHorizontal: 2 },
+  agreeBox: {
+    width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.4)',
+    alignItems: 'center', justifyContent: 'center', marginTop: 1,
+  },
+  agreeBoxOn: { backgroundColor: '#2FE0A8', borderColor: '#2FE0A8' },
+  agreeText: { flex: 1, color: 'rgba(255,255,255,0.7)', fontSize: 13, lineHeight: 19 },
+  agreeLink: { color: '#2FE0A8', textDecorationLine: 'underline' },
+  dimmed: { opacity: 0.45 },
   container: { flex: 1, backgroundColor: '#0A0A0A' },
   keyboardView: { flex: 1 },
   scroll: { padding: 24, flexGrow: 1, justifyContent: 'center' },

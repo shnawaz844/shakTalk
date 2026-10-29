@@ -11,6 +11,8 @@ import { CALL_ENGINE, API_URL } from './src/config';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { ConsentScreen, saveConsent } from './src/screens/ConsentScreen';
+import { hasAcceptedCurrentTerms, pendingAgreement } from './src/legal/legal';
 import { ConversationDetailScreen } from './src/screens/ConversationDetailScreen';
 import { AudioRecordingsScreen } from './src/screens/AudioRecordingsScreen';
 import { PlanSelectionScreen } from './src/screens/PlanSelectionScreen';
@@ -36,6 +38,30 @@ interface SessionParams {
 const publishableKey =
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
   'pk_test_cHJvcGVyLWphZ3Vhci04NS5jbGVyay5hY2NvdW50cy5kZXYk';
+
+/**
+ * Signed-in users must have accepted the current Terms before using the app.
+ * If they ticked the box on the sign-in screen, that is saved here silently;
+ * otherwise (existing users, or after the terms change) ConsentScreen asks.
+ */
+function ConsentGate({ children }: { children: React.ReactNode }) {
+  const { user } = useUser();
+  const { getToken } = useAuth();
+  const accepted = hasAcceptedCurrentTerms(user?.unsafeMetadata);
+  const [autoSaving, setAutoSaving] = useState(!accepted && !!pendingAgreement.acceptedAt);
+
+  useEffect(() => {
+    if (accepted || !user || !pendingAgreement.acceptedAt) return;
+    pendingAgreement.acceptedAt = null;
+    saveConsent(user, getToken, 'signup')
+      .catch((e) => console.warn('[Consent] auto-save failed:', e?.message))
+      .finally(() => setAutoSaving(false));
+  }, [accepted, user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (accepted) return <>{children}</>;
+  if (autoSaving) return <View style={{ flex: 1, backgroundColor: '#0A0D0C' }} />;
+  return <ConsentScreen />;
+}
 
 function MainApp() {
   const { user } = useUser();
@@ -168,7 +194,9 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
     return (
       <>
         <StatusBar style="light" hidden={false} />
-        <MainApp />
+        <ConsentGate>
+          <MainApp />
+        </ConsentGate>
       </>
     );
   }

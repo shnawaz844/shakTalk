@@ -6,7 +6,9 @@ const { warmupSession, feedAudioChunk, closeSession } = require('./geminiService
 const { supabase } = require('./supabaseClient');
 const { uploadAudio } = require('./storageService');
 const { APP_NAME } = require('./app-config');
-const { serveWebsite, storeButtons } = require('./website');
+const { serveWebsite, storeButtons, SITE } = require('./website');
+const crypto = require('crypto');
+const { deleteAccount } = require('./accountService');
 const { TranslatorBot, createToken, LIVEKIT_ENABLED, LIVEKIT_URL } = require('./translatorBot');
 const { verifyClerkToken, requireUser, bearerToken, isValidUserId, AuthError, AUTH_ENFORCE } = require('./auth');
 const { signedUrlFor } = require('./storageService');
@@ -33,6 +35,27 @@ if (!CLERK_SECRET_KEY) {
 // create a token for any user — never decode-only again.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Short join codes ("K7P2QX") that people can type, mapped to the session id.
+// No 0/O, 1/I/L: easy to read out over the phone. ~887 million combinations;
+// codes live only while the call exists.
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const shortCodes = new Map(); // code -> sessionId
+function newShortCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    let code = '';
+    for (let i = 0; i < 6; i++) code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+    if (!shortCodes.has(code)) return code;
+  }
+  return null;
+}
+/** Session id from either a full session id or a short code (any case, spaces/dashes ignored). */
+function resolveSessionId(input) {
+  if (typeof input !== 'string') return null;
+  if (UUID_RE.test(input)) return input;
+  const code = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return shortCodes.get(code) || null;
+}
 const MAX_BODY_BYTES = 64 * 1024;
 
 /** Reads a JSON request body, refusing anything larger than MAX_BODY_BYTES. */
@@ -137,6 +160,46 @@ const httpServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
       sendHttpError(res, err, '/clerk/update-profile');
+    }
+    return;
+  }
+
+  // ── POST /user/consent ─────────────────────────────────────────────────────
+  // Records that the signed-in user accepted the Terms/Privacy version shown in
+  // the app. Stored in Clerk publicMetadata with the SERVER's time, which the
+  // user cannot edit (the app's own copy in unsafeMetadata can be).
+  if (req.method === 'POST' && req.url === '/user/consent') {
+    try {
+      const userId = await verifyClerkToken(bearerToken(req)); // strict: no fallback
+      const body = await readJsonBody(req);
+      const version = typeof body.version === 'string' ? body.version.slice(0, 32) : '';
+      if (!version) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'version is required.' })); return; }
+      const record = {
+        version,
+        acceptedAt: new Date().toISOString(),
+        platform: typeof body.platform === 'string' ? body.platform.slice(0, 16) : undefined,
+        source: typeof body.source === 'string' ? body.source.slice(0, 32) : undefined,
+      };
+      if (CLERK_SECRET_KEY) await updateClerkMetadata(userId, { consent: record });
+      console.log(`[consent] ${userId} accepted terms ${version} (${record.source || 'app'}, ${record.platform || '?'})`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      sendHttpError(res, err, '/user/consent');
+    }
+    return;
+  }
+
+  // ── DELETE /account (or POST /account/delete) ──────────────────────────────
+  // Deletes the signed-in user's account and data (see accountService.js).
+  if ((req.method === 'DELETE' && req.url === '/account') || (req.method === 'POST' && req.url === '/account/delete')) {
+    try {
+      const userId = await verifyClerkToken(bearerToken(req)); // strict: never the legacy userId fallback
+      const result = await deleteAccount(userId);
+      res.writeHead(result.errors.length ? 207 : 200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: !result.errors.length, ...result }));
+    } catch (err) {
+      sendHttpError(res, err, '/account');
     }
     return;
   }
@@ -336,6 +399,16 @@ const httpServer = http.createServer(async (req, res) => {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Join ${APP_NAME} Call</title>
+  <meta name="description" content="Tap to join a live-translated call: you each speak your own language.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="${APP_NAME}">
+  <meta property="og:title" content="Join my ${APP_NAME} call">
+  <meta property="og:description" content="Tap to join. We each speak our own language and ${APP_NAME} translates live.">
+  <meta property="og:image" content="${SITE.SITE_URL}/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="robots" content="noindex">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -913,6 +986,7 @@ function cleanupSession(sessionId, disconnectedRole) {
   dbEndConversation(sessionId)
     .catch(e => console.error('[db] endConversation failed:', e.message))
     .finally(() => conversationIds.delete(sessionId));
+  if (session && session.shortCode) shortCodes.delete(session.shortCode);
   sessions.delete(sessionId);
   console.log(`[server] Session ${sessionId} cleaned up (${disconnectedRole} disconnected).`);
 }
@@ -998,7 +1072,9 @@ wss.on('connection', (ws) => {
         ? (process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview')
         : (process.env.GEMINI_LIVE_MODEL || 'gemini-live-2.5-flash-native-audio');
       console.log(`[server] Host created session ${sessionId} [engine=${hostEngine}, model=${activeModel}] at ${session.createdAt} (Host lang: ${lang}, userId: ${userId})`);
-      send(ws, { type: 'session_created', sessionId });
+      const shortCode = newShortCode();
+      if (shortCode) { shortCodes.set(shortCode, sessionId); session.shortCode = shortCode; }
+      send(ws, { type: 'session_created', sessionId, shortCode });
 
       if (userId) {
         dbCreateConversation(sessionId, userId, lang)
@@ -1009,8 +1085,10 @@ wss.on('connection', (ws) => {
 
     // ── JOIN SESSION (Guest) ─────────────────────────────────────────────────
     if (type === 'join_session') {
-      const { sessionId, lang, speakerGender, speakerAge } = message;
-      const session = sessions.get(sessionId);
+      const { lang, speakerGender, speakerAge } = message;
+      // Accepts the full session id (invite link / QR) or the short code.
+      const sessionId = resolveSessionId(message.sessionId);
+      const session = sessionId ? sessions.get(sessionId) : null;
 
       if (!session) { send(ws, { type: 'error', message: 'Call not found. Ask your partner for a new invite.' }); return; }
       if (session.host === ws) { send(ws, { type: 'error', message: `Cannot join your own session as guest on the same connection.` }); return; }

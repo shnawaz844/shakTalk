@@ -40,6 +40,8 @@ interface WebSocketContextType {
   status: ConnectionStatus;
   role: 'host' | 'guest' | null;
   sessionId: string | null;
+  /** Short code people can type to join (host only), e.g. "K7P2QX". */
+  shortCode: string | null;
   myLang: string | null;
   partnerLang: string | null;
   isProcessing: boolean;
@@ -104,6 +106,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [status, setStatus] = useState<ConnectionStatus>('idle');
   const [role, setRole] = useState<'host' | 'guest' | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [shortCode, setShortCode] = useState<string | null>(null);
   const [myLang, setMyLang] = useState<string | null>(null);
   const [partnerLang, setPartnerLang] = useState<string | null>(null);
   const [callEngine, setCallEngine] = useState<CallEngine>(getCurrentEngine());
@@ -136,12 +139,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const elapsed = Date.now() - connectStartTimeRef.current;
       console.log(`[LATENCY][CALL_CONNECT] Host session created in ${elapsed}ms (sessionId=${message.sessionId}). Waiting for partner...`);
       setSessionId(message.sessionId);
+      setShortCode(message.shortCode || null);
       setRole('host');
       setStatus('waiting');
       setIsGeminiReady(false);
     }
 
     if (type === 'session_ready') {
+      // A guest who joined with a short code learns the real session id here.
+      if (message.sessionId) setSessionId(message.sessionId);
       const elapsed = Date.now() - connectStartTimeRef.current;
       console.log(`[LATENCY][CALL_CONNECT] Partner joined & peer handshake ready in ${elapsed}ms (partnerLang=${message.partnerLang}, engine=${message.engine}). Waiting for Gemini AI warmup...`);
       setStatus('connected');
@@ -394,6 +400,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setStatus('idle');
     setRole(null);
     setSessionId(null);
+    setShortCode(null);
     setMyLang(null);
     setPartnerLang(null);
     setIsProcessing(false);
@@ -414,6 +421,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         status,
         role,
         sessionId,
+        shortCode,
         myLang,
         partnerLang,
         callEngine,

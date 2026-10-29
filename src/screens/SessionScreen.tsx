@@ -24,6 +24,7 @@ import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { Alert } from '../utils/alertCompat';
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
+import { AiCallNotice, AiTranslationLabel } from '../components/AiCallNotice';
 import { APP_NAME_LOWER } from '../config';
 
 const KEEP_AWAKE_TAG = `${APP_NAME_LOWER}-call`;
@@ -93,6 +94,8 @@ export function SessionScreen({
   const [hasError, setHasError] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [durationSec, setDurationSec] = useState(0);
+  // AI translation notice, shown at the start of every call (covers the ~1 s connect).
+  const [showAiNotice, setShowAiNotice] = useState(true);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   // Mirrors isSpeakerOn so the stable handleChunk callback can read the
   // latest speaker-routing state without needing to be recreated.
@@ -830,6 +833,7 @@ export function SessionScreen({
                 </View>
                 <Text style={styles.timer}>{formatDuration(durationSec)}</Text>
               </View>
+              <AiTranslationLabel />
 
               <View style={styles.stageMid}>
                 <View style={styles.orbWrap}>
@@ -960,6 +964,7 @@ export function SessionScreen({
           {transcriptPanel}
         </View>
       )}
+      {showAiNotice && <AiCallNotice onClose={() => setShowAiNotice(false)} />}
     </SafeAreaView>
   );
 }
