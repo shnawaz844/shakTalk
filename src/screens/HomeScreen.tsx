@@ -38,6 +38,10 @@ import {
   CallEngine,
 } from '../utils/enginePreference';
 
+// Invite links already acted on in this app run (kept outside the component so
+// it survives Home being re-created when returning from a call).
+const handledInviteIds = new Set<string>();
+
 interface HomeScreenProps {
   onSessionReady: (params: {
     sessionId: string;
@@ -208,6 +212,11 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     if (!url) return;
     const incomingSid = extractSessionIdFromUrl(url);
     if (!incomingSid) return;
+    // Each invite link is used once per app run. Home is re-created after every
+    // call, and getInitialURL() keeps returning the link that opened the app,
+    // so without this the ended call was joined again ("Call not found").
+    if (handledInviteIds.has(incomingSid)) return;
+    handledInviteIds.add(incomingSid);
 
     if (pendingJoinRef.current === incomingSid || sessionId === incomingSid) {
       return;

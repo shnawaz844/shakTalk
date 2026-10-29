@@ -70,14 +70,18 @@ const TTS_LOCALES = {
 // words have collected, or when no new text came for a moment.
 const SENTENCE_END = /[.!?।॥؟。！？]\s*$/;
 const CLAUSE_END = /[,;:،、，；]\s*$/;
-const MIN_CLAUSE_CHARS = 25;   // don't speak tiny fragments like "So,"
+const MIN_CLAUSE_CHARS = 15;   // don't speak tiny fragments like "So,"
 const MAX_CHARS = 120;         // long run-on text: speak it anyway
-const IDLE_FLUSH_MS = 350;     // no new text for this long: speak what we have
+const IDLE_FLUSH_MS = 250;     // no new text for this long: speak what we have
 // A TTS stream is kept open across phrases (same voice, no start-up cost) and
 // closed after this long without text. Google closes idle streams itself.
 const STREAM_IDLE_MS = 4000;
 
 let client = null;
+// Result of the start-up check: null = not known yet, true = works, false = doesn't.
+let ttsHealthy = null;
+// If TTS sends no audio this long after the first phrase, fall back to Gemini's voice.
+const FIRST_AUDIO_TIMEOUT_MS = 3000;
 function getClient() {
   if (!client) client = new TextToSpeechClient();
   return client;
@@ -102,10 +106,12 @@ class FixedVoiceSpeaker {
     this.call = null;
     this.idleTimer = null;
     this.failed = false;
+    this.gotAudio = false; // any TTS audio received yet in this call
     this.closed = false;
 
     if (!TextToSpeechClient) this._fail('@google-cloud/text-to-speech is not installed (cd backend && npm install)');
     else if (!this.voiceName) this._fail(`no TTS voice for "${languageName}"`);
+    else if (ttsHealthy === false) this._fail('Cloud Text-to-Speech failed the start-up check (see the [fixedVoice] line at server start)');
     else console.log(`[fixedVoice] ${label}: voice ${this.voiceName}`);
   }
 
@@ -135,6 +141,9 @@ class FixedVoiceSpeaker {
     const text = this.text.trim();
     this.text = '';
     if (!text || this.failed || this.closed) return;
+    // Only open TTS streams once the start-up check has passed: without valid
+    // credentials the Google client throws outside our handlers.
+    if (ttsHealthy !== true) { this._fail(ttsHealthy === false ? 'Cloud Text-to-Speech is not available' : 'Cloud Text-to-Speech start-up check has not finished'); return; }
     try {
       this._ensureCall().write({ input: { text } });
     } catch (err) {
@@ -142,6 +151,11 @@ class FixedVoiceSpeaker {
       return;
     }
     this._armIdle();
+    if (!this.gotAudio && !this.firstAudioTimer) {
+      this.firstAudioTimer = setTimeout(() => {
+        if (!this.gotAudio) this._fail(`no audio from Cloud Text-to-Speech within ${FIRST_AUDIO_TIMEOUT_MS / 1000} s`);
+      }, FIRST_AUDIO_TIMEOUT_MS);
+    }
   }
 
   _ensureCall() {
@@ -150,6 +164,7 @@ class FixedVoiceSpeaker {
     this.call = call;
     call.on('data', (res) => {
       if (res.audioContent && res.audioContent.length && !this.closed) {
+        if (!this.gotAudio) { this.gotAudio = true; clearTimeout(this.firstAudioTimer); console.log(`[fixedVoice] ${this.label}: speaking with ${this.voiceName}`); }
         this.onAudio(Buffer.from(res.audioContent), OUTPUT_RATE);
       }
     });
@@ -157,7 +172,9 @@ class FixedVoiceSpeaker {
       if (this.call === call) this.call = null;
       // Code 1 = cancelled by us; idle/deadline closes just mean "open a new one next time".
       if (err.code === 1 || /idle|deadline|timeout/i.test(err.message)) return;
-      if (/PERMISSION|not been used|disabled|NOT_FOUND|INVALID_ARGUMENT/i.test(err.message)) this._fail(err.message);
+      // Any error before the first audio means TTS isn't usable here (API off,
+      // missing credentials, unknown voice): fall back so the call isn't silent.
+      if (!this.gotAudio || /PERMISSION|not been used|disabled|NOT_FOUND|INVALID_ARGUMENT|credentials/i.test(err.message)) this._fail(err.message);
       else console.warn(`[fixedVoice] ${this.label}: TTS stream error: ${err.message}`);
     });
     call.on('end', () => { if (this.call === call) this.call = null; });
@@ -185,8 +202,28 @@ class FixedVoiceSpeaker {
   close() {
     this.closed = true;
     if (this.flushTimer) clearTimeout(this.flushTimer);
+    clearTimeout(this.firstAudioTimer);
     this._endCall();
   }
 }
+
+// One check at server start, so the log says plainly whether fixed voice works.
+function selfTest() {
+  if (!FIXED_VOICE) { console.log('[fixedVoice] off (TRANSLATION_VOICE=gemini): calls use Gemini\'s own voice'); return; }
+  if (!TextToSpeechClient) { console.warn('[fixedVoice] NOT WORKING: @google-cloud/text-to-speech is not installed. Run: cd backend && npm install'); return; }
+  // getProjectId() first: without credentials, calling listVoices directly
+  // throws inside the Google client and would crash the server.
+  let c;
+  try { c = getClient(); } catch (err) { ttsHealthy = false; console.warn(`[fixedVoice] NOT WORKING: ${err.message}`); return; }
+  Promise.resolve().then(() => c.getProjectId())
+    .then(() => c.listVoices({ languageCode: 'en-US' }))
+    .then(([res]) => {
+      ttsHealthy = true;
+      const n = (res.voices || []).filter((v) => /Chirp3-HD/.test(v.name)).length;
+      console.log(`[fixedVoice] ready: Cloud Text-to-Speech reachable (${n} Chirp 3 HD en-US voices)`);
+    })
+    .catch((err) => { ttsHealthy = false; console.warn(`[fixedVoice] NOT WORKING, calls will use Gemini's own voice: ${err.message}\n  -> enable "Cloud Text-to-Speech API" in the Google Cloud project and check the service account credentials`); });
+}
+if (process.env.NODE_ENV !== 'test') selfTest();
 
 module.exports = { FixedVoiceSpeaker, FIXED_VOICE, TTS_LOCALES };
