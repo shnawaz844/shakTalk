@@ -91,6 +91,7 @@ a:hover { text-decoration: underline; }
 .eyebrow .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 10px var(--brand); }
 h1 { font-size: clamp(38px, 6vw, 62px); line-height: 1.05; letter-spacing: -1.5px; margin: 20px 0 18px; font-weight: 800; }
 h1 em { font-style: normal; color: var(--brand); }
+.tagline { font-size: clamp(19px, 2.4vw, 23px); font-weight: 600; color: var(--text); margin: -4px 0 14px; max-width: 540px; line-height: 1.35; text-wrap: balance; }
 .lead { font-size: 19px; color: var(--muted); max-width: 540px; margin: 0 0 30px; }
 .hero-note { margin-top: 18px; color: var(--faint); font-size: 14px; }
 
