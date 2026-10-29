@@ -58,7 +58,7 @@ GEMINI_TRANSLATE_MODEL=gemini-3.5-live-translate-preview
 GEMINI_TRANSLATE_BACKEND=vertex          # or "apikey"
 # GEMINI_TRANSLATE_LOCATION=asia-south1  # defaults to GOOGLE_CLOUD_LOCATION
 # GEMINI_API_KEY=...                     # only for GEMINI_TRANSLATE_BACKEND=apikey
-# GEMINI_TRANSLATE_ECHO_TARGET=true      # default true: also speak words already in the listener's language
+# GEMINI_TRANSLATE_ECHO_TARGET=false     # default false (true caused wrong translations in tests): also speak words already in the listener's language
 #                                        # (replaces the old GEMINI_TRANSLATE_ECHO, whose value was read inverted)
 # TRANSLATION_VOICE=fixed                # default: one fixed voice per language + speaker gender (Cloud TTS);
 #                                        # needs "Cloud Text-to-Speech API" enabled. gemini = Gemini's cloned voice
