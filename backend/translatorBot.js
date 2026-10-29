@@ -264,7 +264,8 @@ class TranslatorBot {
         label: `${this.roomName.slice(0, 8)}:${role}→${this.langs[listener]}`,
         languageName: this.langs[listener],
         gender: this.genders[role],
-        onAudio: (pcm, rate) => this._play(role, pcm, rate),
+        // TTS audio arrives faster than real time in one stream, so it needs no cushion.
+        onAudio: (pcm, rate) => this._play(role, pcm, rate, { cushion: false }),
       });
     }
     this.streams[role] = new LiveTranslateStream({
@@ -325,7 +326,7 @@ class TranslatorBot {
    *                              Raise to 240–300 if "[playout] ... underruns"
    *                              keeps showing up in the log.
    */
-  _play(role, pcm, rate = OUTPUT_RATE) {
+  _play(role, pcm, rate = OUTPUT_RATE, { cushion = true } = {}) {
     const out = this.outputs[role];
     if (!out || this.closed) return;
     // Copy into an aligned Int16Array (base64-decoded Buffers can start at an
@@ -342,7 +343,7 @@ class TranslatorBot {
     // While a cushion is being collected, everything joins the cushion so the
     // order never changes.
     const playing = out.source.queuedDuration > 0 || out.pumping;
-    if (out.hold.length === 0 && (playing || PREBUFFER_MS <= 0)) {
+    if (out.hold.length === 0 && (playing || PREBUFFER_MS <= 0 || !cushion)) {
       this._enqueue(out, samples);
       return;
     }
