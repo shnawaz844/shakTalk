@@ -62,7 +62,6 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
   const [hasError, setHasError] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [durationSec, setDurationSec] = useState(0);
-  const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const processedRef = useRef<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
 
@@ -125,11 +124,11 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
     call.setMicEnabled(!next);
   }, [hasError, isPaused, call]);
 
+  // The hook owns the speaker state, so the button always shows the real route choice.
+  const isSpeakerOn = call.speakerOn;
   const toggleSpeaker = useCallback(() => {
-    const next = !isSpeakerOn;
-    setIsSpeakerOn(next);
-    call.setSpeaker(next);
-  }, [isSpeakerOn, call]);
+    call.setSpeaker(!call.speakerOn);
+  }, [call]);
 
   // Keep the screen on for the whole call (see SessionScreen for the web notes).
   useEffect(() => {

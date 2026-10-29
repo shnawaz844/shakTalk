@@ -9,7 +9,7 @@ import {
   type RemoteTrackPublication,
   type RemoteParticipant,
 } from 'livekit-client';
-import { startCallAudio, stopCallAudio, setSpeakerphone } from './audio';
+import { startCallAudio, stopCallAudio, setSpeakerphone, hasHeadphones } from './audio';
 
 /**
  * The call, LiveKit edition.
@@ -39,6 +39,12 @@ export interface LiveKitCallInfo {
 export function useLiveKitCall(info: LiveKitCallInfo | null) {
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [micEnabled, setMicEnabledState] = useState(true);
+  // Loudspeaker on/off as the USER chose it. Re-applied whenever the phone's
+  // audio system reconfigures (connect, a new track starts playing), because
+  // iOS/Android can silently reset the route at those moments; that's why the
+  // first tap on the speaker button sometimes seemed to do nothing.
+  const [speakerOn, setSpeakerOnState] = useState(true);
+  const speakerWantedRef = useRef(true);
   const [partnerTalking, setPartnerTalking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const roomRef = useRef<Room | null>(null);
@@ -96,6 +102,8 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
       try {
         (track as any).setVolume?.(1.0);
       } catch (_) {}
+      // Playback starting can reset the route: put the user's choice back.
+      setTimeout(() => { setSpeakerphone(speakerWantedRef.current).catch(() => {}); }, 250);
       console.log(`[LiveKitCall] playing translation (${p.identity}/${pub.trackName || pub.trackSid})`);
     });
     room.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
@@ -129,8 +137,12 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
           autoGainControl: true,
         });
         if (Platform.OS === 'web') await room.startAudio().catch(() => {});
-        await setSpeakerphone(true).catch(() => {});
-        setTimeout(() => { setSpeakerphone(true).catch(() => {}); }, 600);
+        // Start on the loudspeaker, unless headphones are connected (Android can tell).
+        const wantSpeaker = !(await hasHeadphones());
+        speakerWantedRef.current = wantSpeaker;
+        setSpeakerOnState(wantSpeaker);
+        await setSpeakerphone(wantSpeaker).catch(() => {});
+        setTimeout(() => { setSpeakerphone(speakerWantedRef.current).catch(() => {}); }, 600);
         setError(null);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not join the call');
@@ -158,13 +170,18 @@ export function useLiveKitCall(info: LiveKitCallInfo | null) {
   }, []);
 
   const setSpeaker = useCallback(async (on: boolean) => {
+    speakerWantedRef.current = on;
+    setSpeakerOnState(on);
     await setSpeakerphone(on).catch((e) => console.warn('[LiveKitCall] speaker switch failed:', e));
+    // Apply once more shortly after: a route change still settling can undo the first one.
+    setTimeout(() => { if (speakerWantedRef.current === on) setSpeakerphone(on).catch(() => {}); }, 400);
   }, []);
 
   return {
     connectionState,
     isConnected: connectionState === ConnectionState.Connected,
     micEnabled,
+    speakerOn,
     partnerTalking,
     error,
     setMicEnabled,
