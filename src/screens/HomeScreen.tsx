@@ -41,6 +41,7 @@ import {
 // Invite links already acted on in this app run (kept outside the component so
 // it survives Home being re-created when returning from a call).
 const handledInviteIds = new Set<string>();
+const LAST_LAUNCH_INVITE_KEY = 'shaktalk_last_launch_invite';
 
 interface HomeScreenProps {
   onSessionReady: (params: {
@@ -208,15 +209,22 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     }
   }, [status, sessionId, wsMyLang, myLang, partnerLang, wsRole, callEngine]);
 
-  const handleJoinFromUrl = async (url: string | null) => {
+  const handleJoinFromUrl = async (url: string | null, fromLaunch = false) => {
     if (!url) return;
     const incomingSid = extractSessionIdFromUrl(url);
     if (!incomingSid) return;
-    // Each invite link is used once per app run. Home is re-created after every
-    // call, and getInitialURL() keeps returning the link that opened the app,
-    // so without this the ended call was joined again ("Call not found").
-    if (handledInviteIds.has(incomingSid)) return;
-    handledInviteIds.add(incomingSid);
+    // The link that OPENED the app is acted on only once. Home is re-created
+    // after every call, and getInitialURL() keeps returning that same link
+    // (also after the app is restored from the background), so without this
+    // the ended call was joined again and showed "Call not found".
+    // A link the user taps again (fromLaunch = false) is always tried.
+    if (fromLaunch) {
+      if (handledInviteIds.has(incomingSid)) return;
+      handledInviteIds.add(incomingSid);
+      const last = await storage.getItem(LAST_LAUNCH_INVITE_KEY).catch(() => null);
+      if (last === incomingSid) return;
+      storage.setItem(LAST_LAUNCH_INVITE_KEY, incomingSid).catch(() => {});
+    }
 
     if (pendingJoinRef.current === incomingSid || sessionId === incomingSid) {
       return;
@@ -249,7 +257,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     // 1. Initial launch from link (cold start)
     Linking.getInitialURL()
       .then(url => {
-        if (url) handleJoinFromUrl(url);
+        if (url) handleJoinFromUrl(url, true);
       })
       .catch(e => console.warn('[HomeScreen] getInitialURL error:', e));
 
