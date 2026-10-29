@@ -70,6 +70,12 @@ const TARGET_CODES = {
   German: 'de',
   Russian: 'ru',
   Ukrainian: 'uk',
+  Romanian: 'ro',
+  Turkish: 'tr',
+  Japanese: 'ja',
+  Korean: 'ko',
+  Italian: 'it',
+  Persian: 'fa',
 };
 
 // Every language name the app can send (used by server.js to reject anything else).
@@ -83,6 +89,9 @@ const TARGET_SCRIPTS = {
   ar: /[\u0600-\u06FF]/, ur: /[\u0600-\u06FF]/, // Arabic script
   'zh-Hans': /[\u4E00-\u9FFF]/, 'zh-Hant': /[\u4E00-\u9FFF]/, // Han
   ru: /[\u0400-\u04FF]/, uk: /[\u0400-\u04FF]/, // Cyrillic
+  ja: /[\u3040-\u30FF\u4E00-\u9FFF]/, // Kana + Kanji
+  ko: /[\uAC00-\uD7AF]/,               // Hangul
+  fa: /[\u0600-\u06FF]/,               // Persian (Arabic script)
 };
 
 /** True when `text` clearly isn't written in the target language's script. */

@@ -133,3 +133,26 @@ Tuning (backend `.env`, all optional):
 ## Switching back to the old engine
 
 Set `EXPO_PUBLIC_CALL_ENGINE=legacy` in the EAS build profile's `env` and rebuild. The app then uses the original `SessionScreen` path, which includes the fixes from PR #2.
+
+## Website (www.shaktalk.com)
+
+The backend now also serves the public website from `backend/public/` (`backend/website.js`):
+`/`, `/privacy`, `/terms`, `/support`, `/delete-account`, plus the join page `/join/<id>`.
+
+Set these in the backend `.env` before launch:
+
+```env
+SUPPORT_EMAIL=support@shaktalk.com
+COMPANY_NAME=...                 # legal entity shown in Privacy/Terms
+COMPANY_ADDRESS=...              # registered address
+GRIEVANCE_OFFICER=...            # name (required in India)
+GOVERNING_LAW=India
+POLICY_DATE=1 November 2026
+APP_STORE_URL=                   # set once Apple approves; until then the button says "Coming soon"
+# PLAY_STORE_URL defaults to the com.cis.shaktranslate listing
+APPLE_TEAM_ID=...                # developer.apple.com > Membership: makes iOS open /join links in the app
+ANDROID_SHA256_FINGERPRINTS=...  # Play Console > App integrity > App signing key SHA-256 (comma-separate several)
+```
+
+Store listing URLs: Privacy `https://www.shaktalk.com/privacy`, Support `https://www.shaktalk.com/support`,
+Account deletion (Google Play) `https://www.shaktalk.com/delete-account`, Marketing `https://www.shaktalk.com`.

@@ -6,6 +6,9 @@ const { warmupSession, feedAudioChunk, closeSession } = require('./geminiService
 const { supabase } = require('./supabaseClient');
 const { uploadAudio } = require('./storageService');
 const { APP_NAME } = require('./app-config');
+const { serveWebsite, storeButtons, SITE } = require('./website');
+const crypto = require('crypto');
+const { deleteAccount } = require('./accountService');
 const { TranslatorBot, createToken, LIVEKIT_ENABLED, LIVEKIT_URL } = require('./translatorBot');
 const { verifyClerkToken, requireUser, bearerToken, isValidUserId, AuthError, AUTH_ENFORCE } = require('./auth');
 const { signedUrlFor } = require('./storageService');
@@ -32,6 +35,27 @@ if (!CLERK_SECRET_KEY) {
 // create a token for any user — never decode-only again.
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Short join codes ("K7P2QX") that people can type, mapped to the session id.
+// No 0/O, 1/I/L: easy to read out over the phone. ~887 million combinations;
+// codes live only while the call exists.
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const shortCodes = new Map(); // code -> sessionId
+function newShortCode() {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    let code = '';
+    for (let i = 0; i < 6; i++) code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+    if (!shortCodes.has(code)) return code;
+  }
+  return null;
+}
+/** Session id from either a full session id or a short code (any case, spaces/dashes ignored). */
+function resolveSessionId(input) {
+  if (typeof input !== 'string') return null;
+  if (UUID_RE.test(input)) return input;
+  const code = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return shortCodes.get(code) || null;
+}
 const MAX_BODY_BYTES = 64 * 1024;
 
 /** Reads a JSON request body, refusing anything larger than MAX_BODY_BYTES. */
@@ -136,6 +160,46 @@ const httpServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
       sendHttpError(res, err, '/clerk/update-profile');
+    }
+    return;
+  }
+
+  // ── POST /user/consent ─────────────────────────────────────────────────────
+  // Records that the signed-in user accepted the Terms/Privacy version shown in
+  // the app. Stored in Clerk publicMetadata with the SERVER's time, which the
+  // user cannot edit (the app's own copy in unsafeMetadata can be).
+  if (req.method === 'POST' && req.url === '/user/consent') {
+    try {
+      const userId = await verifyClerkToken(bearerToken(req)); // strict: no fallback
+      const body = await readJsonBody(req);
+      const version = typeof body.version === 'string' ? body.version.slice(0, 32) : '';
+      if (!version) { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'version is required.' })); return; }
+      const record = {
+        version,
+        acceptedAt: new Date().toISOString(),
+        platform: typeof body.platform === 'string' ? body.platform.slice(0, 16) : undefined,
+        source: typeof body.source === 'string' ? body.source.slice(0, 32) : undefined,
+      };
+      if (CLERK_SECRET_KEY) await updateClerkMetadata(userId, { consent: record });
+      console.log(`[consent] ${userId} accepted terms ${version} (${record.source || 'app'}, ${record.platform || '?'})`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (err) {
+      sendHttpError(res, err, '/user/consent');
+    }
+    return;
+  }
+
+  // ── DELETE /account (or POST /account/delete) ──────────────────────────────
+  // Deletes the signed-in user's account and data (see accountService.js).
+  if ((req.method === 'DELETE' && req.url === '/account') || (req.method === 'POST' && req.url === '/account/delete')) {
+    try {
+      const userId = await verifyClerkToken(bearerToken(req)); // strict: never the legacy userId fallback
+      const result = await deleteAccount(userId);
+      res.writeHead(result.errors.length ? 207 : 200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: !result.errors.length, ...result }));
+    } catch (err) {
+      sendHttpError(res, err, '/account');
     }
     return;
   }
@@ -335,6 +399,16 @@ const httpServer = http.createServer(async (req, res) => {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Join ${APP_NAME} Call</title>
+  <meta name="description" content="Tap to join a live-translated call: you each speak your own language.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="${APP_NAME}">
+  <meta property="og:title" content="Join my ${APP_NAME} call">
+  <meta property="og:description" content="Tap to join. We each speak our own language and ${APP_NAME} translates live.">
+  <meta property="og:image" content="${SITE.SITE_URL}/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="robots" content="noindex">
   <style>
     * { box-sizing: border-box; }
     body {
@@ -444,6 +518,13 @@ const httpServer = http.createServer(async (req, res) => {
       cursor: pointer;
       white-space: nowrap;
     }
+    .store-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 4px; }
+    .store-btn { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 11px 16px; border-radius: 14px; background: #fff; color: #0A0D0C; text-decoration: none; text-align: left; }
+    .store-btn svg { width: 24px; height: 24px; flex: none; }
+    .store-btn small { display: block; font-size: 11px; opacity: .75; }
+    .store-btn strong { display: block; font-size: 16px; }
+    .store-btn.soon { background: transparent; color: #9BA8A4; border: 1px solid rgba(255,255,255,.12); }
+    .home-link { display: block; margin-top: 18px; color: #2FE0A8; font-size: 13px; text-decoration: none; }
     .instructions {
       color: #63726E;
       font-size: 13px;
@@ -463,22 +544,8 @@ const httpServer = http.createServer(async (req, res) => {
     </a>
 
     <div id="downloadSection" style="display:none;">
-      <div id="comingSoonBox" style="
-        background: rgba(47, 224, 168, 0.06);
-        border: 1px solid rgba(47, 224, 168, 0.2);
-        border-radius: 14px;
-        padding: 18px 16px;
-        margin-bottom: 12px;
-        text-align: center;
-      ">
-        <div style="font-size: 22px; margin-bottom: 8px;">🚀</div>
-        <div style="color: #2FE0A8; font-weight: 700; font-size: 15px; margin-bottom: 6px;">App Coming Soon!</div>
-        <div style="color: #9BA8A4; font-size: 13px; line-height: 1.5;">
-          <strong style="color:#fff;">${APP_NAME}</strong> will be available on the<br>
-          <strong style="color:#fff;">App Store</strong> &amp; <strong style="color:#fff;">Google Play Store</strong> shortly.<br><br>
-          Stay tuned - we'll be live soon! 🎉
-        </div>
-      </div>
+      <p style="color:#9BA8A4;font-size:14px;margin:0 0 14px;">Install <strong style="color:#fff;">${APP_NAME}</strong>, then tap the invite link again.</p>
+      ${storeButtons()}
     </div>
 
     <div class="divider"></div>
@@ -491,6 +558,7 @@ const httpServer = http.createServer(async (req, res) => {
     <div class="instructions">
       If you just installed the app, open it & tap <strong>"Enter code"</strong> or scan the host's QR code.
     </div>
+    <a class="home-link" href="/">What is ${APP_NAME}?</a>
   </div>
 
   <script>
@@ -527,7 +595,7 @@ const httpServer = http.createServer(async (req, res) => {
       if (!appOpened && !document.hidden) {
         var statusEl = document.getElementById("statusText");
         if (statusEl) {
-          statusEl.innerHTML = "Don't have <strong>${APP_NAME}</strong> installed yet?<br>The app will be available on the App Store &amp; Google Play soon!";
+          statusEl.innerHTML = "Don't have <strong>${APP_NAME}</strong> installed yet?";
         }
         var dlSection = document.getElementById("downloadSection");
         if (dlSection) {
@@ -540,6 +608,9 @@ const httpServer = http.createServer(async (req, res) => {
 </html>`);
     return;
   }
+
+  // Public website: landing page, privacy, terms, support, app-link files.
+  if (serveWebsite(req, res)) return;
 
   res.writeHead(404); res.end('Not found');
 });
@@ -915,6 +986,7 @@ function cleanupSession(sessionId, disconnectedRole) {
   dbEndConversation(sessionId)
     .catch(e => console.error('[db] endConversation failed:', e.message))
     .finally(() => conversationIds.delete(sessionId));
+  if (session && session.shortCode) shortCodes.delete(session.shortCode);
   sessions.delete(sessionId);
   console.log(`[server] Session ${sessionId} cleaned up (${disconnectedRole} disconnected).`);
 }
@@ -1000,7 +1072,9 @@ wss.on('connection', (ws) => {
         ? (process.env.GEMINI_TRANSLATE_MODEL || 'gemini-3.5-live-translate-preview')
         : (process.env.GEMINI_LIVE_MODEL || 'gemini-live-2.5-flash-native-audio');
       console.log(`[server] Host created session ${sessionId} [engine=${hostEngine}, model=${activeModel}] at ${session.createdAt} (Host lang: ${lang}, userId: ${userId})`);
-      send(ws, { type: 'session_created', sessionId });
+      const shortCode = newShortCode();
+      if (shortCode) { shortCodes.set(shortCode, sessionId); session.shortCode = shortCode; }
+      send(ws, { type: 'session_created', sessionId, shortCode });
 
       if (userId) {
         dbCreateConversation(sessionId, userId, lang)
@@ -1011,8 +1085,10 @@ wss.on('connection', (ws) => {
 
     // ── JOIN SESSION (Guest) ─────────────────────────────────────────────────
     if (type === 'join_session') {
-      const { sessionId, lang, speakerGender, speakerAge } = message;
-      const session = sessions.get(sessionId);
+      const { lang, speakerGender, speakerAge } = message;
+      // Accepts the full session id (invite link / QR) or the short code.
+      const sessionId = resolveSessionId(message.sessionId);
+      const session = sessionId ? sessions.get(sessionId) : null;
 
       if (!session) { send(ws, { type: 'error', message: 'Call not found. Ask your partner for a new invite.' }); return; }
       if (session.host === ws) { send(ws, { type: 'error', message: `Cannot join your own session as guest on the same connection.` }); return; }

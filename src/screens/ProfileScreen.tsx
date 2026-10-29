@@ -8,10 +8,13 @@ import {
   ActivityIndicator,
   Image,
   ScrollView,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser, useAuth } from '@clerk/clerk-expo';
+import { API_URL } from '../config';
+import { TERMS_URL, PRIVACY_URL, SUPPORT_URL } from '../legal/legal';
 import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
@@ -30,7 +33,39 @@ const GENDER_OPTIONS: { value: Gender; label: string }[] = [
 
 export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const { user } = useUser();
+  const { getToken, signOut } = useAuth();
+  const [deleting, setDeleting] = useState(false);
   const meta = user?.unsafeMetadata as any;
+
+  // Account deletion (required by Apple and Google). Deletes data on the
+  // server, then the login itself, then signs out on this phone.
+  const runDelete = async () => {
+    try {
+      setDeleting(true);
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/account/delete`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok && res.status !== 207) throw new Error(`Server error (${res.status})`);
+      await signOut().catch(() => {});
+      Alert.alert('Account deleted', 'Your ShakTalk account and data have been deleted.');
+    } catch (err: any) {
+      Alert.alert('Could not delete account', `${err?.message ?? 'Please try again.'}\n\nYou can also email support to delete it for you.`);
+    } finally {
+      setDeleting(false);
+    }
+  };
+  const confirmDelete = () => {
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your account, profile, conversation history and recordings. It cannot be undone. App Store or Google Play subscriptions must be cancelled separately in your store settings.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete account', style: 'destructive', onPress: () => { void runDelete(); } },
+      ],
+    );
+  };
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [gender, setGender] = useState<Gender>(meta?.gender || 'neutral');
@@ -41,6 +76,10 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const handleUpdateProfile = async () => {
     if (!user) return;
     const parsedAge = parseInt(age, 10);
+    if (Number.isFinite(parsedAge) && parsedAge < 18) {
+      Alert.alert('Age', 'ShakTalk is only for people aged 18 and over.');
+      return;
+    }
     try {
       setIsUpdating(true);
       await user.update({ firstName, lastName });
@@ -211,6 +250,25 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
               </>
             )}
           </TouchableOpacity>
+
+          <View style={styles.legalRow}>
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>
+            <Text style={styles.legalDot}>·</Text>
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(PRIVACY_URL)}>Privacy Policy</Text>
+            <Text style={styles.legalDot}>·</Text>
+            <Text style={styles.legalLink} onPress={() => Linking.openURL(SUPPORT_URL)}>Support</Text>
+          </View>
+
+          <TouchableOpacity style={styles.deleteBtn} onPress={confirmDelete} disabled={deleting}>
+            {deleting ? (
+              <ActivityIndicator color="#E85C5C" size="small" />
+            ) : (
+              <>
+                <Feather name="trash-2" size={16} color="#E85C5C" style={{ marginRight: 8 }} />
+                <Text style={styles.deleteBtnText}>Delete account</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -290,5 +348,14 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   saveBtnDisabled: { opacity: 0.5 },
+  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 28, flexWrap: 'wrap' },
+  legalLink: { color: 'rgba(255,255,255,0.55)', fontSize: 13, textDecorationLine: 'underline' },
+  legalDot: { color: 'rgba(255,255,255,0.3)' },
+  deleteBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginTop: 20, marginBottom: 8, height: 50, borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(232,92,92,0.4)',
+  },
+  deleteBtnText: { color: '#E85C5C', fontSize: 15, fontWeight: '700' },
   saveBtnText: { color: '#000', fontSize: 16, fontWeight: '800' },
 });
