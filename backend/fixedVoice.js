@@ -73,9 +73,11 @@ const CLAUSE_END = /[,;:،、，；]\s*$/;
 const MIN_CLAUSE_CHARS = 15;   // don't speak tiny fragments like "So,"
 const MAX_CHARS = 120;         // long run-on text: speak it anyway
 const IDLE_FLUSH_MS = 250;     // no new text for this long: speak what we have
-// A TTS stream is kept open across phrases (same voice, no start-up cost) and
-// closed after this long without text. Google closes idle streams itself.
-const STREAM_IDLE_MS = 4000;
+// Phrases being synthesized at the same time (each is its own short TTS
+// request). 2 = the next phrase is ready the moment the current one finishes.
+const MAX_IN_FLIGHT = 2;
+// A phrase that produces no complete audio in this time is given up (and logged).
+const PHRASE_TIMEOUT_MS = 6000;
 
 let client = null;
 // Result of the start-up check: null = not known yet, true = works, false = doesn't.
@@ -87,6 +89,19 @@ function getClient() {
   return client;
 }
 
+/*
+ * How phrases are spoken (why each phrase is its own request):
+ * An earlier version kept ONE long TTS stream open and wrote phrases into it.
+ * Google's streaming TTS waits for complete sentences before speaking, and
+ * closes quiet streams on its own; text written while a stream was closing
+ * was lost. That caused both extra delay and skipped words.
+ * Now every phrase is a short request: open, send the text, end. Ending the
+ * request makes Google speak ALL of it right away. Up to MAX_IN_FLIGHT phrases
+ * are synthesized in parallel, but their audio is always played in order.
+ * Note: each phrase counts as one request against the Chirp 3 quota
+ * (200 requests/min per project by default) — ask Google for more before
+ * running many calls at once.
+ */
 class FixedVoiceSpeaker {
   /**
    * @param {object} opts
@@ -103,11 +118,11 @@ class FixedVoiceSpeaker {
     this.voiceName = this.locale ? `${this.locale}-Chirp3-HD-${name}` : null;
     this.text = '';
     this.flushTimer = null;
-    this.call = null;
-    this.idleTimer = null;
+    this.queue = [];      // phrases in speaking order: { text, chunks, started, done, call, at }
     this.failed = false;
     this.gotAudio = false; // any TTS audio received yet in this call
     this.closed = false;
+    this.stats = { phrases: 0, skipped: 0, firstAudioMs: 0, lastLogAt: 0 };
 
     if (!TextToSpeechClient) this._fail('@google-cloud/text-to-speech is not installed (cd backend && npm install)');
     else if (!this.voiceName) this._fail(`no TTS voice for "${languageName}"`);
@@ -119,7 +134,7 @@ class FixedVoiceSpeaker {
     if (this.failed) return;
     this.failed = true;
     console.warn(`[fixedVoice] ${this.label}: ${why} — using Gemini's own voice for this call`);
-    this._endCall();
+    this._cancelAll();
   }
 
   /** Newly translated text (a delta, as Gemini streams it). */
@@ -141,16 +156,11 @@ class FixedVoiceSpeaker {
     const text = this.text.trim();
     this.text = '';
     if (!text || this.failed || this.closed) return;
-    // Only open TTS streams once the start-up check has passed: without valid
+    // Only call TTS once the start-up check has passed: without valid
     // credentials the Google client throws outside our handlers.
     if (ttsHealthy !== true) { this._fail(ttsHealthy === false ? 'Cloud Text-to-Speech is not available' : 'Cloud Text-to-Speech start-up check has not finished'); return; }
-    try {
-      this._ensureCall().write({ input: { text } });
-    } catch (err) {
-      this._fail(`TTS write failed: ${err.message}`);
-      return;
-    }
-    this._armIdle();
+    this.queue.push({ text, chunks: [], started: false, done: false, call: null, at: Date.now() });
+    this._startNext();
     if (!this.gotAudio && !this.firstAudioTimer) {
       this.firstAudioTimer = setTimeout(() => {
         if (!this.gotAudio) this._fail(`no audio from Cloud Text-to-Speech within ${FIRST_AUDIO_TIMEOUT_MS / 1000} s`);
@@ -158,52 +168,110 @@ class FixedVoiceSpeaker {
     }
   }
 
-  _ensureCall() {
-    if (this.call) return this.call;
-    const call = getClient().streamingSynthesize();
-    this.call = call;
+  _startNext() {
+    let inFlight = this.queue.filter((p) => p.started && !p.done).length;
+    for (const p of this.queue) {
+      if (inFlight >= MAX_IN_FLIGHT) break;
+      if (!p.started) { this._synthesize(p); inFlight++; }
+    }
+  }
+
+  _synthesize(p) {
+    p.started = true;
+    let call;
+    try {
+      call = getClient().streamingSynthesize();
+    } catch (err) {
+      this._fail(`TTS request failed: ${err.message}`);
+      return;
+    }
+    p.call = call;
+    p.timer = setTimeout(() => this._finish(p, `no complete audio within ${PHRASE_TIMEOUT_MS / 1000} s`), PHRASE_TIMEOUT_MS);
     call.on('data', (res) => {
-      if (res.audioContent && res.audioContent.length && !this.closed) {
-        if (!this.gotAudio) { this.gotAudio = true; clearTimeout(this.firstAudioTimer); console.log(`[fixedVoice] ${this.label}: speaking with ${this.voiceName}`); }
-        this.onAudio(Buffer.from(res.audioContent), OUTPUT_RATE);
+      if (!res.audioContent || !res.audioContent.length || this.closed || p.done) return;
+      const pcm = Buffer.from(res.audioContent);
+      if (!this.gotAudio) {
+        this.gotAudio = true;
+        clearTimeout(this.firstAudioTimer);
+        console.log(`[fixedVoice] ${this.label}: speaking with ${this.voiceName}`);
       }
+      if (!p.firstAudioAt) p.firstAudioAt = Date.now();
+      // Play now if this is the phrase being spoken; otherwise keep it until its turn.
+      if (this.queue[0] === p) this.onAudio(pcm, OUTPUT_RATE);
+      else p.chunks.push(pcm);
     });
     call.on('error', (err) => {
-      if (this.call === call) this.call = null;
-      // Code 1 = cancelled by us; idle/deadline closes just mean "open a new one next time".
-      if (err.code === 1 || /idle|deadline|timeout/i.test(err.message)) return;
+      if (p.done || this.closed) return;
+      if (err.code === 1) return; // cancelled by us
       // Any error before the first audio means TTS isn't usable here (API off,
       // missing credentials, unknown voice): fall back so the call isn't silent.
-      if (!this.gotAudio || /PERMISSION|not been used|disabled|NOT_FOUND|INVALID_ARGUMENT|credentials/i.test(err.message)) this._fail(err.message);
-      else console.warn(`[fixedVoice] ${this.label}: TTS stream error: ${err.message}`);
+      if (!this.gotAudio || /PERMISSION|not been used|disabled|NOT_FOUND|INVALID_ARGUMENT|credentials/i.test(err.message)) {
+        this._fail(err.message);
+        return;
+      }
+      this._finish(p, `TTS error: ${err.message}`);
     });
-    call.on('end', () => { if (this.call === call) this.call = null; });
+    call.on('end', () => this._finish(p));
     call.write({
       streamingConfig: {
         voice: { name: this.voiceName, languageCode: this.locale },
         streamingAudioConfig: { audioEncoding: 'PCM', sampleRateHertz: OUTPUT_RATE },
       },
     });
-    return call;
+    call.write({ input: { text: p.text } });
+    call.end(); // no more text: Google speaks all of it now
   }
 
-  _armIdle() {
-    if (this.idleTimer) clearTimeout(this.idleTimer);
-    this.idleTimer = setTimeout(() => this._endCall(), STREAM_IDLE_MS);
+  /** A phrase finished (or failed): move on to the next one, in order. */
+  _finish(p, problem) {
+    if (p.done) return;
+    p.done = true;
+    clearTimeout(p.timer);
+    this.stats.phrases++;
+    if (problem && !p.firstAudioAt) {
+      this.stats.skipped++;
+      console.warn(`[fixedVoice] ${this.label}: SKIPPED phrase (${problem}): "${p.text.slice(0, 80)}"`);
+    } else if (problem) {
+      console.warn(`[fixedVoice] ${this.label}: phrase cut short (${problem}): "${p.text.slice(0, 80)}"`);
+    }
+    if (p.firstAudioAt) this.stats.firstAudioMs += p.firstAudioAt - p.at;
+    // Drop finished phrases from the front, then release the next phrase's
+    // audio that arrived while it was waiting its turn.
+    while (this.queue.length && this.queue[0].done) {
+      this.queue.shift();
+      const next = this.queue[0];
+      if (next && next.chunks.length) {
+        for (const c of next.chunks) this.onAudio(c, OUTPUT_RATE);
+        next.chunks = [];
+      }
+    }
+    this._startNext();
+    this._log();
   }
 
-  _endCall() {
-    if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
-    const call = this.call;
-    this.call = null;
-    if (call) { try { call.end(); } catch (_) {} }
+  _log() {
+    const now = Date.now();
+    if (now - this.stats.lastLogAt < 30000) return;
+    this.stats.lastLogAt = now;
+    const ok = this.stats.phrases - this.stats.skipped;
+    const avg = ok ? Math.round(this.stats.firstAudioMs / ok) : 0;
+    console.log(`[fixedVoice] ${this.label}: ${this.stats.phrases} phrases, ${this.stats.skipped} skipped, TTS start ~${avg}ms after the text was ready`);
+  }
+
+  _cancelAll() {
+    for (const p of this.queue) {
+      clearTimeout(p.timer);
+      p.done = true;
+      if (p.call) { try { p.call.cancel?.(); } catch (_) {} }
+    }
+    this.queue = [];
   }
 
   close() {
     this.closed = true;
     if (this.flushTimer) clearTimeout(this.flushTimer);
     clearTimeout(this.firstAudioTimer);
-    this._endCall();
+    this._cancelAll();
   }
 }
 
