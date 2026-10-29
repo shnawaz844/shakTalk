@@ -14,6 +14,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { useLiveKitCall } from '../livekit/useLiveKitCall';
 import { Alert } from '../utils/alertCompat';
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
+import { AiCallNotice, AiTranslationLabel } from '../components/AiCallNotice';
 import { APP_NAME_LOWER } from '../config';
 import { sessionStyles as styles, formatDuration } from './SessionScreen';
 
@@ -62,6 +63,8 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
   const [hasError, setHasError] = useState(false);
   const [showTranscript, setShowTranscript] = useState(false);
   const [durationSec, setDurationSec] = useState(0);
+  // AI translation notice, shown at the start of every call (covers the ~1 s connect).
+  const [showAiNotice, setShowAiNotice] = useState(true);
   const processedRef = useRef<Set<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
 
@@ -253,6 +256,7 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
                 </View>
                 <Text style={styles.timer}>{formatDuration(durationSec)}</Text>
               </View>
+              <AiTranslationLabel />
 
               <View style={styles.stageMid}>
                 <View style={styles.orbWrap}>
@@ -383,6 +387,7 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
           {transcriptPanel}
         </View>
       )}
+      {showAiNotice && <AiCallNotice onClose={() => setShowAiNotice(false)} />}
     </SafeAreaView>
   );
 }

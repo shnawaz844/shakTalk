@@ -19,7 +19,7 @@ import { Alert } from '../utils/alertCompat';
 
 export type Gender = 'male' | 'female' | 'neutral';
 
-const MIN_AGE = 10;
+const MIN_AGE = 18; // ShakTalk and its AI providers require users to be 18+
 const MAX_AGE = 90;
 
 const GENDER_OPTIONS: { value: Gender; label: string; icon: string }[] = [
@@ -97,7 +97,8 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
 
       // unsafeMetadata is writable directly by the signed-in user, so this
       // doesn't depend on the backend having a Clerk secret key configured.
-      await user.update({ unsafeMetadata: { age, gender, onboardingComplete: true } });
+      // Merge: keep the consent record and anything else already saved.
+      await user.update({ unsafeMetadata: { ...(user.unsafeMetadata || {}), age, gender, onboardingComplete: true } });
 
       // Best-effort sync to backend/publicMetadata for server-side use
       // (e.g. if CLERK_SECRET_KEY is configured); failure here is non-fatal.

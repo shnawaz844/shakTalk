@@ -86,6 +86,12 @@ const LANGUAGE_NAME_TO_BCP47 = {
   German: 'de-DE',
   Russian: 'ru-RU',
   Ukrainian: 'uk-UA',
+  Romanian: 'ro-RO',
+  Turkish: 'tr-TR',
+  Japanese: 'ja-JP',
+  Korean: 'ko-KR',
+  Italian: 'it-IT',
+  Persian: 'fa-IR',
 };
 
 function bcp47For(languageName) {
@@ -111,6 +117,12 @@ const SCRIPT_RANGES = {
   German: /[A-Za-z]/u,
   Russian: /[\u0400-\u04FF]/u,
   Ukrainian: /[\u0400-\u04FF]/u,
+  Romanian: /[A-Za-zĂÂÎȘȚăâîșț]/u,
+  Turkish: /[A-Za-zÇĞİÖŞÜçğıöşü]/u,
+  Japanese: /[\u3040-\u30FF\u4E00-\u9FFF]/u,
+  Korean: /[\uAC00-\uD7AF]/u,
+  Italian: /[A-Za-z]/u,
+  Persian: /[\u0600-\u06FF]/u,
 };
 
 // Common romanized/Hinglish words (Hindi spoken in Latin letters)

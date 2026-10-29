@@ -190,7 +190,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
 
-  const { status, sessionId, myLang: wsMyLang, partnerLang, role: wsRole, callEngine, createSession, joinSession, endSession } = useWebSocket({
+  const { status, sessionId, shortCode, myLang: wsMyLang, partnerLang, role: wsRole, callEngine, createSession, joinSession, endSession } = useWebSocket({
     onError: (msg) => {
       setErrorMsg(msg);
       setConnectingMsg(null);
@@ -299,10 +299,9 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const buildShareMessage = (sid: string) => {
     const joinUrl = `${JOIN_BASE_URL}/${sid}`;
     return (
-      `Hey! Join my ${APP_NAME} live-translation call 🌐\n\n` +
+      `Join my ${APP_NAME} call 🌐 We each speak our own language and ${APP_NAME} translates live.\n\n` +
       `👉 Tap to join: ${joinUrl}\n\n` +
-      `Or open the app → "Scan to join" → scan the QR code I'll show you.\n\n` +
-      `Session code: ${sid}`
+      (shortCode ? `Or open ${APP_NAME} → "Enter code" → ${shortCode}` : `Or open ${APP_NAME} → "Scan QR" and scan my screen.`)
     );
   };
 
@@ -584,7 +583,15 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
             <Text style={styles.modalSubtitle}>Share the code, or have them scan this screen</Text>
 
             {sessionId ? (
-              <QRCodeDisplay sessionId={sessionId} />
+              <>
+                <QRCodeDisplay sessionId={sessionId} />
+                {shortCode && (
+                  <View style={styles.shortCodeBox}>
+                    <Text style={styles.shortCodeLabel}>CODE</Text>
+                    <Text style={styles.shortCodeText} selectable>{shortCode}</Text>
+                  </View>
+                )}
+              </>
             ) : (
               <ActivityIndicator color={colors.signal} size="large" style={{ marginVertical: 40 }} />
             )}
@@ -684,7 +691,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                 style={styles.codeInput}
                 value={manualCode}
                 onChangeText={(t) => { setManualCode(t); setManualCodeError(null); }}
-                placeholder="Code or invite link…"
+                placeholder="6-letter code or invite link…"
                 placeholderTextColor={colors.muted}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -1015,6 +1022,9 @@ const styles = StyleSheet.create({
     borderColor: colors.hair,
     paddingHorizontal: 14,
   },
+  shortCodeBox: { alignItems: 'center', marginTop: 12, marginBottom: 4 },
+  shortCodeLabel: { color: colors.muted, fontSize: 11, letterSpacing: 2 },
+  shortCodeText: { color: colors.warm, fontSize: 28, fontWeight: '800', letterSpacing: 6, marginTop: 2 },
   codeInput: {
     flex: 1,
     color: colors.warm,
