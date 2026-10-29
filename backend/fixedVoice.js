@@ -64,6 +64,12 @@ const TTS_LOCALES = {
   German: 'de-DE',
   Russian: 'ru-RU',
   Ukrainian: 'uk-UA',
+  Romanian: 'ro-RO',
+  Turkish: 'tr-TR',
+  Japanese: 'ja-JP',
+  Korean: 'ko-KR',
+  Italian: 'it-IT',
+  // Persian: no Chirp 3 HD voice yet, so Persian listeners hear Gemini's own voice.
 };
 
 // When to hand text to TTS: at the end of a sentence or clause, or once enough
