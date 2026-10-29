@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cis.shaktranslate",
-      "buildNumber": "71",
+      "buildNumber": "72",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -38,7 +38,7 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "versionCode": 23,
+      "versionCode": 24,
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "cover",
