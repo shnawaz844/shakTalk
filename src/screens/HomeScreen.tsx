@@ -127,7 +127,11 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
       const token = await getToken().catch(() => null);
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
-      const res = await fetch(`${API_URL}/wallet/balance`, { headers });
+      const url = user?.id
+        ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
+        : `${API_URL}/wallet/balance`;
+
+      const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok && data.balanceFormatted) {
         setWalletBalance(data.balanceFormatted);
@@ -135,7 +139,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
     } catch (e) {
       console.warn('[HomeScreen] fetchWalletBalance error:', e);
     }
-  }, [getToken]);
+  }, [getToken, user?.id]);
 
   useEffect(() => {
     fetchWalletBalance();

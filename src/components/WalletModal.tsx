@@ -108,8 +108,11 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
       const token = await getToken().catch(() => null);
       const headers: Record<string, string> = {};
       if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = user?.id
+        ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
+        : `${API_URL}/wallet/balance`;
 
-      const res = await fetch(`${API_URL}/wallet/balance`, { headers });
+      const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok && data.balanceFormatted) {
         setBalance(data.balanceFormatted);
