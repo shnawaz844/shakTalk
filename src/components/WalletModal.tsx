@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { startRazorpayCheckout } from '../utils/razorpayCheckout';
 import { API_URL } from '../config';
 import {
@@ -86,6 +86,7 @@ const PLAN_INFO: Record<
 
 export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalProps) {
   const { getToken } = useAuth();
+  const { user } = useUser();
   const [balance, setBalance] = useState('$0.00');
   const [loading, setLoading] = useState(false);
   const [processingTopup, setProcessingTopup] = useState(false);
@@ -161,9 +162,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
         type: 'wallet_topup',
         amountCents: selectedAmountCents,
         authToken: token,
+        userId: user?.id,
         name: 'ShakTalk Wallet Top-up',
         description: `Add $${(selectedAmountCents / 100).toFixed(2)} to Wallet Balance`,
-        email: 'aabir.hussain1@gmail.com',
+        email: user?.primaryEmailAddress?.emailAddress || 'aabir.hussain1@gmail.com',
       });
 
       if (result.success) {

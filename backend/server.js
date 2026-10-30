@@ -247,10 +247,10 @@ const httpServer = http.createServer(async (req, res) => {
   // GET /wallet/balance
   if (req.method === 'GET' && req.url === '/wallet/balance') {
     try {
-      let userId = null;
+      let userId = body.userId || null;
       try {
         const token = bearerToken(req);
-        if (token) userId = await verifyClerkToken(token);
+        if (token) userId = (await verifyClerkToken(token)) || userId;
       } catch (_) {}
       const targetUser = userId || 'test_user_wallet';
       const wallet = await walletService.getWallet(targetUser);

@@ -9,6 +9,7 @@ export interface CheckoutOptions {
   amountCents?: number;
   email?: string;
   authToken?: string | null;
+  userId?: string | null;
   name?: string;
   description?: string;
 }
@@ -66,6 +67,7 @@ export async function startRazorpayCheckout(
       tier: options.tier,
       amountCents: options.amountCents,
       email: options.email || 'aabir.hussain1@gmail.com',
+      userId: options.userId || undefined,
     }),
   });
 
@@ -98,9 +100,14 @@ export async function startRazorpayCheckout(
         },
         handler: async function (response: any) {
           try {
+            const verifyHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (options.authToken) {
+              verifyHeaders['Authorization'] = `Bearer ${options.authToken}`;
+            }
+
             const verifyRes = await fetch(`${API_URL}/payment/verify`, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: verifyHeaders,
               body: JSON.stringify({
                 orderId: response.razorpay_order_id,
                 paymentId: response.razorpay_payment_id,
@@ -108,6 +115,7 @@ export async function startRazorpayCheckout(
                 tier: options.tier || 'none',
                 type: options.type,
                 amountCents: orderData.amount,
+                userId: options.userId || undefined,
               }),
             });
             const verifyData = await verifyRes.json();
@@ -159,8 +167,10 @@ export async function startRazorpayCheckout(
 
     return {
       success: false,
-      error: result.type === 'cancel' || result.type === 'dismiss' ? 'Payment was cancelled.' : 'Payment could not be verified.',
+      error:
+        result.type === 'cancel' || result.type === 'dismiss'
+          ? 'Payment was cancelled.'
+          : 'Payment could not be verified.',
     };
   }
 }
-
