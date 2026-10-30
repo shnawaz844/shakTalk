@@ -1,24 +1,212 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ViewStyle } from 'react-native';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  ViewStyle,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { CallEngine, getStoredEngine, setStoredEngine, subscribeEngineChange } from '../utils/enginePreference';
+import { useAuth } from '@clerk/clerk-expo';
+import * as WebBrowser from 'expo-web-browser';
+import {
+  CallEngine,
+  getStoredEngine,
+  setStoredEngine,
+  subscribeEngineChange,
+  PlanTier,
+  getStoredPlanTier,
+  setStoredPlanTier,
+} from '../utils/enginePreference';
+import { API_URL } from '../config';
 
 interface ModelSwitcherProps {
   style?: ViewStyle;
 }
 
+interface PlanDetails {
+  name: string;
+  tier: PlanTier;
+  price: string;
+  amount: string;
+}
+
+const PLAN_MAP: Record<CallEngine, PlanDetails> = {
+  legacy: {
+    name: 'Base Plan',
+    tier: 'starter',
+    price: '$9.99/mo',
+    amount: '$9.99',
+  },
+  livekit: {
+    name: 'Pro Plan',
+    tier: 'pro',
+    price: '$24.99/mo',
+    amount: '$24.99',
+  },
+};
+
 export function ModelSwitcher({ style }: ModelSwitcherProps) {
   const [engine, setEngine] = useState<CallEngine>('legacy');
+  const [currentTier, setCurrentTier] = useState<PlanTier>('starter');
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const { getToken } = useAuth();
 
   useEffect(() => {
     getStoredEngine().then(setEngine);
-    const unsubscribe = subscribeEngineChange(setEngine);
-    return unsubscribe;
+    getStoredPlanTier().then(setCurrentTier);
+
+    const unsubEngine = subscribeEngineChange(setEngine);
+    return unsubEngine;
   }, []);
 
+  const triggerPaymentFlow = async (targetEngine: CallEngine) => {
+    const targetPlan = PLAN_MAP[targetEngine];
+    setIsUpgrading(true);
+
+    try {
+      // 1. Create Razorpay order
+      const orderRes = await fetch(`${API_URL}/payment/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier: targetPlan.tier,
+          email: 'aabir.hussain1@gmail.com',
+        }),
+      });
+
+      const orderData = await orderRes.json();
+      if (!orderData.ok || !orderData.checkoutUrl) {
+        throw new Error(orderData.error || 'Could not initiate payment order.');
+      }
+
+      // 2. Open Razorpay in-app modal
+      const result = await WebBrowser.openAuthSessionAsync(
+        orderData.checkoutUrl,
+        'shaktalk://'
+      );
+
+      // 3. Verify return redirect
+      if (result.type === 'success' && result.url) {
+        const isSuccess =
+          result.url.includes('status=success') ||
+          result.url.includes('paymentId=') ||
+          result.url.includes('payment-status');
+
+        if (isSuccess) {
+          await setStoredEngine(targetEngine);
+          await setStoredPlanTier(targetPlan.tier);
+          setEngine(targetEngine);
+          setCurrentTier(targetPlan.tier);
+
+          Alert.alert(
+            'Plan Upgraded! 🎉',
+            `You are now subscribed to the ${targetPlan.name} (${targetPlan.price}). Your AI model has been updated.`
+          );
+          return;
+        }
+      }
+
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        Alert.alert('Payment Cancelled', 'Your plan was not changed.');
+      }
+    } catch (err: any) {
+      console.error('[ModelSwitcher Payment] Error:', err);
+      Alert.alert(
+        'Payment Notice',
+        err.message || 'Unable to connect to the payment gateway.',
+        [
+          {
+            text: 'Switch Anyway (Test Mode)',
+            style: 'destructive',
+            onPress: async () => {
+              await setStoredEngine(targetEngine);
+              await setStoredPlanTier(targetPlan.tier);
+              setEngine(targetEngine);
+              setCurrentTier(targetPlan.tier);
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
+  const payUsingWalletBalance = async (targetEngine: CallEngine) => {
+    const targetPlan = PLAN_MAP[targetEngine];
+    try {
+      setIsUpgrading(true);
+      const token = await getToken();
+      if (!token) {
+        Alert.alert('Notice', 'Please sign in to use wallet balance.');
+        return;
+      }
+
+      const res = await fetch(`${API_URL}/wallet/pay-with-wallet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ tier: targetPlan.tier }),
+      });
+
+      const data = await res.json();
+      if (!data.ok) {
+        Alert.alert(
+          'Insufficient Wallet Balance',
+          `${data.error || 'You do not have enough funds.'}\nYour current balance: ${data.currentBalance || '$0.00'}\n\nWould you like to pay with Razorpay instead?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Pay via Razorpay',
+              onPress: () => triggerPaymentFlow(targetEngine),
+            },
+          ]
+        );
+        return;
+      }
+
+      await setStoredEngine(targetEngine);
+      await setStoredPlanTier(targetPlan.tier);
+      setEngine(targetEngine);
+      setCurrentTier(targetPlan.tier);
+
+      Alert.alert(
+        'Subscription Activated! 🎉',
+        `Deducted ${targetPlan.amount} from your wallet balance. New Balance: ${data.newBalance}\nYour AI model is now upgraded to ${targetPlan.name}.`
+      );
+    } catch (err: any) {
+      Alert.alert('Notice', err.message || 'Failed to pay with wallet.');
+    } finally {
+      setIsUpgrading(false);
+    }
+  };
+
   const handleSelect = (choice: CallEngine) => {
-    setEngine(choice);
-    setStoredEngine(choice);
+    if (choice === engine) return;
+
+    const targetPlan = PLAN_MAP[choice];
+
+    Alert.alert(
+      `Switch to ${targetPlan.name}?`,
+      `The ${targetPlan.name} requires an active ${targetPlan.price} subscription.\n\nHow would you like to pay?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pay with Wallet',
+          onPress: () => payUsingWalletBalance(choice),
+        },
+        {
+          text: `Razorpay (${targetPlan.amount})`,
+          onPress: () => triggerPaymentFlow(choice),
+        },
+      ]
+    );
   };
 
   return (
@@ -26,6 +214,9 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
       <View style={styles.headerRow}>
         <Feather name="cpu" size={13} color="#2FE0A8" />
         <Text style={styles.headerLabel}>AI TRANSLATION MODEL</Text>
+        {isUpgrading && (
+          <ActivityIndicator size="small" color="#2FE0A8" style={{ marginLeft: 8 }} />
+        )}
       </View>
 
       <View style={styles.switchWrapper}>
@@ -37,6 +228,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
           ]}
           onPress={() => handleSelect('legacy')}
           activeOpacity={0.8}
+          disabled={isUpgrading}
         >
           <View style={styles.btnContent}>
             <View style={styles.titleRow}>
@@ -74,6 +266,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
           ]}
           onPress={() => handleSelect('livekit')}
           activeOpacity={0.8}
+          disabled={isUpgrading}
         >
           <View style={styles.btnContent}>
             <View style={styles.titleRow}>

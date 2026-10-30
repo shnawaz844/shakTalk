@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
   Alert,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -111,9 +112,12 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
       }
 
       // 2. Open secure in-app Razorpay checkout session
+      const returnUrl = Platform.OS === 'web' ? window.location.origin : 'shaktalk://';
+      const checkoutUrlWithReturn = `${orderData.checkoutUrl}&return_scheme=${encodeURIComponent(returnUrl)}`;
+      
       const result = await WebBrowser.openAuthSessionAsync(
-        orderData.checkoutUrl,
-        'shaktalk://'
+        checkoutUrlWithReturn,
+        returnUrl
       );
 
       // 3. Handle payment result redirect

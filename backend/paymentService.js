@@ -4,8 +4,12 @@
  */
 const crypto = require('crypto');
 
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || 'rzp_test_RKlnTuK7wKads5';
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || 'QIggZJVi5EtLhlaCkqmlq1gU';
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+
+if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+  console.warn('[paymentService] Warning: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is not set in environment.');
+}
 
 const PLANS = {
   starter: {
@@ -36,12 +40,26 @@ const PLANS = {
 
 /**
  * Creates a Razorpay Order via REST API.
+ * Supports plan purchases or wallet top-ups.
  */
-async function createOrder({ tier = 'pro', email, userId }) {
-  const plan = PLANS[tier] || PLANS.pro;
-  const authHeader = 'Basic ' + Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) {
+  let finalAmount = 0;
+  let currency = 'USD';
+  let planName = 'ShakTalk Wallet Top-up';
+  let displayPrice = '';
 
-  const receipt = `shak_${tier}_${Date.now()}`.slice(0, 40);
+  if (type === 'wallet_topup') {
+    finalAmount = Number(amountCents);
+    displayPrice = `$${(finalAmount / 100).toFixed(2)}`;
+  } else {
+    const plan = PLANS[tier] || PLANS.pro;
+    finalAmount = plan.amountCents;
+    planName = plan.name;
+    displayPrice = plan.displayPrice;
+  }
+
+  const authHeader = 'Basic ' + Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
+  const receipt = `shak_${type}_${Date.now()}`.slice(0, 40);
 
   const res = await fetch('https://api.razorpay.com/v1/orders', {
     method: 'POST',
@@ -50,12 +68,13 @@ async function createOrder({ tier = 'pro', email, userId }) {
       Authorization: authHeader,
     },
     body: JSON.stringify({
-      amount: plan.amountCents,
-      currency: plan.currency,
+      amount: finalAmount,
+      currency,
       receipt,
       notes: {
-        tier,
-        plan_name: plan.name,
+        type,
+        tier: tier || 'none',
+        plan_name: planName,
         user_id: userId || 'anonymous',
       },
     }),
@@ -70,9 +89,10 @@ async function createOrder({ tier = 'pro', email, userId }) {
     orderId: data.id,
     amount: data.amount,
     currency: data.currency,
-    tier,
-    planName: plan.name,
-    displayPrice: plan.displayPrice,
+    tier: tier || 'wallet',
+    planName,
+    displayPrice,
+    type,
     keyId: RAZORPAY_KEY_ID,
   };
 }
@@ -92,15 +112,32 @@ function verifyPaymentSignature({ orderId, paymentId, signature }) {
 /**
  * Renders the hosted Razorpay Checkout page that opens in the app's browser modal.
  */
-function renderCheckoutHtml({ orderId, tier = 'pro', email = 'aabir.hussain1@gmail.com', returnScheme = 'shaktalk' }) {
-  const plan = PLANS[tier] || PLANS.pro;
+function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir.hussain1@gmail.com', type = 'plan', returnScheme = 'shaktalk' }) {
+  let title = 'ShakTalk Pro Plan';
+  let amount = 2499;
+  let displayPrice = '$24.99';
+  let desc = 'Includes unlimited real-time AI live voice translation with Google Gemini.';
+  let badge = 'SECURE RAZORPAY CHECKOUT';
+
+  if (type === 'wallet_topup') {
+    amount = Number(amountCents) || 1000;
+    displayPrice = `$${(amount / 100).toFixed(2)}`;
+    title = 'Wallet Top-up';
+    desc = `Add ${displayPrice} to your ShakTalk wallet balance for calls and subscriptions.`;
+    badge = 'WALLET TOP-UP';
+  } else {
+    const plan = PLANS[tier] || PLANS.pro;
+    amount = plan.amountCents;
+    displayPrice = plan.displayPrice;
+    title = plan.name;
+  }
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ShakTalk Subscription Payment</title>
+  <title>ShakTalk Secure Payment</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -201,12 +238,12 @@ function renderCheckoutHtml({ orderId, tier = 'pro', email = 'aabir.hussain1@gma
 </head>
 <body>
   <div class="card">
-    <div class="badge">SECURE RAZORPAY CHECKOUT</div>
-    <h1>${plan.name}</h1>
-    <div class="price">${plan.displayPrice} <span>/ month</span></div>
-    <div class="desc">Includes unlimited real-time AI live voice translation with Google Gemini.</div>
+    <div class="badge">${badge}</div>
+    <h1>${title}</h1>
+    <div class="price">${displayPrice} ${type === 'plan' ? '<span>/ month</span>' : ''}</div>
+    <div class="desc">${desc}</div>
 
-    <button id="rzp-button" class="btn">Proceed to Pay ${plan.displayPrice}</button>
+    <button id="rzp-button" class="btn">Proceed to Pay ${displayPrice}</button>
     <div id="spinner" class="spinner"></div>
     <div id="status" class="status-msg">Verifying payment with bank...</div>
     <br>
@@ -218,8 +255,9 @@ function renderCheckoutHtml({ orderId, tier = 'pro', email = 'aabir.hussain1@gma
     var keyId = "${RAZORPAY_KEY_ID}";
     var orderId = "${orderId}";
     var tier = "${tier}";
-    var amount = ${plan.amountCents};
-    var currency = "${plan.currency}";
+    var amount = ${amount};
+    var currency = "USD";
+    var type = "${type}";
     var returnScheme = "${returnScheme}";
 
     var options = {
@@ -227,7 +265,7 @@ function renderCheckoutHtml({ orderId, tier = 'pro', email = 'aabir.hussain1@gma
       amount: amount,
       currency: currency,
       name: "ShakTalk",
-      description: "${plan.name} Monthly Subscription",
+      description: "${title}",
       order_id: orderId,
       prefill: {
         email: "${email}"
@@ -247,20 +285,37 @@ function renderCheckoutHtml({ orderId, tier = 'pro', email = 'aabir.hussain1@gma
             orderId: response.razorpay_order_id,
             paymentId: response.razorpay_payment_id,
             signature: response.razorpay_signature,
-            tier: tier
+            tier: tier,
+            type: type,
+            amountCents: amount
           })
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.ok) {
-            window.location.href = returnScheme + "://payment-success?status=success&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+            // Attempt app deep link redirect
+            var targetUrl = returnScheme + "://payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+            window.location.href = targetUrl;
+
+            // In case running in desktop browser where custom scheme doesn't close:
+            setTimeout(function() {
+              document.getElementById('spinner').style.display = 'none';
+              document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">Payment ID: ' + response.razorpay_payment_id + '<br><br>You can now close this tab and return to ShakTalk.</span>';
+              document.getElementById('status').style.display = 'block';
+            }, 800);
           } else {
             alert("Payment verification failed: " + (data.error || "Please contact support."));
             window.location.href = returnScheme + "://payment-cancel";
           }
         })
         .catch(function(err) {
-          window.location.href = returnScheme + "://payment-success?status=success&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+          var targetUrl = returnScheme + "://payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+          window.location.href = targetUrl;
+          setTimeout(function() {
+            document.getElementById('spinner').style.display = 'none';
+            document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">You can now close this tab and return to ShakTalk.</span>';
+            document.getElementById('status').style.display = 'block';
+          }, 800);
         });
       },
       modal: {
@@ -277,7 +332,6 @@ function renderCheckoutHtml({ orderId, tier = 'pro', email = 'aabir.hussain1@gma
       e.preventDefault();
     };
 
-    // Auto-launch checkout when page loads
     window.addEventListener('load', function() {
       setTimeout(function() {
         try { rzp.open(); } catch(e) {}
@@ -295,4 +349,3 @@ module.exports = {
   PLANS,
   RAZORPAY_KEY_ID,
 };
-

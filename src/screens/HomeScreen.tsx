@@ -23,6 +23,7 @@ import { QRCodeDisplay } from '../components/QRCodeDisplay';
 import { QRScanner } from '../components/QRScanner';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { StatusBadge } from '../components/StatusBadge';
+import { WalletModal } from '../components/WalletModal';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useAuthFetch } from '../utils/authFetch';
 import { useRef } from 'react';
@@ -107,6 +108,8 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   const [myLang, setMyLang] = useState('English');
   const [currentTier, setCurrentTier] = useState<PlanTier>('pro');
+  const [showWallet, setShowWallet] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [currentEngineState, setCurrentEngineState] = useState<CallEngine>('livekit');
 
   useEffect(() => {
@@ -394,6 +397,18 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {/* Wallet Button */}
+              <TouchableOpacity
+                onPress={() => setShowWallet(true)}
+                style={styles.walletBadge}
+                activeOpacity={0.75}
+              >
+                <Feather name="credit-card" size={12} color="#2FE0A8" style={{ marginRight: 4 }} />
+                <Text style={styles.walletBadgeText}>
+                  {walletBalance || 'Wallet'}
+                </Text>
+              </TouchableOpacity>
+
               {/* Active Model / Plan Chip */}
               <TouchableOpacity
                 onPress={onOpenProfile}
@@ -765,6 +780,21 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.warm, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   titleGreen: { color: colors.signal },
+  walletBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(47, 224, 168, 0.35)',
+    backgroundColor: 'rgba(47, 224, 168, 0.1)',
+  },
+  walletBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2FE0A8',
+  },
   modelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
