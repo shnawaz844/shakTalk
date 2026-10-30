@@ -19,6 +19,7 @@ import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { ModelSwitcher } from '../components/ModelSwitcher';
+import { setStoredEngine, setStoredPlanTier, CallEngine, PlanTier } from '../utils/enginePreference';
 import type { Gender } from './OnboardingScreen';
 
 interface ProfileScreenProps {
@@ -35,6 +36,43 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   const { user } = useUser();
   const { getToken, signOut } = useAuth();
   const [deleting, setDeleting] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+
+  const handleRestorePurchases = async () => {
+    try {
+      setRestoring(true);
+      const token = await getToken();
+      if (!token) throw new Error('Not authenticated');
+
+      const res = await fetch(`${API_URL}/user/account-state`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        if (data.hasPurchasedPlan) {
+          await setStoredEngine(data.planEngine as CallEngine);
+          await setStoredPlanTier(data.planTier as PlanTier);
+          const planName = data.planTier === 'business' ? 'Dual AI All-Access' : (data.planTier === 'pro' ? 'Pro Plan' : 'Base Plan');
+          Alert.alert(
+            'Account Restored! 🎉',
+            `Your ${planName} subscription is active with ${data.totalMinutes} total minutes available across your plan and wallet.`
+          );
+        } else {
+          Alert.alert(
+            'Account Verified',
+            `Your wallet has ${data.walletMinutes || 0} minutes available. No active monthly subscription was found for this account.`
+          );
+        }
+      } else {
+        throw new Error(data.error || 'Could not restore account');
+      }
+    } catch (err: any) {
+      Alert.alert('Restore Notice', err.message || 'Could not sync account state.');
+    } finally {
+      setRestoring(false);
+    }
+  };
   const meta = user?.unsafeMetadata as any;
 
   // Account deletion (required by Apple and Google). Deletes data on the
@@ -251,6 +289,23 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
             )}
           </TouchableOpacity>
 
+          {/* Restore Purchases & Sync Plan */}
+          <TouchableOpacity
+            style={styles.restoreBtn}
+            onPress={handleRestorePurchases}
+            disabled={restoring}
+            activeOpacity={0.8}
+          >
+            {restoring ? (
+              <ActivityIndicator color="#2FE0A8" size="small" />
+            ) : (
+              <>
+                <Feather name="refresh-cw" size={16} color="#2FE0A8" style={{ marginRight: 8 }} />
+                <Text style={styles.restoreBtnText}>Restore Plan & Sync Credits</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
           <View style={styles.legalRow}>
             <Text style={styles.legalLink} onPress={() => Linking.openURL(TERMS_URL)}>Terms of Use</Text>
             <Text style={styles.legalDot}>·</Text>
@@ -358,4 +413,20 @@ const styles = StyleSheet.create({
   },
   deleteBtnText: { color: '#E85C5C', fontSize: 15, fontWeight: '700' },
   saveBtnText: { color: '#000', fontSize: 16, fontWeight: '800' },
+  restoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(47, 224, 168, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(47, 224, 168, 0.3)',
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 12,
+  },
+  restoreBtnText: {
+    color: '#2FE0A8',
+    fontSize: 15,
+    fontWeight: '700',
+  },
 });

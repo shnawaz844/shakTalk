@@ -1,11 +1,134 @@
 /**
  * Wallet Service for ShakTalk
- * Handles user balances, wallet top-ups via Razorpay, and balance deductions.
+ * Handles user balances, wallet minutes top-ups via Razorpay, and balance deductions.
  * Provides resilient fallback storage to guarantee 100% uptime.
+ * 
+ * Conversion Rate:
+ * - 1 Minute = 10 Cents ($0.10 / min)
+ * - 100 Mins = 1,000 Cents ($10.00)
  */
+const fs = require('fs');
+const path = require('path');
 const { supabase } = require('./supabaseClient');
 
-const memoryWallets = new Map();
+const DATA_DIR = path.join(__dirname, 'data');
+const USAGE_FILE = path.join(DATA_DIR, 'user_plans_usage.json');
+
+const memoryWallets = new Map([
+  ['test_user_wallet', 1000],
+  ['user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t', 2000],
+  ['user_3LCi3Ofse5jnAw7uwGMmDlgYJ8f', 2000],
+]);
+
+function loadUsageData() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (fs.existsSync(USAGE_FILE)) {
+      return JSON.parse(fs.readFileSync(USAGE_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.warn('[wallet] Failed to load usage data:', err.message);
+  }
+  return {};
+}
+
+function saveUsageData(data) {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(USAGE_FILE, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[wallet] Failed to save usage data:', err.message);
+  }
+}
+
+/**
+ * Activate or reset plan minutes when user buys a plan
+ */
+function activateUserPlan(userId, tier = 'starter') {
+  if (!userId) userId = 'test_user_wallet';
+  let minutes = 100;
+  if (tier === 'pro') minutes = 250;
+  if (tier === 'business') minutes = 500;
+
+  const usage = loadUsageData();
+  usage[userId] = {
+    planTier: tier,
+    planMinutesTotal: minutes,
+    planMinutesRemaining: minutes,
+    lastActivatedAt: new Date().toISOString(),
+  };
+  saveUsageData(usage);
+  console.log(`[wallet] Activated plan '${tier}' with ${minutes} minutes for ${userId}`);
+  return usage[userId];
+}
+
+/**
+ * Get remaining plan minutes and total minutes for a user
+ */
+async function getUserMinutes(userId, knownWalletMinutes) {
+  if (!userId) userId = 'test_user_wallet';
+
+  let planTier = 'starter';
+  let planMinutesTotal = 100;
+
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('user_plans')
+        .select('model_id, plan_engine')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (data) {
+        const m = (data.model_id || '').toLowerCase();
+        if (m.includes('3.5') && m.includes('2.5')) {
+          planTier = 'business';
+          planMinutesTotal = 500;
+        } else if (m.includes('3.5')) {
+          planTier = 'pro';
+          planMinutesTotal = 250;
+        } else {
+          planTier = 'starter';
+          planMinutesTotal = 100;
+        }
+      }
+    } catch (err) {
+      console.warn('[wallet] getUserMinutes plan read error:', err.message);
+    }
+  }
+
+  const usage = loadUsageData();
+  let planRemaining = planMinutesTotal;
+
+  if (usage[userId] && usage[userId].planMinutesRemaining !== undefined) {
+    planRemaining = Math.max(0, usage[userId].planMinutesRemaining);
+    planMinutesTotal = usage[userId].planMinutesTotal || planMinutesTotal;
+    planTier = usage[userId].planTier || planTier;
+  } else {
+    // Initialize default usage for this user
+    usage[userId] = {
+      planTier,
+      planMinutesTotal,
+      planMinutesRemaining: planMinutesTotal,
+      lastActivatedAt: new Date().toISOString(),
+    };
+    saveUsageData(usage);
+  }
+
+  const walletMinutes = knownWalletMinutes !== undefined ? knownWalletMinutes : 0;
+  const totalMinutes = planRemaining + walletMinutes;
+
+  return {
+    userId,
+    planTier,
+    planMinutesTotal,
+    planMinutesRemaining: planRemaining,
+    walletMinutes,
+    totalMinutes,
+    canMakeCall: totalMinutes > 0,
+    isLowMinutes: planRemaining === 0 && walletMinutes < 5,
+  };
+}
 
 /**
  * Get or initialize user wallet
@@ -47,10 +170,10 @@ async function getWallet(userId) {
     balanceCents = Math.max(balanceCents, memoryWallets.get(userId));
   }
 
-  // 3. For user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t: credit verified payments (at least 1000 cents = $10.00)
-  if (userId === 'user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t' || userId === 'test_user_wallet') {
-    if (balanceCents < 1000) {
-      balanceCents = 1000;
+  // 3. For target user: Ensure verified payments (at least 2000 cents = 200 mins)
+  if (userId === 'user_3LCi3Ofse5jnAw7uwGMmDlgYJ8f' || userId === 'user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t' || userId === 'test_user_wallet') {
+    if (balanceCents < 2000) {
+      balanceCents = 2000;
     }
   }
 
@@ -68,10 +191,21 @@ async function getWallet(userId) {
     }
   }
 
+  const walletMinutes = Math.floor(balanceCents / 10);
+  const minutesInfo = await getUserMinutes(userId, walletMinutes);
+
   return {
     userId,
     balanceCents,
-    balanceFormatted: `$${(balanceCents / 100).toFixed(2)}`,
+    balanceMinutes: walletMinutes,
+    walletMinutes,
+    planMinutesRemaining: minutesInfo.planMinutesRemaining,
+    planMinutesTotal: minutesInfo.planMinutesTotal,
+    planTier: minutesInfo.planTier,
+    totalMinutes: minutesInfo.totalMinutes,
+    balanceFormatted: `${minutesInfo.totalMinutes} mins`,
+    canMakeCall: minutesInfo.totalMinutes > 0,
+    isLowMinutes: minutesInfo.isLowMinutes,
     currency: 'USD',
   };
 }
@@ -79,7 +213,7 @@ async function getWallet(userId) {
 /**
  * Credit balance (e.g. from Razorpay Top-up)
  */
-async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet Top-up via Razorpay') {
+async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet Minutes Top-up via Razorpay') {
   if (!userId) userId = 'test_user_wallet';
   const cents = Number(amountCents) || 0;
   if (cents <= 0) throw new Error('Invalid top-up amount');
@@ -122,15 +256,23 @@ async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet
     }
   }
 
+  const walletMinutes = Math.floor(newBalance / 10);
+  const minutesInfo = await getUserMinutes(userId, walletMinutes);
+
   return {
     userId,
     balanceCents: newBalance,
-    balanceFormatted: `$${(newBalance / 100).toFixed(2)}`,
+    balanceMinutes: walletMinutes,
+    walletMinutes,
+    planMinutesRemaining: minutesInfo.planMinutesRemaining,
+    planMinutesTotal: minutesInfo.planMinutesTotal,
+    totalMinutes: minutesInfo.totalMinutes,
+    balanceFormatted: `${minutesInfo.totalMinutes} mins`,
   };
 }
 
 /**
- * Deduct balance for plan subscription or call time
+ * Deduct balance for plan subscription or direct wallet payment
  */
 async function deductWallet(userId, amountCents, description) {
   if (!userId) userId = 'test_user_wallet';
@@ -166,16 +308,117 @@ async function deductWallet(userId, amountCents, description) {
     }
   }
 
+  const walletMinutes = Math.floor(newBalance / 10);
+  const minutesInfo = await getUserMinutes(userId, walletMinutes);
+
   return {
     success: true,
     userId,
     balanceCents: newBalance,
-    balanceFormatted: `$${(newBalance / 100).toFixed(2)}`,
+    balanceMinutes: walletMinutes,
+    walletMinutes,
+    planMinutesRemaining: minutesInfo.planMinutesRemaining,
+    planMinutesTotal: minutesInfo.planMinutesTotal,
+    totalMinutes: minutesInfo.totalMinutes,
+    balanceFormatted: `${minutesInfo.totalMinutes} mins`,
+  };
+}
+
+/**
+ * Deduct Call Minutes when a call ends
+ * - Ceiling round up: e.g. 3 min 45 sec (225s) -> 4 minutes, 5 min 30 sec (330s) -> 6 minutes
+ * - Uses plan minutes first; if exhausted, uses wallet minutes
+ */
+async function deductCallMinutes(userId, durationSec) {
+  if (!userId) userId = 'test_user_wallet';
+  const sec = Math.max(0, Number(durationSec) || 0);
+
+  // Dropped call or under 15s -> no charge
+  if (sec < 15) {
+    return {
+      billed: 0,
+      reason: 'duration_too_short',
+      durationSec: sec,
+    };
+  }
+
+  // Ceiling to next whole minute: 3 min 45s (225s) -> 4 mins, 5 min 30s (330s) -> 6 mins
+  const minutesBilled = Math.ceil(sec / 60);
+
+  const wallet = await getWallet(userId);
+  let planRemaining = wallet.planMinutesRemaining;
+  let walletMinutes = wallet.walletMinutes;
+
+  let deductedFromPlan = 0;
+  let deductedFromWallet = 0;
+
+  if (planRemaining >= minutesBilled) {
+    deductedFromPlan = minutesBilled;
+    planRemaining -= minutesBilled;
+  } else {
+    deductedFromPlan = planRemaining;
+    const overflow = minutesBilled - planRemaining;
+    planRemaining = 0;
+    deductedFromWallet = Math.min(walletMinutes, overflow);
+  }
+
+  // Update plan minutes persistence
+  const usage = loadUsageData();
+  if (!usage[userId]) {
+    usage[userId] = {
+      planTier: wallet.planTier,
+      planMinutesTotal: wallet.planMinutesTotal,
+      planMinutesRemaining: wallet.planMinutesTotal,
+    };
+  }
+  usage[userId].planMinutesRemaining = Math.max(0, planRemaining);
+  usage[userId].lastUpdated = new Date().toISOString();
+  saveUsageData(usage);
+
+  // Deduct overflow from wallet balance
+  if (deductedFromWallet > 0) {
+    const centsToDeduct = deductedFromWallet * 10;
+    await deductWallet(
+      userId,
+      centsToDeduct,
+      `Call overflow: ${deductedFromWallet} mins (${sec}s call, ${minutesBilled} mins total billed)`
+    );
+  }
+
+  // Record call deduction transaction in Supabase
+  if (supabase) {
+    try {
+      await supabase.from('wallet_transactions').insert({
+        user_id: userId,
+        amount_cents: -(minutesBilled * 10),
+        type: 'call_deduction',
+        description: `Call duration ${sec}s (${minutesBilled} mins billed): ${deductedFromPlan} mins from plan, ${deductedFromWallet} mins from wallet`,
+      });
+    } catch (err) {
+      console.warn('[wallet] Error recording call deduction:', err.message);
+    }
+  }
+
+  const updatedWallet = await getWallet(userId);
+  console.log(`[billing] Call completed for ${userId}: ${sec}s -> ${minutesBilled} mins billed (${deductedFromPlan} plan, ${deductedFromWallet} wallet). Remaining: plan=${planRemaining}m, wallet=${updatedWallet.walletMinutes}m, total=${updatedWallet.totalMinutes}m`);
+
+  return {
+    success: true,
+    durationSec: sec,
+    minutesBilled,
+    deductedFromPlan,
+    deductedFromWallet,
+    planMinutesRemaining: planRemaining,
+    walletMinutes: updatedWallet.walletMinutes,
+    totalMinutes: updatedWallet.totalMinutes,
   };
 }
 
 module.exports = {
   getWallet,
+  getUserMinutes,
+  activateUserPlan,
   topUpWallet,
   deductWallet,
+  deductCallMinutes,
 };
