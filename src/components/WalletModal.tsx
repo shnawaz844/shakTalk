@@ -239,8 +239,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                         <Text style={[styles.activePillText, { color: activePlan.color }]}>ACTIVE PLAN</Text>
                       </View>
                     </View>
-                    <Text style={styles.planModelText}>{activePlan.model}</Text>
-                  </View>
+                    </View>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={[styles.planPriceValue, { color: activePlan.color }]}>
@@ -316,7 +315,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   style={{ marginRight: 8 }}
                 />
                 <TextInput
-                  style={styles.customInput}
+                  style={[
+                    styles.customInput,
+                    Platform.OS === 'web' && ({ outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as any),
+                  ]}
                   value={customMinutes}
                   onChangeText={handleCustomMinutesChange}
                   placeholder="e.g. 150 (min 100)"
@@ -618,6 +620,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     height: '100%',
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    ...(Platform.OS === 'web'
+      ? ({
+        outlineStyle: 'none',
+        outlineWidth: 0,
+        boxShadow: 'none',
+      } as any)
+      : {}),
   },
   customCalcBadge: {
     backgroundColor: 'rgba(47, 224, 168, 0.15)',

@@ -194,12 +194,12 @@ ${msg}`);
 
   const planInfo = (() => {
     if (currentTier === 'starter' || currentEngineState === 'legacy') {
-      return { label: 'Base Model', color: '#39FF14', icon: 'zap' as const };
+      return { label: 'Base Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
     }
     if (currentTier === 'business') {
-      return { label: 'Both Models', color: '#E6A23C', icon: 'layers' as const };
+      return { label: 'Dual AI (500 mins)', color: '#E6A23C', icon: 'layers' as const };
     }
-    return { label: 'Pro Model', color: '#2FE0A8', icon: 'activity' as const };
+    return { label: 'Pro Plan (250 mins)', color: '#2FE0A8', icon: 'activity' as const };
   })();
 
   // Default to the user's native language (set in their profile) until they

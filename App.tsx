@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Image } from 'react-native';
+import { View, Image, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { APP_OPENING_SCREEN } from './src/config';
 import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
@@ -30,6 +30,26 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 
 WebBrowser.maybeCompleteAuthSession();
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const styleId = 'shaktalk-web-no-outline';
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.innerHTML = `
+      input, textarea, select {
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+      }
+      input:focus, textarea:focus, select:focus {
+        outline: none !important;
+        box-shadow: none !important;
+        border-color: transparent !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+}
+
 
 type AppScreen = 'onboarding' | 'home' | 'session' | 'profile' | 'conversation' | 'recordings';
 type AuthFlow = 'plan-selection' | 'login';
