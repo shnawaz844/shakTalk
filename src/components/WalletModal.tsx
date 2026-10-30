@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
@@ -33,6 +34,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
   const [loading, setLoading] = useState(false);
   const [processingTopup, setProcessingTopup] = useState(false);
   const [selectedAmountCents, setSelectedAmountCents] = useState(2500);
+  const [customAmount, setCustomAmount] = useState('');
 
   const fetchBalance = async () => {
     try {
@@ -60,7 +62,32 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
     }
   }, [visible]);
 
+  const handleCustomAmountChange = (text: string) => {
+    // Keep only numbers and max 1 decimal point
+    const sanitized = text.replace(/[^0-9.]/g, '');
+    const parts = sanitized.split('.');
+    const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : sanitized;
+    setCustomAmount(clean);
+
+    const num = parseFloat(clean);
+    if (!isNaN(num) && num > 0) {
+      setSelectedAmountCents(Math.round(num * 100));
+    } else {
+      setSelectedAmountCents(0);
+    }
+  };
+
   const handleTopup = async () => {
+    if (!selectedAmountCents || selectedAmountCents < 100) {
+      const msg = 'Please enter a valid amount (minimum $1.00).';
+      if (Platform.OS === 'web') {
+        alert(msg);
+      } else {
+        Alert.alert('Notice', msg);
+      }
+      return;
+    }
+
     try {
       setProcessingTopup(true);
       const token = await getToken().catch(() => null);
@@ -76,6 +103,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
 
       if (result.success) {
         await fetchBalance();
+        setCustomAmount('');
         if (Platform.OS === 'web') {
           alert('🎉 Top-up Successful! Your wallet balance has been updated.');
         } else {
@@ -94,6 +122,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
       setProcessingTopup(false);
     }
   };
+
+  const isCustomActive = !!customAmount;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -125,16 +155,19 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             </Text>
           </View>
 
-          {/* Top-up Selection */}
+          {/* Quick Preset Buttons */}
           <Text style={styles.sectionLabel}>CHOOSE TOP-UP AMOUNT</Text>
           <View style={styles.amountGrid}>
             {TOPUP_OPTIONS.map((opt) => {
-              const isSelected = selectedAmountCents === opt.cents;
+              const isSelected = !isCustomActive && selectedAmountCents === opt.cents;
               return (
                 <TouchableOpacity
                   key={opt.cents}
                   style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
-                  onPress={() => setSelectedAmountCents(opt.cents)}
+                  onPress={() => {
+                    setCustomAmount('');
+                    setSelectedAmountCents(opt.cents);
+                  }}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
@@ -145,20 +178,54 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             })}
           </View>
 
+          {/* Custom Any-Amount Input */}
+          <View style={styles.customSection}>
+            <Text style={styles.customLabel}>OR ENTER ANY AMOUNT ($)</Text>
+            <View style={[styles.customInputRow, isCustomActive && styles.customInputRowActive]}>
+              <Text style={[styles.currencyPrefix, isCustomActive && styles.currencyPrefixActive]}>$</Text>
+              <TextInput
+                style={styles.customInput}
+                value={customAmount}
+                onChangeText={handleCustomAmountChange}
+                placeholder="e.g. 22"
+                placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                keyboardType="decimal-pad"
+                maxLength={6}
+              />
+              {isCustomActive ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setCustomAmount('');
+                    setSelectedAmountCents(2500);
+                  }}
+                  style={styles.clearBtn}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="x" size={16} color="rgba(255,255,255,0.6)" />
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+
           {/* Top-up Button */}
           <TouchableOpacity
-            style={[styles.topupBtn, processingTopup && { opacity: 0.7 }]}
+            style={[
+              styles.topupBtn,
+              (processingTopup || selectedAmountCents < 100) && { opacity: 0.6 },
+            ]}
             onPress={handleTopup}
-            disabled={processingTopup}
+            disabled={processingTopup || selectedAmountCents < 100}
             activeOpacity={0.85}
           >
             {processingTopup ? (
               <ActivityIndicator color="#000" size="small" />
             ) : (
               <>
-                <Feather name="plus-circle" size={18} color="#000" style={{ marginRight: 6 }} />
+                <Feather name="plus-circle" size={18} color="#000" style={{ marginRight: 8 }} />
                 <Text style={styles.topupBtnText}>
-                  Top-up ${(selectedAmountCents / 100).toFixed(2)} with Razorpay
+                  {selectedAmountCents >= 100
+                    ? `Top-up $${(selectedAmountCents / 100).toFixed(2)} with Razorpay`
+                    : 'Enter an amount (min $1.00)'}
                 </Text>
               </>
             )}
@@ -179,7 +246,7 @@ const styles = StyleSheet.create({
   },
   content: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 420,
     backgroundColor: '#121714',
     borderRadius: 24,
     borderWidth: 1,
@@ -228,7 +295,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(47, 224, 168, 0.3)',
     padding: 22,
     alignItems: 'center',
-    marginBottom: 22,
+    marginBottom: 20,
   },
   balanceLabel: {
     fontSize: 11,
@@ -256,13 +323,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#8A9793',
     letterSpacing: 1.1,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   amountGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 22,
+    marginBottom: 16,
   },
   amountBtn: {
     flex: 1,
@@ -271,13 +338,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 14,
-    paddingVertical: 14,
+    paddingVertical: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
   amountBtnSelected: {
     borderColor: '#2FE0A8',
-    backgroundColor: 'rgba(47, 224, 168, 0.12)',
+    backgroundColor: 'rgba(47, 224, 168, 0.14)',
   },
   amountText: {
     fontSize: 17,
@@ -287,6 +354,50 @@ const styles = StyleSheet.create({
   amountTextSelected: {
     color: '#2FE0A8',
     fontWeight: '800',
+  },
+  customSection: {
+    marginBottom: 20,
+  },
+  customLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8A9793',
+    letterSpacing: 1.1,
+    marginBottom: 8,
+  },
+  customInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    height: 50,
+  },
+  customInputRowActive: {
+    borderColor: '#2FE0A8',
+    backgroundColor: 'rgba(47, 224, 168, 0.06)',
+  },
+  currencyPrefix: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: 'rgba(255, 255, 255, 0.4)',
+    marginRight: 6,
+  },
+  currencyPrefixActive: {
+    color: '#2FE0A8',
+  },
+  customInput: {
+    flex: 1,
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '700',
+    height: '100%',
+  },
+  clearBtn: {
+    padding: 6,
+    borderRadius: 6,
   },
   topupBtn: {
     backgroundColor: '#2FE0A8',
