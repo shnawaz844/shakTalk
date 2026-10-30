@@ -133,8 +133,18 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
       const res = await fetch(url, { headers });
       const data = await res.json();
-      if (data.ok && data.balanceFormatted) {
-        setWalletBalance(data.balanceFormatted);
+      if (data.ok) {
+        let mins = 0;
+        if (data.balanceMinutes !== undefined) {
+          mins = Number(data.balanceMinutes);
+        } else if (data.balanceCents !== undefined) {
+          mins = Math.floor(Number(data.balanceCents) / 10);
+        } else if (data.balanceFormatted) {
+          const raw = String(data.balanceFormatted);
+          const num = parseFloat(raw.replace(/[^0-9.]/g, ''));
+          mins = !isNaN(num) ? (raw.includes('min') ? Math.floor(num) : Math.floor(num * 10)) : 0;
+        }
+        setWalletBalance(`${mins} mins`);
       }
     } catch (e) {
       console.warn('[HomeScreen] fetchWalletBalance error:', e);
