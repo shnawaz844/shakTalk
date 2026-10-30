@@ -1,6 +1,12 @@
 /**
  * ShakTalk Razorpay Payment Service
  * Handles order creation, hosted checkout rendering, and signature verification.
+ * 
+ * Unit Cost & Margin Analysis:
+ * - Gemini 2.5 Flash Raw Cost: ~$0.025 / min
+ * - Gemini 3.5 Live Raw Cost: ~$0.050 / min
+ * - Retail Rate Card: $0.100 / min (₹9.50 / min)
+ * - Gross Profit Margin: 50% to 75%
  */
 const crypto = require('crypto');
 
@@ -17,45 +23,58 @@ const PLANS = {
     modelName: 'Gemini 2.5 Flash',
     engine: 'legacy',
     amountCents: 999, // $9.99
+    minutesIncluded: 100,
     currency: 'USD',
     displayPrice: '$9.99',
+    displayMinutes: '100 min / month',
+    description: '100 min/mo Turn-by-Turn Translation (Gemini 2.5 Flash)',
   },
   pro: {
     name: 'Pro Plan',
     modelName: 'Gemini 3.5 Live',
     engine: 'livekit',
     amountCents: 2499, // $24.99
+    minutesIncluded: 250,
     currency: 'USD',
     displayPrice: '$24.99',
+    displayMinutes: '250 min / month',
+    description: '250 min/mo Simultaneous Live Translation (Gemini 3.5 Live)',
   },
   business: {
     name: 'Dual AI All-Access',
     modelName: 'Dual Gemini 3.5 & 2.5',
     engine: 'livekit',
     amountCents: 4999, // $49.99
+    minutesIncluded: 500,
     currency: 'USD',
     displayPrice: '$49.99',
+    displayMinutes: '500 min / month',
+    description: '500 min/mo Dual AI Translation Access',
   },
 };
 
 /**
  * Creates a Razorpay Order via REST API.
- * Supports plan purchases or wallet top-ups.
+ * Supports plan purchases or wallet minutes top-ups.
  */
 async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) {
   let finalAmount = 0;
   let currency = 'USD';
   let planName = 'ShakTalk Wallet Top-up';
   let displayPrice = '';
+  let minutes = 0;
 
   if (type === 'wallet_topup') {
     finalAmount = Number(amountCents);
+    minutes = Math.floor(finalAmount / 10);
     displayPrice = `$${(finalAmount / 100).toFixed(2)}`;
+    planName = `ShakTalk Wallet - ${minutes} Minutes Top-up`;
   } else {
     const plan = PLANS[tier] || PLANS.pro;
     finalAmount = plan.amountCents;
-    planName = plan.name;
+    planName = `${plan.name} (${plan.minutesIncluded} mins/mo)`;
     displayPrice = plan.displayPrice;
+    minutes = plan.minutesIncluded;
   }
 
   const authHeader = 'Basic ' + Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
@@ -75,6 +94,7 @@ async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) 
         type,
         tier: tier || 'none',
         plan_name: planName,
+        minutes_included: String(minutes),
         user_id: userId || 'anonymous',
       },
     }),
@@ -92,6 +112,7 @@ async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) 
     tier: tier || 'wallet',
     planName,
     displayPrice,
+    minutes,
     type,
     keyId: RAZORPAY_KEY_ID,
   };
@@ -114,28 +135,31 @@ function verifyPaymentSignature({ orderId, paymentId, signature }) {
  */
 function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir.hussain1@gmail.com', type = 'plan', returnScheme = 'shaktalk' }) {
   let title = 'ShakTalk Pro Plan';
-  let amount = 2499;
   let displayPrice = '$24.99';
-  let desc = 'Includes unlimited real-time AI live voice translation with Google Gemini.';
-  let badge = 'SECURE RAZORPAY CHECKOUT';
+  let desc = '250 minutes of real-time live AI voice translation with Gemini 3.5 Live.';
+  let badge = 'Active Subscription';
+  let amount = 2499;
 
   if (type === 'wallet_topup') {
     amount = Number(amountCents) || 1000;
+    const mins = Math.floor(amount / 10);
+    title = `${mins} Minutes Wallet Top-up`;
     displayPrice = `$${(amount / 100).toFixed(2)}`;
-    title = 'Wallet Top-up';
-    desc = `Add ${displayPrice} to your ShakTalk wallet balance for calls and subscriptions.`;
-    badge = 'WALLET TOP-UP';
+    desc = `Add ${mins} minutes to your ShakTalk translation wallet. Valid for all calls.`;
+    badge = 'Prepaid Minutes';
   } else {
     const plan = PLANS[tier] || PLANS.pro;
-    amount = plan.amountCents;
-    displayPrice = plan.displayPrice;
     title = plan.name;
+    displayPrice = plan.displayPrice;
+    desc = `${plan.minutesIncluded} minutes / month of live translation with ${plan.modelName}.`;
+    badge = 'Monthly Plan';
+    amount = plan.amountCents;
   }
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ShakTalk Secure Payment</title>
   <style>

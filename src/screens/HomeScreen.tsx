@@ -428,7 +428,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
               >
                 <Feather name="credit-card" size={12} color="#2FE0A8" style={{ marginRight: 5 }} />
                 <Text style={styles.walletBadgeText}>
-                  {walletBalance || '$0.00'}
+                  {walletBalance || '0 mins'}
                 </Text>
               </TouchableOpacity>
 

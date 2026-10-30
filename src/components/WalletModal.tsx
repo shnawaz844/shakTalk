@@ -27,20 +27,20 @@ interface WalletModalProps {
   onBalanceUpdated?: (balanceFormatted: string) => void;
 }
 
-const TOPUP_OPTIONS = [
-  { label: '$10', cents: 1000 },
-  { label: '$25', cents: 2500 },
-  { label: '$50', cents: 5000 },
-  { label: '$100', cents: 10000 },
+// Preset top-up packages in minutes
+const MINUTE_PRESETS = [
+  { minutes: 50, cents: 500, label: '50 Mins' },
+  { minutes: 100, cents: 1000, label: '100 Mins' },
+  { minutes: 250, cents: 2499, label: '250 Mins' },
+  { minutes: 500, cents: 4999, label: '500 Mins' },
 ];
 
 const PLAN_INFO: Record<
   PlanTier,
   {
     name: string;
-    price: string;
-    monthlyAmount: string;
     model: string;
+    monthlyMinutes: string;
     color: string;
     icon: 'zap' | 'activity' | 'layers';
     description: string;
@@ -48,50 +48,47 @@ const PLAN_INFO: Record<
 > = {
   starter: {
     name: 'Base Plan',
-    price: '$9.99',
-    monthlyAmount: '$9.99 / mo',
     model: 'Gemini 2.5 Flash',
+    monthlyMinutes: '100 mins',
     color: '#39FF14',
     icon: 'zap',
-    description: 'Turn-by-Turn Translation (Paid via Razorpay)',
+    description: '100 min/mo Turn-by-Turn Translation',
   },
   pro: {
     name: 'Pro Plan',
-    price: '$24.99',
-    monthlyAmount: '$24.99 / mo',
     model: 'Gemini 3.5 Live',
+    monthlyMinutes: '250 mins',
     color: '#2FE0A8',
     icon: 'activity',
-    description: 'Real-Time Simultaneous Live Translation',
+    description: '250 min/mo Simultaneous Live Translation',
   },
   business: {
     name: 'Dual AI All-Access',
-    price: '$49.99',
-    monthlyAmount: '$49.99 / mo',
-    model: 'Both 3.5 Live & 2.5 Flash',
+    model: 'Dual Gemini 3.5 & 2.5',
+    monthlyMinutes: '500 mins',
     color: '#E6A23C',
     icon: 'layers',
-    description: 'Both Turn-by-Turn & Live Simultaneous',
+    description: '500 min/mo Dual AI Translation Access',
   },
   payg: {
     name: 'Standard Plan',
-    price: '$0.00',
-    monthlyAmount: 'Pay as you go',
     model: 'Gemini Flash',
+    monthlyMinutes: '0 mins',
     color: '#8A9793',
     icon: 'zap',
-    description: 'Standard Translation Access',
+    description: 'Standard translation access',
   },
 };
 
 export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalProps) {
   const { getToken } = useAuth();
   const { user } = useUser();
-  const [balance, setBalance] = useState('$0.00');
+  const [balanceMinutes, setBalanceMinutes] = useState(100);
   const [loading, setLoading] = useState(false);
   const [processingTopup, setProcessingTopup] = useState(false);
-  const [selectedAmountCents, setSelectedAmountCents] = useState(2500);
-  const [customAmount, setCustomAmount] = useState('');
+  const [selectedMinutes, setSelectedMinutes] = useState(100);
+  const [selectedAmountCents, setSelectedAmountCents] = useState(1000);
+  const [customMinutes, setCustomMinutes] = useState('');
   const [currentTier, setCurrentTier] = useState<PlanTier>('starter');
 
   useEffect(() => {
@@ -114,9 +111,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
 
       const res = await fetch(url, { headers });
       const data = await res.json();
-      if (data.ok && data.balanceFormatted) {
-        setBalance(data.balanceFormatted);
-        onBalanceUpdated?.(data.balanceFormatted);
+      if (data.ok) {
+        const mins = data.balanceMinutes !== undefined ? Number(data.balanceMinutes) : Math.floor((data.balanceCents || 0) / 10);
+        setBalanceMinutes(mins);
+        onBalanceUpdated?.(`${mins} mins`);
       }
     } catch (e) {
       console.warn('[WalletModal] fetchBalance error:', e);
@@ -132,23 +130,25 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
     }
   }, [visible]);
 
-  const handleCustomAmountChange = (text: string) => {
-    const sanitized = text.replace(/[^0-9.]/g, '');
-    const parts = sanitized.split('.');
-    const clean = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : sanitized;
-    setCustomAmount(clean);
+  // Handle custom minutes input (e.g. 20 minutes)
+  const handleCustomMinutesChange = (text: string) => {
+    const sanitized = text.replace(/[^0-9]/g, '');
+    setCustomMinutes(sanitized);
 
-    const num = parseFloat(clean);
-    if (!isNaN(num) && num > 0) {
-      setSelectedAmountCents(Math.round(num * 100));
+    const mins = parseInt(sanitized, 10);
+    if (!isNaN(mins) && mins > 0) {
+      setSelectedMinutes(mins);
+      // Rate: 10 cents per minute ($0.10 / min)
+      setSelectedAmountCents(mins * 10);
     } else {
+      setSelectedMinutes(0);
       setSelectedAmountCents(0);
     }
   };
 
   const handleTopup = async () => {
-    if (!selectedAmountCents || selectedAmountCents < 100) {
-      const msg = 'Please enter a valid amount (minimum $1.00).';
+    if (!selectedMinutes || selectedMinutes < 10) {
+      const msg = 'Please enter at least 10 minutes to top up.';
       if (Platform.OS === 'web') {
         alert(msg);
       } else {
@@ -166,18 +166,18 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
         amountCents: selectedAmountCents,
         authToken: token,
         userId: user?.id,
-        name: 'ShakTalk Wallet Top-up',
-        description: `Add $${(selectedAmountCents / 100).toFixed(2)} to Wallet Balance`,
+        name: `ShakTalk ${selectedMinutes} Mins Top-up`,
+        description: `Add ${selectedMinutes} minutes to your call balance`,
         email: user?.primaryEmailAddress?.emailAddress || 'aabir.hussain1@gmail.com',
       });
 
       if (result.success) {
         await fetchBalance();
-        setCustomAmount('');
+        setCustomMinutes('');
         if (Platform.OS === 'web') {
-          alert('🎉 Top-up Successful! Your wallet balance has been updated.');
+          alert(`🎉 Top-up Successful! ${selectedMinutes} minutes added to your wallet.`);
         } else {
-          Alert.alert('Top-up Successful! 🎉', 'Your wallet balance has been updated.');
+          Alert.alert('Top-up Successful! 🎉', `${selectedMinutes} minutes added to your wallet.`);
         }
         return;
       }
@@ -193,7 +193,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
     }
   };
 
-  const isCustomActive = !!customAmount;
+  const isCustomActive = !!customMinutes;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -231,46 +231,50 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   </View>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.planPriceValue, { color: activePlan.color }]}>{activePlan.price}</Text>
-                  <Text style={styles.planPriceSub}>/mo paid</Text>
+                  <Text style={[styles.planPriceValue, { color: activePlan.color }]}>{activePlan.monthlyMinutes}</Text>
+                  <Text style={styles.planPriceSub}>/mo included</Text>
                 </View>
               </View>
 
               <View style={styles.planDivider} />
 
               <View style={styles.planFooterRow}>
-                <Feather name="check-circle" size={12} color={activePlan.color} style={{ marginRight: 6 }} />
+                <Feather name="clock" size={12} color={activePlan.color} style={{ marginRight: 6 }} />
                 <Text style={styles.planFooterText}>{activePlan.description}</Text>
               </View>
             </View>
 
-            {/* Available Wallet Cash Card */}
+            {/* Available Wallet Minutes Card */}
             <View style={styles.balanceCard}>
               <View style={styles.balanceHeaderRow}>
-                <Text style={styles.balanceLabel}>AVAILABLE WALLET CASH</Text>
-                <Feather name="shield" size={12} color="#2FE0A8" />
+                <Text style={styles.balanceLabel}>AVAILABLE WALLET MINUTES</Text>
+                <Feather name="clock" size={13} color="#2FE0A8" />
               </View>
               {loading ? (
                 <ActivityIndicator color="#2FE0A8" style={{ marginVertical: 6 }} />
               ) : (
-                <Text style={styles.balanceAmount}>{balance}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6, marginVertical: 2 }}>
+                  <Text style={styles.balanceAmount}>{balanceMinutes}</Text>
+                  <Text style={styles.balanceUnit}>MINUTES</Text>
+                </View>
               )}
               <Text style={styles.balanceSub}>
-                Use wallet cash for extra call time, model add-ons, or automatic plan renewals.
+                Real-time live voice translation time available across all calls.
               </Text>
             </View>
 
-            {/* Quick Preset Buttons */}
-            <Text style={styles.sectionLabel}>CHOOSE TOP-UP AMOUNT</Text>
+            {/* Preset Minutes Selection */}
+            <Text style={styles.sectionLabel}>CHOOSE TOP-UP MINUTES</Text>
             <View style={styles.amountGrid}>
-              {TOPUP_OPTIONS.map((opt) => {
-                const isSelected = !isCustomActive && selectedAmountCents === opt.cents;
+              {MINUTE_PRESETS.map((opt) => {
+                const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
                 return (
                   <TouchableOpacity
-                    key={opt.cents}
+                    key={opt.minutes}
                     style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
                     onPress={() => {
-                      setCustomAmount('');
+                      setCustomMinutes('');
+                      setSelectedMinutes(opt.minutes);
                       setSelectedAmountCents(opt.cents);
                     }}
                     activeOpacity={0.8}
@@ -283,25 +287,38 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
               })}
             </View>
 
-            {/* Custom Any-Amount Input */}
+            {/* Custom Minutes Input */}
             <View style={styles.customSection}>
-              <Text style={styles.customLabel}>OR ENTER ANY AMOUNT ($)</Text>
+              <Text style={styles.customLabel}>OR ENTER MINUTES</Text>
               <View style={[styles.customInputRow, isCustomActive && styles.customInputRowActive]}>
-                <Text style={[styles.currencyPrefix, isCustomActive && styles.currencyPrefixActive]}>$</Text>
+                <Feather
+                  name="clock"
+                  size={16}
+                  color={isCustomActive ? "#2FE0A8" : "rgba(255, 255, 255, 0.4)"}
+                  style={{ marginRight: 8 }}
+                />
                 <TextInput
                   style={styles.customInput}
-                  value={customAmount}
-                  onChangeText={handleCustomAmountChange}
-                  placeholder="e.g. 22"
+                  value={customMinutes}
+                  onChangeText={handleCustomMinutesChange}
+                  placeholder="e.g. 20"
                   placeholderTextColor="rgba(255, 255, 255, 0.3)"
-                  keyboardType="decimal-pad"
-                  maxLength={6}
+                  keyboardType="number-pad"
+                  maxLength={5}
                 />
+                {isCustomActive && selectedAmountCents > 0 && (
+                  <View style={styles.customCalcBadge}>
+                    <Text style={styles.customCalcText}>
+                      {selectedMinutes} Mins
+                    </Text>
+                  </View>
+                )}
                 {isCustomActive ? (
                   <TouchableOpacity
                     onPress={() => {
-                      setCustomAmount('');
-                      setSelectedAmountCents(2500);
+                      setCustomMinutes('');
+                      setSelectedMinutes(100);
+                      setSelectedAmountCents(1000);
                     }}
                     style={styles.clearBtn}
                     activeOpacity={0.7}
@@ -316,10 +333,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             <TouchableOpacity
               style={[
                 styles.topupBtn,
-                (processingTopup || selectedAmountCents < 100) && { opacity: 0.6 },
+                (processingTopup || selectedMinutes < 10) && { opacity: 0.6 },
               ]}
               onPress={handleTopup}
-              disabled={processingTopup || selectedAmountCents < 100}
+              disabled={processingTopup || selectedMinutes < 10}
               activeOpacity={0.85}
             >
               {processingTopup ? (
@@ -328,9 +345,9 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                 <>
                   <Feather name="plus-circle" size={18} color="#000" style={{ marginRight: 8 }} />
                   <Text style={styles.topupBtnText}>
-                    {selectedAmountCents >= 100
-                      ? `Top-up $${(selectedAmountCents / 100).toFixed(2)} with Razorpay`
-                      : 'Enter an amount (min $1.00)'}
+                    {selectedMinutes >= 10
+                      ? `Top-up ${selectedMinutes} Minutes with Razorpay`
+                      : 'Enter minutes (min 10 mins)'}
                   </Text>
                 </>
               )}
@@ -484,11 +501,16 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
   },
   balanceAmount: {
-    fontSize: 34,
+    fontSize: 38,
     fontWeight: '900',
     color: '#2FE0A8',
     letterSpacing: -0.5,
-    marginVertical: 2,
+  },
+  balanceUnit: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: 'rgba(47, 224, 168, 0.8)',
+    letterSpacing: 0.8,
   },
   balanceSub: {
     fontSize: 11.5,
@@ -517,7 +539,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -527,12 +549,20 @@ const styles = StyleSheet.create({
   },
   amountText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#FFF',
   },
   amountTextSelected: {
     color: '#2FE0A8',
-    fontWeight: '800',
+  },
+  amountPriceSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.45)',
+    marginTop: 2,
+  },
+  amountPriceSubSelected: {
+    color: 'rgba(47, 224, 168, 0.85)',
   },
   customSection: {
     marginBottom: 18,
@@ -558,21 +588,24 @@ const styles = StyleSheet.create({
     borderColor: '#2FE0A8',
     backgroundColor: 'rgba(47, 224, 168, 0.06)',
   },
-  currencyPrefix: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: 'rgba(255, 255, 255, 0.4)',
-    marginRight: 6,
-  },
-  currencyPrefixActive: {
-    color: '#2FE0A8',
-  },
   customInput: {
     flex: 1,
     color: '#FFF',
     fontSize: 15,
     fontWeight: '700',
     height: '100%',
+  },
+  customCalcBadge: {
+    backgroundColor: 'rgba(47, 224, 168, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  customCalcText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2FE0A8',
   },
   clearBtn: {
     padding: 6,
@@ -592,7 +625,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   topupBtnText: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: '800',
     color: '#000',
     letterSpacing: 0.2,

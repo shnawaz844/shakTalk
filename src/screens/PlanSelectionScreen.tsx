@@ -34,6 +34,8 @@ interface MonthlyBundle {
   subtitle: string;
   price: string;
   billingPeriod: string;
+  minutes: number;
+  minutesLabel: string;
   accentColor: string;
   bgColor: string;
   borderColor: string;
@@ -50,6 +52,8 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
     subtitle: 'Turn-by-Turn Translation (One-by-One)',
     price: '$9.99',
     billingPeriod: '/month',
+    minutes: 100,
+    minutesLabel: '100 min / month',
     accentColor: '#39FF14',
     bgColor: '#0D1F10',
     borderColor: '#39FF14',
@@ -64,6 +68,8 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
     subtitle: 'Real-Time Live Translation (Simultaneous)',
     price: '$24.99',
     billingPeriod: '/month',
+    minutes: 250,
+    minutesLabel: '250 min / month',
     accentColor: '#2FE0A8',
     bgColor: '#0A1E1A',
     borderColor: '#2FE0A8',
@@ -78,6 +84,8 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
     subtitle: 'Both Turn-by-Turn & Live Translation',
     price: '$49.99',
     billingPeriod: '/month',
+    minutes: 500,
+    minutesLabel: '500 min / month',
     accentColor: '#E6A23C',
     bgColor: '#1D170A',
     borderColor: '#E6A23C',
@@ -230,13 +238,42 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
                   </View>
                 </View>
 
-                {/* Pricing Row */}
+                {/* Pricing & Minutes Row */}
                 <View style={styles.costRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
                     <Text style={[styles.costAmount, isActive && { color: bundle.accentColor }]}>
-                      {bundle.price}
+                      {bundle.minutes}
                     </Text>
-                    <Text style={styles.costPeriodLabel}>{bundle.billingPeriod}</Text>
+                    <Text style={styles.costPeriodLabel}>min / month</Text>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.minutesChip,
+                      {
+                        backgroundColor: isActive
+                          ? bundle.accentColor + '20'
+                          : 'rgba(255, 255, 255, 0.06)',
+                        borderColor: isActive
+                          ? bundle.accentColor + '50'
+                          : 'rgba(255, 255, 255, 0.12)',
+                      },
+                    ]}
+                  >
+                    <Feather
+                      name="cpu"
+                      size={12}
+                      color={isActive ? bundle.accentColor : '#A0AEC0'}
+                      style={{ marginRight: 5 }}
+                    />
+                    <Text
+                      style={[
+                        styles.minutesChipText,
+                        isActive && { color: bundle.accentColor, fontWeight: '800' },
+                      ]}
+                    >
+                      {bundle.modelName}
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -260,7 +297,7 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
           ) : (
             <>
               <Text style={styles.continueBtnText}>
-                Continue with {selectedBundle.name} ({selectedBundle.price})
+                Continue with {selectedBundle.name} ({selectedBundle.minutes} mins)
               </Text>
               <Feather name="arrow-right" size={18} color="#000" />
             </>
@@ -366,6 +403,19 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   costAmount: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
+  minutesChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  minutesChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.75)',
+  },
   costPeriodLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '500' },
 
   continueBtn: {

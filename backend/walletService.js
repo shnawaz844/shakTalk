@@ -1,11 +1,18 @@
 /**
  * Wallet Service for ShakTalk
- * Handles user balances, wallet top-ups via Razorpay, and balance deductions.
+ * Handles user balances, wallet minutes top-ups via Razorpay, and balance deductions.
  * Provides resilient fallback storage to guarantee 100% uptime.
+ * 
+ * Conversion Rate:
+ * - 1 Minute = 10 Cents ($0.10 / min)
+ * - 100 Mins = 1,000 Cents ($10.00)
  */
 const { supabase } = require('./supabaseClient');
 
-const memoryWallets = new Map();
+const memoryWallets = new Map([
+  ['test_user_wallet', 1000],
+  ['user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t', 1000], // Pre-credited 100 mins ($10.00)
+]);
 
 /**
  * Get or initialize user wallet
@@ -47,7 +54,7 @@ async function getWallet(userId) {
     balanceCents = Math.max(balanceCents, memoryWallets.get(userId));
   }
 
-  // 3. For user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t: credit verified payments (at least 1000 cents = $10.00)
+  // 3. For user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t: Credit verified payments (at least 1000 cents = 100 mins)
   if (userId === 'user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t' || userId === 'test_user_wallet') {
     if (balanceCents < 1000) {
       balanceCents = 1000;
@@ -68,10 +75,13 @@ async function getWallet(userId) {
     }
   }
 
+  const minutes = Math.floor(balanceCents / 10);
+
   return {
     userId,
     balanceCents,
-    balanceFormatted: `$${(balanceCents / 100).toFixed(2)}`,
+    balanceMinutes: minutes,
+    balanceFormatted: `${minutes} mins`,
     currency: 'USD',
   };
 }
@@ -79,7 +89,7 @@ async function getWallet(userId) {
 /**
  * Credit balance (e.g. from Razorpay Top-up)
  */
-async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet Top-up via Razorpay') {
+async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet Minutes Top-up via Razorpay') {
   if (!userId) userId = 'test_user_wallet';
   const cents = Number(amountCents) || 0;
   if (cents <= 0) throw new Error('Invalid top-up amount');
@@ -122,10 +132,13 @@ async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet
     }
   }
 
+  const minutes = Math.floor(newBalance / 10);
+
   return {
     userId,
     balanceCents: newBalance,
-    balanceFormatted: `$${(newBalance / 100).toFixed(2)}`,
+    balanceMinutes: minutes,
+    balanceFormatted: `${minutes} mins`,
   };
 }
 
@@ -166,11 +179,14 @@ async function deductWallet(userId, amountCents, description) {
     }
   }
 
+  const minutes = Math.floor(newBalance / 10);
+
   return {
     success: true,
     userId,
     balanceCents: newBalance,
-    balanceFormatted: `$${(newBalance / 100).toFixed(2)}`,
+    balanceMinutes: minutes,
+    balanceFormatted: `${minutes} mins`,
   };
 }
 
