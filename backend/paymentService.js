@@ -293,16 +293,32 @@ function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.ok) {
-            // Attempt app deep link redirect
-            var targetUrl = returnScheme + "://payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
-            window.location.href = targetUrl;
+            // If opened in web popup from localhost/web browser, notify parent window and auto-close!
+            if (window.opener) {
+              try {
+                window.opener.postMessage({
+                  type: 'shaktalk_payment_success',
+                  status: 'success',
+                  tier: tier,
+                  paymentId: response.razorpay_payment_id
+                }, '*');
+              } catch(e) {}
+              setTimeout(function() { window.close(); }, 500);
+            }
 
-            // In case running in desktop browser where custom scheme doesn't close:
+            // Attempt app deep link redirect for mobile apps
+            if (returnScheme && returnScheme.indexOf('://') !== -1) {
+              window.location.href = returnScheme + "payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+            } else {
+              window.location.href = returnScheme + "://payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+            }
+
+            // Fallback UI for standalone desktop window
             setTimeout(function() {
               document.getElementById('spinner').style.display = 'none';
-              document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">Payment ID: ' + response.razorpay_payment_id + '<br><br>You can now close this tab and return to ShakTalk.</span>';
+              document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">Payment ID: ' + response.razorpay_payment_id + '<br><br><button onclick="window.close()" style="margin-top:12px;background:#2FE0A8;color:#000;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;">Close Window</button></span>';
               document.getElementById('status').style.display = 'block';
-            }, 800);
+            }, 500);
           } else {
             alert("Payment verification failed: " + (data.error || "Please contact support."));
             window.location.href = returnScheme + "://payment-cancel";
