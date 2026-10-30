@@ -66,6 +66,9 @@ async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) 
 
   if (type === 'wallet_topup') {
     finalAmount = Number(amountCents);
+    if (finalAmount < 1000) {
+      throw new Error('Minimum wallet top-up is 100 minutes ($10.00)');
+    }
     minutes = Math.floor(finalAmount / 10);
     displayPrice = `$${(finalAmount / 100).toFixed(2)}`;
     planName = `ShakTalk Wallet - ${minutes} Minutes Top-up`;

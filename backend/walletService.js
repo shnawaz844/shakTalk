@@ -216,7 +216,7 @@ async function getWallet(userId) {
 async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet Minutes Top-up via Razorpay') {
   if (!userId) userId = 'test_user_wallet';
   const cents = Number(amountCents) || 0;
-  if (cents <= 0) throw new Error('Invalid top-up amount');
+  if (cents < 1000) throw new Error('Minimum wallet top-up is 100 minutes ($10.00)');
 
   const wallet = await getWallet(userId);
   const newBalance = wallet.balanceCents + cents;
