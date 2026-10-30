@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
-import * as WebBrowser from 'expo-web-browser';
+import { startRazorpayCheckout } from '../utils/razorpayCheckout';
 import {
   CallEngine,
   getStoredEngine,
@@ -67,50 +67,29 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
     setIsUpgrading(true);
 
     try {
-      // 1. Create Razorpay order
-      const orderRes = await fetch(`${API_URL}/payment/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tier: targetPlan.tier,
-          email: 'aabir.hussain1@gmail.com',
-        }),
+      const result = await startRazorpayCheckout({
+        type: 'plan',
+        tier: targetPlan.tier,
+        name: 'ShakTalk',
+        description: `Upgrade to ${targetPlan.name}`,
+        email: 'aabir.hussain1@gmail.com',
       });
 
-      const orderData = await orderRes.json();
-      if (!orderData.ok || !orderData.checkoutUrl) {
-        throw new Error(orderData.error || 'Could not initiate payment order.');
+      if (result.success) {
+        await setStoredEngine(targetEngine);
+        await setStoredPlanTier(targetPlan.tier);
+        setEngine(targetEngine);
+        setCurrentTier(targetPlan.tier);
+
+        Alert.alert(
+          'Plan Upgraded! 🎉',
+          `You are now subscribed to the ${targetPlan.name} (${targetPlan.price}). Your AI model has been updated.`
+        );
+        return;
       }
 
-      // 2. Open Razorpay in-app modal
-      const result = await WebBrowser.openAuthSessionAsync(
-        orderData.checkoutUrl,
-        'shaktalk://'
-      );
-
-      // 3. Verify return redirect
-      if (result.type === 'success' && result.url) {
-        const isSuccess =
-          result.url.includes('status=success') ||
-          result.url.includes('paymentId=') ||
-          result.url.includes('payment-status');
-
-        if (isSuccess) {
-          await setStoredEngine(targetEngine);
-          await setStoredPlanTier(targetPlan.tier);
-          setEngine(targetEngine);
-          setCurrentTier(targetPlan.tier);
-
-          Alert.alert(
-            'Plan Upgraded! 🎉',
-            `You are now subscribed to the ${targetPlan.name} (${targetPlan.price}). Your AI model has been updated.`
-          );
-          return;
-        }
-      }
-
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        Alert.alert('Payment Cancelled', 'Your plan was not changed.');
+      if (result.error && !result.error.toLowerCase().includes('cancel')) {
+        Alert.alert('Payment Notice', result.error);
       }
     } catch (err: any) {
       console.error('[ModelSwitcher Payment] Error:', err);

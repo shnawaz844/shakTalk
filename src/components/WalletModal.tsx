@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '@clerk/clerk-expo';
-import * as WebBrowser from 'expo-web-browser';
+import { startRazorpayCheckout } from '../utils/razorpayCheckout';
 import { API_URL } from '../config';
 
 interface WalletModalProps {
@@ -69,45 +69,23 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
         return;
       }
 
-      // 1. Create top-up order
-      const orderRes = await fetch(`${API_URL}/payment/create-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          type: 'wallet_topup',
-          amountCents: selectedAmountCents,
-          email: 'aabir.hussain1@gmail.com',
-        }),
+      const result = await startRazorpayCheckout({
+        type: 'wallet_topup',
+        amountCents: selectedAmountCents,
+        authToken: token,
+        name: 'ShakTalk Wallet',
+        description: `Add $${(selectedAmountCents / 100).toFixed(2)} to Wallet Balance`,
+        email: 'aabir.hussain1@gmail.com',
       });
 
-      const orderData = await orderRes.json();
-      if (!orderData.ok || !orderData.checkoutUrl) {
-        throw new Error(orderData.error || 'Could not initiate top-up.');
+      if (result.success) {
+        Alert.alert('Top-up Successful! 🎉', 'Your wallet balance has been updated.');
+        await fetchBalance();
+        return;
       }
 
-      // 2. Open Razorpay Hosted Checkout
-      const result = await WebBrowser.openAuthSessionAsync(
-        orderData.checkoutUrl,
-        'shaktalk://'
-      );
-
-      // 3. Check result
-      if (result.type === 'success' && result.url) {
-        const isSuccess =
-          result.url.includes('status=success') || result.url.includes('paymentId=');
-
-        if (isSuccess) {
-          Alert.alert('Top-up Successful! 🎉', 'Your wallet balance has been updated.');
-          await fetchBalance();
-          return;
-        }
-      }
-
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        Alert.alert('Cancelled', 'Wallet top-up was cancelled.');
+      if (result.error && !result.error.toLowerCase().includes('cancel')) {
+        Alert.alert('Top-up Notice', result.error);
       }
     } catch (err: any) {
       console.error('[WalletModal] Top-up error:', err);

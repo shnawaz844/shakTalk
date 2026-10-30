@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
-import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX, API_URL } from '../config';
+import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX } from '../config';
+import { startRazorpayCheckout } from '../utils/razorpayCheckout';
 import {
   CallEngine,
   setStoredEngine,
@@ -95,62 +95,22 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
   const handleContinueWithPayment = async () => {
     setIsProcessing(true);
     try {
-      // 1. Create order on the backend with Razorpay
-      const orderRes = await fetch(`${API_URL}/payment/create-order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          tier: selectedBundle.id,
-          email: 'aabir.hussain1@gmail.com',
-        }),
+      const result = await startRazorpayCheckout({
+        type: 'plan',
+        tier: selectedBundle.id,
+        name: 'ShakTalk',
+        description: `${selectedBundle.name} Monthly Subscription`,
+        email: 'aabir.hussain1@gmail.com',
       });
 
-      const orderData = await orderRes.json();
+      if (result.success) {
+        await setStoredEngine(selectedBundle.engine);
+        await setStoredPlanTier(selectedBundle.id);
 
-      if (!orderData.ok || !orderData.checkoutUrl) {
-        throw new Error(orderData.error || 'Could not initiate payment order.');
-      }
-
-      // 2. Open secure in-app Razorpay checkout session
-      let isSuccess = false;
-
-      // On Web, listen to postMessage from the popup window
-      let messageHandler: any = null;
-      if (Platform.OS === 'web' && typeof window !== 'undefined') {
-        messageHandler = (event: MessageEvent) => {
-          if (event.data?.type === 'shaktalk_payment_success') {
-            isSuccess = true;
-            try { WebBrowser.dismissAuthSession(); } catch(e) {}
-          }
-        };
-        window.addEventListener('message', messageHandler);
-      }
-
-      const returnUrl = Platform.OS === 'web' ? window.location.origin : 'shaktalk://';
-      const checkoutUrlWithReturn = `${orderData.checkoutUrl}&return_scheme=${encodeURIComponent(returnUrl)}`;
-      
-      const result = await WebBrowser.openAuthSessionAsync(
-        checkoutUrlWithReturn,
-        returnUrl
-      );
-
-      if (messageHandler && typeof window !== 'undefined') {
-        window.removeEventListener('message', messageHandler);
-      }
-
-      // 3. Handle payment result redirect
-      if ((result.type === 'success' && result.url) || isSuccess) {
-        if (!isSuccess && result.type === 'success' && result.url) {
-          isSuccess =
-            result.url.includes('status=success') ||
-            result.url.includes('paymentId=') ||
-            result.url.includes('payment-status');
-        }
-
-        if (isSuccess) {
-          await setStoredEngine(selectedBundle.engine);
-          await setStoredPlanTier(selectedBundle.id);
-
+        if (Platform.OS === 'web') {
+          window.alert(`🎉 Payment Successful! Your ${selectedBundle.name} subscription is now active.`);
+          onContinue();
+        } else {
           Alert.alert(
             'Payment Successful! 🎉',
             `Your ${selectedBundle.name} subscription is now active. Welcome to ShakTalk!`,
@@ -161,16 +121,12 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
               },
             ]
           );
-          return;
         }
+        return;
       }
 
-      // If user dismissed or cancelled
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        Alert.alert(
-          'Payment Incomplete',
-          'You can complete your subscription payment anytime to activate your AI plan.'
-        );
+      if (result.error && !result.error.toLowerCase().includes('cancel')) {
+        Alert.alert('Payment Notice', result.error);
       }
     } catch (err: any) {
       console.error('[Payment] Error:', err);
