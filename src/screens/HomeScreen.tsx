@@ -3,6 +3,7 @@ import { storage } from '../utils/storageCompat';
 import {
   View,
   Text,
+  Alert,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
@@ -134,17 +135,44 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
       const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok) {
-        let mins = 0;
-        if (data.balanceMinutes !== undefined) {
-          mins = Number(data.balanceMinutes);
+        let totalMins = 0;
+        if (data.totalMinutes !== undefined) {
+          totalMins = Number(data.totalMinutes);
+        } else if (data.balanceMinutes !== undefined) {
+          totalMins = Number(data.balanceMinutes);
         } else if (data.balanceCents !== undefined) {
-          mins = Math.floor(Number(data.balanceCents) / 10);
+          totalMins = Math.floor(Number(data.balanceCents) / 10);
         } else if (data.balanceFormatted) {
           const raw = String(data.balanceFormatted);
           const num = parseFloat(raw.replace(/[^0-9.]/g, ''));
-          mins = !isNaN(num) ? (raw.includes('min') ? Math.floor(num) : Math.floor(num * 10)) : 0;
+          totalMins = !isNaN(num) ? (raw.includes('min') ? Math.floor(num) : Math.floor(num * 10)) : 0;
         }
-        setWalletBalance(`${mins} mins`);
+        setWalletBalance(`${totalMins} mins`);
+
+        // Low-minutes once-a-day reminder:
+        // Alert when plan minutes are finished and wallet minutes are less than 5 minutes
+        const planOver = data.planMinutesRemaining !== undefined ? data.planMinutesRemaining <= 0 : false;
+        const walletLeft = data.walletMinutes !== undefined ? data.walletMinutes : totalMins;
+
+        if (planOver && walletLeft < 5) {
+          const today = new Date().toISOString().slice(0, 10);
+          storage.getItem('last_low_balance_notified_date').then((lastDate) => {
+            if (lastDate !== today) {
+              storage.setItem('last_low_balance_notified_date', today).catch(() => {});
+              const msg = `Your monthly plan minutes are finished and you have only ${walletLeft} minute${walletLeft === 1 ? '' : 's'} remaining in your wallet. Top up your wallet to continue calling without interruption.`;
+              if (Platform.OS === 'web') {
+                alert(`⚠️ Low Minutes Notice:
+
+${msg}`);
+              } else {
+                Alert.alert('Low Minutes Notice ⚠️', msg, [
+                  { text: 'Later', style: 'cancel' },
+                  { text: 'Top Up Wallet', onPress: () => setShowWallet(true) },
+                ]);
+              }
+            }
+          }).catch(() => {});
+        }
       }
     } catch (e) {
       console.warn('[HomeScreen] fetchWalletBalance error:', e);
@@ -323,6 +351,19 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
 
   const handleStartSession = async () => {
     setErrorMsg(null);
+    if (walletBalance && (walletBalance === '0 mins' || walletBalance === '0 min')) {
+      const msg = 'You have 0 call minutes remaining. Please top up your wallet to make calls.';
+      if (Platform.OS === 'web') {
+        alert(msg);
+      } else {
+        Alert.alert('No Minutes Remaining', msg, [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Top Up Wallet', onPress: () => setShowWallet(true) },
+        ]);
+      }
+      setShowWallet(true);
+      return;
+    }
     const ok = await checkMicPermission();
     if (!ok) return;
     roleRef.current = 'host';

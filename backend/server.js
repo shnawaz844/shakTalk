@@ -298,6 +298,8 @@ const httpServer = http.createServer(async (req, res) => {
         { onConflict: 'user_id' }
       );
 
+      walletService.activateUserPlan(userId, tier || 'starter');
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, plan: plan.name, newBalance: deduction.balanceFormatted }));
     } catch (err) {
@@ -404,6 +406,7 @@ const httpServer = http.createServer(async (req, res) => {
           },
           { onConflict: 'user_id' }
         );
+        walletService.activateUserPlan(userId, tier || 'starter');
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1140,6 +1143,17 @@ function cleanupSession(sessionId, disconnectedRole) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
+  // Bill call minutes if call was connected and host is known
+  if (session.connectedAt && session.hostUserId) {
+    const durationSec = Math.floor((Date.now() - session.connectedAt) / 1000);
+    session.connectedAt = null; // Prevent double billing
+    walletService.deductCallMinutes(session.hostUserId, durationSec)
+      .then(res => {
+        console.log(`[billing] Call ended for ${session.hostUserId}: ${durationSec}s -> ${res.minutesBilled} mins billed (Plan: ${res.planMinutesRemaining}m left, Wallet: ${res.walletMinutes}m left, Total: ${res.totalMinutes}m)`);
+      })
+      .catch(err => console.error('[billing] Call deduction failed:', err.message));
+  }
+
   session.roleState.host.paused = false;
   session.roleState.guest.paused = false;
 
@@ -1225,6 +1239,22 @@ wss.on('connection', (ws) => {
       let userId;
       try { userId = await wsCaller(message); }
       catch (err) { send(ws, { type: 'error', message: err.message }); return; }
+
+      if (userId) {
+        try {
+          const minutesInfo = await walletService.getUserMinutes(userId);
+          if (minutesInfo.totalMinutes <= 0) {
+            send(ws, {
+              type: 'error',
+              code: 'NO_MINUTES',
+              message: 'You have 0 call minutes remaining. Please top up your wallet to make calls.',
+            });
+            return;
+          }
+        } catch (err) {
+          console.warn('[billing] Pre-call balance check error:', err.message);
+        }
+      }
       const sessionId = uuidv4();
       const hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       sessions.set(sessionId, {
@@ -1292,6 +1322,7 @@ wss.on('connection', (ws) => {
       currentSessionId = sessionId;
       currentRole = 'guest';
       const guestJoinAt = Date.now();
+      session.connectedAt = guestJoinAt;
       const waitTime = session.createdAt ? guestJoinAt - session.createdAt : 0;
       console.log(`[LATENCY][CALL_CONNECT] Guest joined session: ${sessionId} [engine=${session.engine}] (${waitTime}ms after host creation)`);
 

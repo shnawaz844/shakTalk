@@ -84,6 +84,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
   const { getToken } = useAuth();
   const { user } = useUser();
   const [balanceMinutes, setBalanceMinutes] = useState(100);
+  const [planMinutesRemaining, setPlanMinutesRemaining] = useState<number | null>(null);
+  const [planMinutesTotal, setPlanMinutesTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [processingTopup, setProcessingTopup] = useState(false);
   const [selectedMinutes, setSelectedMinutes] = useState(100);
@@ -112,9 +114,19 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
       const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok) {
-        const mins = data.balanceMinutes !== undefined ? Number(data.balanceMinutes) : Math.floor((data.balanceCents || 0) / 10);
-        setBalanceMinutes(mins);
-        onBalanceUpdated?.(`${mins} mins`);
+        const walletMins = data.walletMinutes !== undefined
+          ? Number(data.walletMinutes)
+          : (data.balanceMinutes !== undefined ? Number(data.balanceMinutes) : Math.floor((data.balanceCents || 0) / 10));
+        setBalanceMinutes(walletMins);
+
+        if (data.planMinutesRemaining !== undefined) {
+          setPlanMinutesRemaining(Number(data.planMinutesRemaining));
+        }
+        if (data.planMinutesTotal !== undefined) {
+          setPlanMinutesTotal(Number(data.planMinutesTotal));
+        }
+        const total = data.totalMinutes !== undefined ? Number(data.totalMinutes) : walletMins;
+        onBalanceUpdated?.(`${total} mins`);
       }
     } catch (e) {
       console.warn('[WalletModal] fetchBalance error:', e);
@@ -231,8 +243,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   </View>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={[styles.planPriceValue, { color: activePlan.color }]}>{activePlan.monthlyMinutes}</Text>
-                  <Text style={styles.planPriceSub}>/mo included</Text>
+                  <Text style={[styles.planPriceValue, { color: activePlan.color }]}>
+                    {planMinutesRemaining !== null ? `${planMinutesRemaining} mins` : activePlan.monthlyMinutes}
+                  </Text>
+                  <Text style={styles.planPriceSub}>remaining / mo</Text>
                 </View>
               </View>
 
