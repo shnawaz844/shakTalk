@@ -48,7 +48,7 @@ const PLAN_INFO: Record<
 > = {
   starter: {
     name: 'Base Plan',
-    model: 'Gemini 2.5 Flash',
+    model: 'Turn-by-Turn Voice Translation',
     monthlyMinutes: '100 mins',
     color: '#39FF14',
     icon: 'zap',
@@ -56,7 +56,7 @@ const PLAN_INFO: Record<
   },
   pro: {
     name: 'Pro Plan',
-    model: 'Gemini 3.5 Live',
+    model: 'Simultaneous Live Voice Translation',
     monthlyMinutes: '250 mins',
     color: '#2FE0A8',
     icon: 'activity',
@@ -64,7 +64,7 @@ const PLAN_INFO: Record<
   },
   business: {
     name: 'Dual AI All-Access',
-    model: 'Dual Gemini 3.5 & 2.5',
+    model: 'Dual Turn-by-Turn & Live Translation',
     monthlyMinutes: '500 mins',
     color: '#E6A23C',
     icon: 'layers',
@@ -72,7 +72,7 @@ const PLAN_INFO: Record<
   },
   payg: {
     name: 'Standard Plan',
-    model: 'Gemini Flash',
+    model: 'Standard Voice Translation',
     monthlyMinutes: '0 mins',
     color: '#8A9793',
     icon: 'zap',
@@ -254,7 +254,11 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
 
               <View style={styles.planFooterRow}>
                 <Feather name="clock" size={12} color={activePlan.color} style={{ marginRight: 6 }} />
-                <Text style={styles.planFooterText}>{activePlan.description}</Text>
+                <Text style={styles.planFooterText}>
+                  {planMinutesRemaining !== null
+                    ? `${planMinutesRemaining} of ${planMinutesTotal || 100} mins left this month`
+                    : activePlan.description}
+                </Text>
               </View>
             </View>
 

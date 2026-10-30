@@ -135,18 +135,27 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
       const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok) {
-        let totalMins = 0;
-        if (data.totalMinutes !== undefined) {
-          totalMins = Number(data.totalMinutes);
-        } else if (data.balanceMinutes !== undefined) {
-          totalMins = Number(data.balanceMinutes);
-        } else if (data.balanceCents !== undefined) {
-          totalMins = Math.floor(Number(data.balanceCents) / 10);
-        } else if (data.balanceFormatted) {
-          const raw = String(data.balanceFormatted);
-          const num = parseFloat(raw.replace(/[^0-9.]/g, ''));
-          totalMins = !isNaN(num) ? (raw.includes('min') ? Math.floor(num) : Math.floor(num * 10)) : 0;
+        // Wallet minutes (e.g. 200 mins)
+        const walletMins = data.walletMinutes !== undefined
+          ? Number(data.walletMinutes)
+          : (data.balanceMinutes !== undefined
+              ? Number(data.balanceMinutes)
+              : (data.balanceCents !== undefined ? Math.floor(Number(data.balanceCents) / 10) : 0));
+
+        // Plan minutes (e.g. 100 mins for starter)
+        let planMins = 100;
+        if (data.planMinutesRemaining !== undefined) {
+          planMins = Number(data.planMinutesRemaining);
+        } else if (currentTier === 'business') {
+          planMins = 500;
+        } else if (currentTier === 'pro') {
+          planMins = 250;
+        } else if (currentTier === 'starter') {
+          planMins = 100;
         }
+
+        // Total available minutes = plan minutes + wallet minutes (e.g. 100 plan + 200 wallet = 300 mins)
+        const totalMins = data.totalMinutes !== undefined ? Number(data.totalMinutes) : (walletMins + planMins);
         setWalletBalance(`${totalMins} mins`);
 
         // Low-minutes once-a-day reminder:
@@ -181,7 +190,7 @@ ${msg}`);
 
   useEffect(() => {
     fetchWalletBalance();
-  }, [fetchWalletBalance]);
+  }, [currentTier, fetchWalletBalance]);
 
   const planInfo = (() => {
     if (currentTier === 'starter' || currentEngineState === 'legacy') {

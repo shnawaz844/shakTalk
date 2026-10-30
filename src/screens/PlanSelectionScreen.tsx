@@ -174,7 +174,7 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
           </Text>
           <Text style={styles.headline}>Choose Your Monthly Plan</Text>
           <Text style={styles.subheadline}>
-            Select a monthly subscription based on Google's live voice translation models.
+            Select a monthly subscription to get your included translation minutes.
           </Text>
         </View>
 
@@ -245,35 +245,6 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
                       {bundle.minutes}
                     </Text>
                     <Text style={styles.costPeriodLabel}>min / month</Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.minutesChip,
-                      {
-                        backgroundColor: isActive
-                          ? bundle.accentColor + '20'
-                          : 'rgba(255, 255, 255, 0.06)',
-                        borderColor: isActive
-                          ? bundle.accentColor + '50'
-                          : 'rgba(255, 255, 255, 0.12)',
-                      },
-                    ]}
-                  >
-                    <Feather
-                      name="cpu"
-                      size={12}
-                      color={isActive ? bundle.accentColor : '#A0AEC0'}
-                      style={{ marginRight: 5 }}
-                    />
-                    <Text
-                      style={[
-                        styles.minutesChipText,
-                        isActive && { color: bundle.accentColor, fontWeight: '800' },
-                      ]}
-                    >
-                      {bundle.modelName}
-                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>

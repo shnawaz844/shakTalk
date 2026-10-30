@@ -333,8 +333,8 @@ async function deductCallMinutes(userId, durationSec) {
   if (!userId) userId = 'test_user_wallet';
   const sec = Math.max(0, Number(durationSec) || 0);
 
-  // Dropped call or under 5s -> no charge
-  if (sec < 5) {
+  // Dropped call or under 15s -> no charge
+  if (sec < 15) {
     return {
       billed: 0,
       reason: 'duration_too_short',
