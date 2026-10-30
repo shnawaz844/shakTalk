@@ -13,6 +13,7 @@ const { TranslatorBot, createToken, LIVEKIT_ENABLED, LIVEKIT_URL } = require('./
 const { verifyClerkToken, requireUser, bearerToken, isValidUserId, AuthError, AUTH_ENFORCE } = require('./auth');
 const { signedUrlFor } = require('./storageService');
 const { SUPPORTED_LANGUAGES } = require('./liveTranslate');
+const paymentService = require('./paymentService');
 
 const PORT = process.env.PORT || 8080;
 const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://expo.dev/accounts/shahahmad/projects/shak-translate/builds/bb9de5af-858f-4444-948e-8a1a54ca988f';
@@ -236,6 +237,93 @@ const httpServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ ok: true }));
     } catch (err) {
       sendHttpError(res, err, '/user/set-plan');
+    }
+    return;
+  }
+
+  // ── RAZORPAY PAYMENT ENDPOINTS ───────────────────────────────
+  // POST /payment/create-order
+  if (req.method === 'POST' && req.url === '/payment/create-order') {
+    try {
+      const body = await readJsonBody(req);
+      const { tier, email } = body || {};
+      let userId = null;
+      try {
+        const token = bearerToken(req);
+        if (token) userId = await verifyClerkToken(token);
+      } catch (_) {}
+
+      const order = await paymentService.createOrder({ tier, email, userId });
+      const host = req.headers.host || 'www.shaktalk.com';
+      const proto = req.headers['x-forwarded-proto'] || (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+      const checkoutUrl = `${proto}://${host}/payment/checkout?order_id=${order.orderId}&tier=${order.tier}`;
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...order, checkoutUrl }));
+    } catch (err) {
+      sendHttpError(res, err, '/payment/create-order');
+    }
+    return;
+  }
+
+  // GET /payment/checkout
+  if (req.method === 'GET' && req.url?.startsWith('/payment/checkout')) {
+    try {
+      const u = new URL(req.url, 'http://localhost');
+      const orderId = u.searchParams.get('order_id');
+      const tier = u.searchParams.get('tier') || 'pro';
+      const email = u.searchParams.get('email') || 'aabir.hussain1@gmail.com';
+      if (!orderId) {
+        res.writeHead(400, { 'Content-Type': 'text/plain' });
+        res.end('order_id is required');
+        return;
+      }
+      const html = paymentService.renderCheckoutHtml({ orderId, tier, email, returnScheme: 'shaktalk' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } catch (err) {
+      sendHttpError(res, err, '/payment/checkout');
+    }
+    return;
+  }
+
+  // POST /payment/verify
+  if (req.method === 'POST' && req.url === '/payment/verify') {
+    try {
+      const body = await readJsonBody(req);
+      const { orderId, paymentId, signature, tier } = body || {};
+      const isValid = paymentService.verifyPaymentSignature({ orderId, paymentId, signature });
+      if (!isValid) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Invalid payment signature' }));
+        return;
+      }
+
+      console.log(`[payment] Verified payment ${paymentId} for order ${orderId} (Tier: ${tier})`);
+
+      let userId = null;
+      try {
+        const token = bearerToken(req);
+        if (token) userId = await verifyClerkToken(token);
+      } catch (_) {}
+
+      if (userId) {
+        const plan = paymentService.PLANS[tier] || paymentService.PLANS.pro;
+        await supabase.from('user_plans').upsert(
+          {
+            user_id: userId,
+            plan_engine: plan.engine,
+            model_id: plan.modelName,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'user_id' }
+        );
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, status: 'verified', paymentId, tier }));
+    } catch (err) {
+      sendHttpError(res, err, '/payment/verify');
     }
     return;
   }
