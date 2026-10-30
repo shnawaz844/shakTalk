@@ -14,6 +14,7 @@ const { verifyClerkToken, requireUser, bearerToken, isValidUserId, AuthError, AU
 const { signedUrlFor } = require('./storageService');
 const { SUPPORTED_LANGUAGES } = require('./liveTranslate');
 const paymentService = require('./paymentService');
+const walletService = require('./walletService');
 
 const PORT = process.env.PORT || 8080;
 const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://expo.dev/accounts/shahahmad/projects/shak-translate/builds/bb9de5af-858f-4444-948e-8a1a54ca988f';
@@ -242,21 +243,74 @@ const httpServer = http.createServer(async (req, res) => {
   }
 
   // ── RAZORPAY PAYMENT ENDPOINTS ───────────────────────────────
-  // POST /payment/create-order
+  // ── WALLET ENDPOINTS ───────────────────────────────────────────────────────
+  // GET /wallet/balance
+  if (req.method === 'GET' && req.url === '/wallet/balance') {
+    try {
+      const userId = await verifyClerkToken(bearerToken(req));
+      const wallet = await walletService.getWallet(userId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...wallet }));
+    } catch (err) {
+      sendHttpError(res, err, '/wallet/balance');
+    }
+    return;
+  }
+
+  // POST /wallet/pay-with-wallet
+  // Allows paying for a plan using available wallet balance
+  if (req.method === 'POST' && req.url === '/wallet/pay-with-wallet') {
+    try {
+      const userId = await verifyClerkToken(bearerToken(req));
+      const body = await readJsonBody(req);
+      const { tier } = body || {};
+      const plan = paymentService.PLANS[tier] || paymentService.PLANS.pro;
+
+      const deduction = await walletService.deductWallet(
+        userId,
+        plan.amountCents,
+        `Subscribed to ${plan.name} via Wallet Balance`
+      );
+
+      if (!deduction.success) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: deduction.error, currentBalance: deduction.currentBalance }));
+        return;
+      }
+
+      await supabase.from('user_plans').upsert(
+        {
+          user_id: userId,
+          plan_engine: plan.engine,
+          model_id: plan.modelName,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, plan: plan.name, newBalance: deduction.balanceFormatted }));
+    } catch (err) {
+      sendHttpError(res, err, '/wallet/pay-with-wallet');
+    }
+    return;
+  }
+
+  // POST /payment/create-order (Supports plan or wallet topup)
   if (req.method === 'POST' && req.url === '/payment/create-order') {
     try {
       const body = await readJsonBody(req);
-      const { tier, email } = body || {};
+      const { tier, email, type, amountCents } = body || {};
       let userId = null;
       try {
         const token = bearerToken(req);
         if (token) userId = await verifyClerkToken(token);
       } catch (_) {}
 
-      const order = await paymentService.createOrder({ tier, email, userId });
+      const order = await paymentService.createOrder({ tier, amountCents, email, userId, type: type || 'plan' });
       const host = req.headers.host || 'www.shaktalk.com';
       const proto = req.headers['x-forwarded-proto'] || (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
-      const checkoutUrl = `${proto}://${host}/payment/checkout?order_id=${order.orderId}&tier=${order.tier}`;
+      const checkoutUrl = `${proto}://${host}/payment/checkout?order_id=${order.orderId}&tier=${order.tier}&type=${order.type || 'plan'}&amount_cents=${order.amount}`;
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, ...order, checkoutUrl }));
@@ -272,13 +326,16 @@ const httpServer = http.createServer(async (req, res) => {
       const u = new URL(req.url, 'http://localhost');
       const orderId = u.searchParams.get('order_id');
       const tier = u.searchParams.get('tier') || 'pro';
+      const type = u.searchParams.get('type') || 'plan';
+      const amountCents = u.searchParams.get('amount_cents') || 2499;
       const email = u.searchParams.get('email') || 'aabir.hussain1@gmail.com';
       if (!orderId) {
         res.writeHead(400, { 'Content-Type': 'text/plain' });
         res.end('order_id is required');
         return;
       }
-      const html = paymentService.renderCheckoutHtml({ orderId, tier, email, returnScheme: 'shaktalk' });
+      const returnScheme = u.searchParams.get('return_scheme') || 'shaktalk';
+      const html = paymentService.renderCheckoutHtml({ orderId, tier, amountCents, email, type, returnScheme });
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (err) {
@@ -291,7 +348,7 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/payment/verify') {
     try {
       const body = await readJsonBody(req);
-      const { orderId, paymentId, signature, tier } = body || {};
+      const { orderId, paymentId, signature, tier, type, amountCents } = body || {};
       const isValid = paymentService.verifyPaymentSignature({ orderId, paymentId, signature });
       if (!isValid) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -299,7 +356,7 @@ const httpServer = http.createServer(async (req, res) => {
         return;
       }
 
-      console.log(`[payment] Verified payment ${paymentId} for order ${orderId} (Tier: ${tier})`);
+      console.log(`[payment] Verified payment ${paymentId} for order ${orderId} (Type: ${type}, Tier: ${tier})`);
 
       let userId = null;
       try {
@@ -307,6 +364,15 @@ const httpServer = http.createServer(async (req, res) => {
         if (token) userId = await verifyClerkToken(token);
       } catch (_) {}
 
+      // Handle Wallet Top-up
+      if (type === 'wallet_topup' && userId) {
+        const updated = await walletService.topUpWallet(userId, amountCents, paymentId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, status: 'verified', type: 'wallet_topup', newBalance: updated.balanceFormatted }));
+        return;
+      }
+
+      // Handle Plan Subscription
       if (userId) {
         const plan = paymentService.PLANS[tier] || paymentService.PLANS.pro;
         await supabase.from('user_plans').upsert(

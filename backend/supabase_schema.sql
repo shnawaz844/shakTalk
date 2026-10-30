@@ -56,3 +56,31 @@ CREATE TABLE IF NOT EXISTS public.user_plans (
 
 CREATE INDEX IF NOT EXISTS user_plans_user_idx ON public.user_plans (user_id);
 ALTER TABLE public.user_plans ENABLE ROW LEVEL SECURITY;
+
+-- WALLETS table
+-- Stores prepaid user balance for calls and plan subscriptions.
+CREATE TABLE IF NOT EXISTS public.user_wallets (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       TEXT NOT NULL UNIQUE,
+  balance_cents BIGINT NOT NULL DEFAULT 0, -- Stored in USD cents (e.g. 1000 = $10.00)
+  currency      TEXT NOT NULL DEFAULT 'USD',
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS user_wallets_user_idx ON public.user_wallets (user_id);
+ALTER TABLE public.user_wallets ENABLE ROW LEVEL SECURITY;
+
+-- WALLET_TRANSACTIONS table
+-- Audit log of all top-ups and deductions.
+CREATE TABLE IF NOT EXISTS public.wallet_transactions (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         TEXT NOT NULL,
+  amount_cents    BIGINT NOT NULL,
+  type            TEXT NOT NULL, -- 'topup' | 'subscription' | 'call_deduction'
+  description     TEXT,
+  payment_id      TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS wallet_transactions_user_idx ON public.wallet_transactions (user_id);
+ALTER TABLE public.wallet_transactions ENABLE ROW LEVEL SECURITY;
