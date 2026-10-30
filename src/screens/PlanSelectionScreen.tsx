@@ -6,10 +6,13 @@ import {
   StyleSheet,
   ScrollView,
   Image,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX } from '../config';
+import * as WebBrowser from 'expo-web-browser';
+import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX, API_URL } from '../config';
 import {
   CallEngine,
   setStoredEngine,
@@ -83,14 +86,89 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
 
 export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
   const [selectedTier, setSelectedTier] = useState<PlanTier>('pro');
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const selectedBundle =
     MONTHLY_BUNDLES.find((b) => b.id === selectedTier) || MONTHLY_BUNDLES[1];
 
-  const handleContinue = async () => {
-    await setStoredEngine(selectedBundle.engine);
-    await setStoredPlanTier(selectedBundle.id);
-    onContinue();
+  const handleContinueWithPayment = async () => {
+    setIsProcessing(true);
+    try {
+      // 1. Create order on the backend with Razorpay
+      const orderRes = await fetch(`${API_URL}/payment/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tier: selectedBundle.id,
+          email: 'aabir.hussain1@gmail.com',
+        }),
+      });
+
+      const orderData = await orderRes.json();
+
+      if (!orderData.ok || !orderData.checkoutUrl) {
+        throw new Error(orderData.error || 'Could not initiate payment order.');
+      }
+
+      // 2. Open secure in-app Razorpay checkout session
+      const result = await WebBrowser.openAuthSessionAsync(
+        orderData.checkoutUrl,
+        'shaktalk://'
+      );
+
+      // 3. Handle payment result redirect
+      if (result.type === 'success' && result.url) {
+        const isSuccess =
+          result.url.includes('status=success') ||
+          result.url.includes('paymentId=') ||
+          result.url.includes('payment-status');
+
+        if (isSuccess) {
+          await setStoredEngine(selectedBundle.engine);
+          await setStoredPlanTier(selectedBundle.id);
+
+          Alert.alert(
+            'Payment Successful! 🎉',
+            `Your ${selectedBundle.name} subscription is now active. Welcome to ShakTalk!`,
+            [
+              {
+                text: 'Continue',
+                onPress: () => onContinue(),
+              },
+            ]
+          );
+          return;
+        }
+      }
+
+      // If user dismissed or cancelled
+      if (result.type === 'cancel' || result.type === 'dismiss') {
+        Alert.alert(
+          'Payment Incomplete',
+          'You can complete your subscription payment anytime to activate your AI plan.'
+        );
+      }
+    } catch (err: any) {
+      console.error('[Payment] Error:', err);
+      Alert.alert(
+        'Payment Notice',
+        err.message || 'Unable to connect to the payment gateway. Please try again.',
+        [
+          {
+            text: 'Skip for Now (Test Mode)',
+            style: 'destructive',
+            onPress: async () => {
+              await setStoredEngine(selectedBundle.engine);
+              await setStoredPlanTier(selectedBundle.id);
+              onContinue();
+            },
+          },
+          { text: 'Retry', style: 'default' },
+        ]
+      );
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -128,6 +206,7 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
                 ]}
                 onPress={() => setSelectedTier(bundle.id)}
                 activeOpacity={0.88}
+                disabled={isProcessing}
               >
                 {/* Header */}
                 <View style={styles.cardHeader}>
@@ -185,17 +264,34 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
           })}
         </View>
 
-        {/* Continue Button */}
+        {/* Continue to Payment Button */}
         <TouchableOpacity
-          style={[styles.continueBtn, { backgroundColor: selectedBundle.accentColor }]}
-          onPress={handleContinue}
+          style={[
+            styles.continueBtn,
+            { backgroundColor: selectedBundle.accentColor },
+            isProcessing && { opacity: 0.7 },
+          ]}
+          onPress={handleContinueWithPayment}
           activeOpacity={0.85}
+          disabled={isProcessing}
         >
-          <Text style={styles.continueBtnText}>
-            Continue with {selectedBundle.name} ({selectedBundle.price})
-          </Text>
-          <Feather name="arrow-right" size={18} color="#000" />
+          {isProcessing ? (
+            <ActivityIndicator color="#000" size="small" />
+          ) : (
+            <>
+              <Text style={styles.continueBtnText}>
+                Continue with {selectedBundle.name} ({selectedBundle.price})
+              </Text>
+              <Feather name="arrow-right" size={18} color="#000" />
+            </>
+          )}
         </TouchableOpacity>
+
+        {/* Trust & Security Badge */}
+        <View style={styles.securityRow}>
+          <Feather name="shield" size={13} color="rgba(255,255,255,0.4)" />
+          <Text style={styles.securityText}>Secured via 256-bit Razorpay Payment Gateway</Text>
+        </View>
 
         <Text style={styles.footerNote}>
           Cancel or change your subscription model anytime in your profile settings.
@@ -292,7 +388,6 @@ const styles = StyleSheet.create({
   costAmount: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   costPeriodLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '500' },
 
-
   continueBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -300,7 +395,7 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 16,
     height: 54,
-    marginBottom: 14,
+    marginBottom: 10,
     shadowColor: '#2FE0A8',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
@@ -308,6 +403,19 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   continueBtnText: { color: '#000', fontSize: 15.5, fontWeight: '800' },
+
+  securityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  securityText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 11.5,
+    fontWeight: '500',
+  },
 
   footerNote: {
     color: 'rgba(255,255,255,0.22)',
