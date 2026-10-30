@@ -42,7 +42,7 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "versionCode": 25,
+      "versionCode": 26,
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "cover",

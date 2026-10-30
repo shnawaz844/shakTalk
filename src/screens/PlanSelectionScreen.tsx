@@ -112,6 +112,20 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
       }
 
       // 2. Open secure in-app Razorpay checkout session
+      let isSuccess = false;
+
+      // On Web, listen to postMessage from the popup window
+      let messageHandler: any = null;
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        messageHandler = (event: MessageEvent) => {
+          if (event.data?.type === 'shaktalk_payment_success') {
+            isSuccess = true;
+            try { WebBrowser.dismissAuthSession(); } catch(e) {}
+          }
+        };
+        window.addEventListener('message', messageHandler);
+      }
+
       const returnUrl = Platform.OS === 'web' ? window.location.origin : 'shaktalk://';
       const checkoutUrlWithReturn = `${orderData.checkoutUrl}&return_scheme=${encodeURIComponent(returnUrl)}`;
       
@@ -120,12 +134,18 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
         returnUrl
       );
 
+      if (messageHandler && typeof window !== 'undefined') {
+        window.removeEventListener('message', messageHandler);
+      }
+
       // 3. Handle payment result redirect
-      if (result.type === 'success' && result.url) {
-        const isSuccess =
-          result.url.includes('status=success') ||
-          result.url.includes('paymentId=') ||
-          result.url.includes('payment-status');
+      if ((result.type === 'success' && result.url) || isSuccess) {
+        if (!isSuccess && result.type === 'success' && result.url) {
+          isSuccess =
+            result.url.includes('status=success') ||
+            result.url.includes('paymentId=') ||
+            result.url.includes('payment-status');
+        }
 
         if (isSuccess) {
           await setStoredEngine(selectedBundle.engine);
