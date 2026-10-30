@@ -242,6 +242,55 @@ const httpServer = http.createServer(async (req, res) => {
     return;
   }
 
+  // ── USER ACCOUNT & PLAN RESTORATION ──────────────────────────────────────────
+  // GET /user/account-state
+  // Checks Supabase for the user's existing subscription, remaining plan minutes,
+  // and wallet balance. Used upon login to restore purchased plans and credits.
+  if (req.method === 'GET' && req.url === '/user/account-state') {
+    try {
+      const token = bearerToken(req);
+      const userId = await verifyClerkToken(token);
+      if (!userId) throw new AuthError('Authentication required');
+
+      // 1. Fetch Plan from user_plans in Supabase
+      let planRecord = null;
+      if (supabase) {
+        const { data } = await supabase
+          .from('user_plans')
+          .select('plan_engine, model_id, updated_at')
+          .eq('user_id', userId)
+          .maybeSingle();
+        planRecord = data;
+      }
+
+      // 2. Fetch Wallet & Minutes Info from walletService
+      const wallet = await walletService.getWallet(userId);
+
+      const hasPurchasedPlan = !!planRecord;
+      const planTier = wallet.planTier || 'starter';
+      const planEngine = planRecord?.plan_engine || (planTier === 'starter' ? 'legacy' : 'livekit');
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        ok: true,
+        userId,
+        hasPurchasedPlan,
+        planTier,
+        planEngine,
+        modelId: planRecord?.model_id || 'gemini-live-2.5-flash-native-audio',
+        planMinutesRemaining: wallet.planMinutesRemaining,
+        planMinutesTotal: wallet.planMinutesTotal,
+        walletMinutes: wallet.walletMinutes,
+        totalMinutes: wallet.totalMinutes,
+        canMakeCall: wallet.canMakeCall,
+        currency: 'USD',
+      }));
+    } catch (err) {
+      sendHttpError(res, err, '/user/account-state');
+    }
+    return;
+  }
+
   // ── RAZORPAY PAYMENT ENDPOINTS ───────────────────────────────
   // ── WALLET ENDPOINTS ───────────────────────────────────────────────────────
   // GET /wallet/balance

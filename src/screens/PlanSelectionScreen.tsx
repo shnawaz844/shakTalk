@@ -23,6 +23,7 @@ import {
 
 interface PlanSelectionScreenProps {
   onContinue: () => void;
+  onLoginPress?: () => void;
 }
 
 interface MonthlyBundle {
@@ -93,7 +94,7 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
   },
 ];
 
-export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
+export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionScreenProps) {
   const [selectedTier, setSelectedTier] = useState<PlanTier>('pro');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -165,6 +166,19 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
       <View style={styles.glowBottomLeft} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+        {/* Top Action Bar for Returning Users */}
+        <View style={styles.topBarRow}>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity
+            style={styles.topSignInPill}
+            onPress={onLoginPress || onContinue}
+            activeOpacity={0.8}
+          >
+            <Feather name="log-in" size={13} color="#2FE0A8" style={{ marginRight: 6 }} />
+            <Text style={styles.topSignInPillText}>Existing User? Sign In</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Header */}
         <View style={styles.header}>
           <Image source={APP_LOGO} style={styles.logo} resizeMode="cover" />
@@ -275,6 +289,17 @@ export function PlanSelectionScreen({ onContinue }: PlanSelectionScreenProps) {
           )}
         </TouchableOpacity>
 
+        {/* Already have an account shortcut */}
+        <TouchableOpacity
+          style={styles.loginShortcutBtn}
+          onPress={onLoginPress || onContinue}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.loginShortcutText}>
+            Already have an active account or plan? <Text style={styles.loginShortcutHighlight}>Sign In</Text>
+          </Text>
+        </TouchableOpacity>
+
         {/* Trust & Security Badge */}
         <View style={styles.securityRow}>
           <Feather name="shield" size={13} color="rgba(255,255,255,0.4)" />
@@ -312,6 +337,43 @@ const styles = StyleSheet.create({
     opacity: 0.04,
   },
   scroll: { padding: 20, paddingBottom: 40 },
+  topBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  topSignInPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(47, 224, 168, 0.12)',
+    borderColor: 'rgba(47, 224, 168, 0.35)',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+  },
+  topSignInPillText: {
+    color: '#2FE0A8',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  loginShortcutBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  loginShortcutText: {
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 13.5,
+    fontWeight: '500',
+  },
+  loginShortcutHighlight: {
+    color: '#2FE0A8',
+    fontWeight: '800',
+    textDecorationLine: 'underline',
+  },
 
   header: { alignItems: 'center', marginBottom: 22, paddingTop: 6 },
   logo: { width: 56, height: 56, borderRadius: 16, marginBottom: 12 },

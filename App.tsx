@@ -17,7 +17,14 @@ import { ConversationDetailScreen } from './src/screens/ConversationDetailScreen
 import { AudioRecordingsScreen } from './src/screens/AudioRecordingsScreen';
 import { PlanSelectionScreen } from './src/screens/PlanSelectionScreen';
 import { WebSocketProvider } from './src/contexts/WebSocketContext';
-import { getCurrentEngine, getCurrentPlanTier } from './src/utils/enginePreference';
+import {
+  getCurrentEngine,
+  getCurrentPlanTier,
+  setStoredEngine,
+  setStoredPlanTier,
+  CallEngine,
+  PlanTier,
+} from './src/utils/enginePreference';
 import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
@@ -153,26 +160,41 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [authFlow, setAuthFlow] = React.useState<AuthFlow>('plan-selection');
 
-  // After the user signs in, save the plan they chose to the backend.
+  // When user signs in, restore their purchased plan and credit state from server
   React.useEffect(() => {
     if (!isSignedIn) return;
     (async () => {
       try {
         const token = await getToken();
         if (!token) return;
-        const engine = getCurrentEngine();
-        const tier = getCurrentPlanTier();
-        const MODEL_MAP: Record<string, string> = {
-          legacy: 'gemini-live-2.5-flash-native-audio',
-          livekit: 'gemini-3.5-live-translate-preview',
-        };
-        await fetch(`${API_URL}/user/set-plan`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ engine, modelId: MODEL_MAP[engine], tier }),
+
+        // Fetch user's existing subscription & credits from server
+        const res = await fetch(`${API_URL}/user/account-state`, {
+          headers: { Authorization: `Bearer ${token}` },
         });
-      } catch (_) {
-        // Non-critical — plan save failure shouldn't block the user
+        const state = await res.json();
+
+        if (state.ok && state.hasPurchasedPlan) {
+          // Restore server's source of truth into local device storage
+          await setStoredEngine(state.planEngine as CallEngine);
+          await setStoredPlanTier(state.planTier as PlanTier);
+          console.log(`[App] Restored account state for ${state.userId}: Tier=${state.planTier}, Engine=${state.planEngine}, Total=${state.totalMinutes}m`);
+        } else {
+          // New user who chose a plan before sign up: save to backend
+          const engine = getCurrentEngine();
+          const tier = getCurrentPlanTier();
+          const MODEL_MAP: Record<string, string> = {
+            legacy: 'gemini-live-2.5-flash-native-audio',
+            livekit: 'gemini-3.5-live-translate-preview',
+          };
+          await fetch(`${API_URL}/user/set-plan`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ engine, modelId: MODEL_MAP[engine], tier }),
+          });
+        }
+      } catch (err) {
+        console.warn('[App] Account sync warning:', err);
       }
     })();
   }, [isSignedIn]);
@@ -205,7 +227,7 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
     <>
       <StatusBar style="light" hidden={false} />
       {authFlow === 'plan-selection' ? (
-        <PlanSelectionScreen onContinue={() => setAuthFlow('login')} />
+        <PlanSelectionScreen onContinue={() => setAuthFlow('login')} onLoginPress={() => setAuthFlow('login')} />
       ) : (
         <AuthScreen />
       )}
