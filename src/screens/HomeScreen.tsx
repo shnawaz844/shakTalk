@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { storage } from '../utils/storageCompat';
 import {
   View,
@@ -26,9 +26,8 @@ import { StatusBadge } from '../components/StatusBadge';
 import { WalletModal } from '../components/WalletModal';
 import { useAuth, useUser } from '@clerk/clerk-expo';
 import { useAuthFetch } from '../utils/authFetch';
-import { useRef } from 'react';
 import { requestRecordingPermissionsAsync } from 'expo-audio';
-import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_NAME } from '../config';
+import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_NAME, API_URL } from '../config';
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
 import {
   getStoredPlanTier,
@@ -94,7 +93,7 @@ function extractSessionIdFromUrl(url: string | null): string | null {
 }
 
 export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, onOpenRecordings }: HomeScreenProps) {
-  const { signOut } = useAuth();
+  const { signOut, getToken } = useAuth();
   const authFetch = useAuthFetch();
   const { user } = useUser();
   // Voice profile from Clerk metadata — used for Gemini voice warm-up at session start
@@ -122,6 +121,29 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
       unsubEngine();
     };
   }, []);
+
+  const fetchWalletBalance = useCallback(async () => {
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const url = user?.id
+        ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
+        : `${API_URL}/wallet/balance`;
+
+      const res = await fetch(url, { headers });
+      const data = await res.json();
+      if (data.ok && data.balanceFormatted) {
+        setWalletBalance(data.balanceFormatted);
+      }
+    } catch (e) {
+      console.warn('[HomeScreen] fetchWalletBalance error:', e);
+    }
+  }, [getToken, user?.id]);
+
+  useEffect(() => {
+    fetchWalletBalance();
+  }, [fetchWalletBalance]);
 
   const planInfo = (() => {
     if (currentTier === 'starter' || currentEngineState === 'legacy') {
@@ -396,52 +418,62 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
                 {APP_NAME_SUFFIX ? <Text style={styles.titleGreen}>{APP_NAME_SUFFIX}</Text> : null}
               </Text>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+
+            <View style={styles.headerActions}>
               {/* Wallet Button */}
               <TouchableOpacity
                 onPress={() => setShowWallet(true)}
                 style={styles.walletBadge}
                 activeOpacity={0.75}
               >
-                <Feather name="credit-card" size={12} color="#2FE0A8" style={{ marginRight: 4 }} />
+                <Feather name="credit-card" size={12} color="#2FE0A8" style={{ marginRight: 5 }} />
                 <Text style={styles.walletBadgeText}>
-                  {walletBalance || 'Wallet'}
+                  {walletBalance || '$0.00'}
                 </Text>
               </TouchableOpacity>
 
-              {/* Active Model / Plan Chip */}
-              <TouchableOpacity
-                onPress={onOpenProfile}
-                style={[
-                  styles.modelBadge,
-                  {
-                    borderColor: planInfo.color + '45',
-                    backgroundColor: planInfo.color + '14',
-                  },
-                ]}
-                activeOpacity={0.75}
-              >
-                <Feather name={planInfo.icon} size={11} color={planInfo.color} style={{ marginRight: 4 }} />
-                <Text style={[styles.modelBadgeText, { color: planInfo.color }]}>
-                  {planInfo.label}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={onOpenProfile} style={styles.profileBtn}>
+              {/* Profile Avatar Button */}
+              <TouchableOpacity onPress={onOpenProfile} style={styles.profileBtn} activeOpacity={0.75}>
                 {user?.imageUrl ? (
                   <Image source={{ uri: user.imageUrl }} style={styles.profileAvatar} />
                 ) : (
-                  <Feather name="user" size={18} color={colors.muted} />
+                  <Feather name="user" size={16} color={colors.muted} />
                 )}
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => signOut()} style={styles.signOutBtn}>
-                <Feather name="log-out" size={18} color={colors.muted} />
+
+              {/* Sign Out Button */}
+              <TouchableOpacity onPress={() => signOut()} style={styles.signOutBtn} activeOpacity={0.75}>
+                <Feather name="log-out" size={16} color={colors.muted} />
               </TouchableOpacity>
             </View>
           </View>
 
-          <Text style={styles.greetTitle}>Ready when you are</Text>
-          <Text style={styles.subtitle}>Start a call and share the code, or join one.</Text>
+          {/* Subheader Greeting Row with Active Model Badge */}
+          <View style={styles.greetingHeaderRow}>
+            <View style={{ flex: 1, marginRight: 10 }}>
+              <Text style={styles.greetTitle}>Ready when you are</Text>
+              <Text style={styles.subtitle}>Start a call and share the code, or join one.</Text>
+            </View>
+
+            {/* Active Model / Plan Chip */}
+            <TouchableOpacity
+              onPress={onOpenProfile}
+              style={[
+                styles.modelBadge,
+                {
+                  borderColor: planInfo.color + '45',
+                  backgroundColor: planInfo.color + '14',
+                },
+              ]}
+              activeOpacity={0.75}
+            >
+              <Feather name={planInfo.icon} size={11} color={planInfo.color} style={{ marginRight: 5 }} />
+              <Text style={[styles.modelBadgeText, { color: planInfo.color }]}>
+                {planInfo.label}
+              </Text>
+              <Feather name="chevron-right" size={12} color={planInfo.color} style={{ marginLeft: 3 }} />
+            </TouchableOpacity>
+          </View>
 
           {/* Connecting from link banner */}
           {connectingMsg && (
@@ -746,6 +778,15 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
           </View>
         </View>
       </Modal>
+
+      {/* Wallet Modal */}
+      <WalletModal
+        visible={showWallet}
+        onClose={() => setShowWallet(false)}
+        onBalanceUpdated={(newBal) => {
+          setWalletBalance(newBal);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -767,72 +808,109 @@ const styles = StyleSheet.create({
     backgroundColor: colors.signal, opacity: 0.06,
   },
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20,
-    paddingTop: Platform.OS === 'android' ? 20 : 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+    paddingTop: Platform.OS === 'android' ? 16 : 8,
   },
   headerTitleContainer: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   logoIcon: {
-    width: 36, height: 36, borderRadius: 10,
-    marginRight: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    marginRight: 9,
     overflow: 'hidden',
   },
-  title: { color: colors.warm, fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  titleGreen: { color: colors.signal },
+  title: {
+    color: colors.warm,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  titleGreen: {
+    color: colors.signal,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   walletBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(47, 224, 168, 0.35)',
-    backgroundColor: 'rgba(47, 224, 168, 0.1)',
+    borderColor: 'rgba(47, 224, 168, 0.4)',
+    backgroundColor: 'rgba(47, 224, 168, 0.12)',
   },
   walletBadgeText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     color: '#2FE0A8',
+    letterSpacing: 0.2,
+  },
+  greetingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  greetTitle: {
+    color: colors.warm,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  subtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    lineHeight: 18,
   },
   modelBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
+    alignSelf: 'flex-start',
+    marginTop: 2,
   },
   modelBadgeText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  signOutBtn: {
-    padding: 8,
-    backgroundColor: colors.surface2,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.hair,
-  },
   profileBtn: {
-    padding: 6,
-    backgroundColor: colors.surface2,
+    width: 34,
+    height: 34,
     borderRadius: 10,
+    backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.hair,
     justifyContent: 'center',
     alignItems: 'center',
   },
   profileAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
   },
-  greetTitle: { color: colors.warm, fontSize: 19, fontWeight: '600', marginBottom: 4 },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 13, marginBottom: 28,
+  signOutBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: colors.surface2,
+    borderWidth: 1,
+    borderColor: colors.hair,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   connectingBox: {
     flexDirection: 'row', alignItems: 'center', gap: 8,

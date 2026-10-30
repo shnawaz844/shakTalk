@@ -292,8 +292,12 @@ function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir
         })
         .then(function(res) { return res.json(); })
         .then(function(data) {
+          document.getElementById('spinner').style.display = 'none';
+
           if (data.ok) {
-            // If opened in web popup from localhost/web browser, notify parent window and auto-close!
+            document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">Payment ID: ' + response.razorpay_payment_id + '<br><br><button onclick="window.close()" style="margin-top:12px;background:#2FE0A8;color:#000;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;">Return to App</button></span>';
+            document.getElementById('status').style.display = 'block';
+
             if (window.opener) {
               try {
                 window.opener.postMessage({
@@ -303,35 +307,29 @@ function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir
                   paymentId: response.razorpay_payment_id
                 }, '*');
               } catch(e) {}
-              setTimeout(function() { window.close(); }, 500);
+              setTimeout(function() { window.close(); }, 800);
             }
 
-            // Attempt app deep link redirect for mobile apps
-            if (returnScheme && returnScheme.indexOf('://') !== -1) {
-              window.location.href = returnScheme + "payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
-            } else {
-              window.location.href = returnScheme + "://payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
+            var base = returnScheme || 'shaktalk://';
+            if (base.indexOf('://') === -1) {
+              base = base + '://';
             }
-
-            // Fallback UI for standalone desktop window
-            setTimeout(function() {
-              document.getElementById('spinner').style.display = 'none';
-              document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">Payment ID: ' + response.razorpay_payment_id + '<br><br><button onclick="window.close()" style="margin-top:12px;background:#2FE0A8;color:#000;border:none;padding:10px 18px;border-radius:10px;font-weight:700;cursor:pointer;">Close Window</button></span>';
-              document.getElementById('status').style.display = 'block';
-            }, 500);
+            if (!base.endsWith('/') && !base.endsWith('?')) {
+              base = base + '/';
+            }
+            var targetUrl = base + 'payment-success?status=success&type=' + encodeURIComponent(type) + '&tier=' + encodeURIComponent(tier) + '&paymentId=' + encodeURIComponent(response.razorpay_payment_id);
+            try {
+              window.location.href = targetUrl;
+            } catch(e) {}
           } else {
-            alert("Payment verification failed: " + (data.error || "Please contact support."));
-            window.location.href = returnScheme + "://payment-cancel";
+            document.getElementById('status').innerHTML = '❌ <b>Payment Verification Failed</b><br><br><span style="color:#ff6b6b;font-size:13px;">' + (data.error || 'Please contact support.') + '</span>';
+            document.getElementById('status').style.display = 'block';
           }
         })
         .catch(function(err) {
-          var targetUrl = returnScheme + "://payment-success?status=success&type=" + type + "&tier=" + tier + "&paymentId=" + response.razorpay_payment_id;
-          window.location.href = targetUrl;
-          setTimeout(function() {
-            document.getElementById('spinner').style.display = 'none';
-            document.getElementById('status').innerHTML = '✅ <b>Payment Successful!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">You can now close this tab and return to ShakTalk.</span>';
-            document.getElementById('status').style.display = 'block';
-          }, 800);
+          document.getElementById('spinner').style.display = 'none';
+          document.getElementById('status').innerHTML = '✅ <b>Payment Received!</b><br><br><span style="color:rgba(255,255,255,0.7);font-size:13px;">Payment ID: ' + response.razorpay_payment_id + '<br>You can now return to ShakTalk.</span>';
+          document.getElementById('status').style.display = 'block';
         });
       },
       modal: {
