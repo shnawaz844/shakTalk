@@ -47,7 +47,7 @@ function saveUsageData(data) {
 function activateUserPlan(userId, tier = 'starter') {
   if (!userId) userId = 'test_user_wallet';
   let minutes = 100;
-  if (tier === 'pro') minutes = 250;
+  if (tier === 'pro') minutes = 110;
   if (tier === 'business') minutes = 500;
 
   const usage = loadUsageData();
@@ -84,9 +84,9 @@ async function getUserMinutes(userId, knownWalletMinutes) {
         if (m.includes('3.5') && m.includes('2.5')) {
           planTier = 'business';
           planMinutesTotal = 500;
-        } else if (m.includes('3.5')) {
+        } else if (m.includes('3.5') || m.includes('pro') || m.includes('livekit')) {
           planTier = 'pro';
-          planMinutesTotal = 250;
+          planMinutesTotal = 110;
         } else {
           planTier = 'starter';
           planMinutesTotal = 100;

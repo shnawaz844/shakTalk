@@ -32,9 +32,11 @@ import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
 import {
   getStoredPlanTier,
+  setStoredPlanTier,
   subscribePlanTierChange,
   PlanTier,
   getStoredEngine,
+  setStoredEngine,
   subscribeEngineChange,
   CallEngine,
 } from '../utils/enginePreference';
@@ -138,8 +140,17 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
           if (billingRes.ok) {
             const bData = await billingRes.json();
             if (bData.ok && bData.totalMinutes !== undefined) {
-              const pName = bData.plan ? (bData.plan.charAt(0).toUpperCase() + bData.plan.slice(1)) : 'Pro';
-              setWalletBalance(`${pName} · ${bData.totalMinutes} min left`);
+              const planKey = (bData.plan || 'pro').toLowerCase();
+              const isStandard = planKey === 'standard' || planKey === 'starter';
+              const pTier: PlanTier = isStandard ? 'starter' : 'pro';
+              const pEngine: CallEngine = isStandard ? 'legacy' : 'livekit';
+
+              setCurrentTier(pTier);
+              setCurrentEngineState(pEngine);
+              setStoredPlanTier(pTier);
+              setStoredEngine(pEngine);
+
+              setWalletBalance(`${bData.totalMinutes} mins`);
               return;
             }
           }
@@ -207,13 +218,11 @@ ${msg}`);
   }, [currentTier, fetchWalletBalance]);
 
   const planInfo = (() => {
-    if (currentTier === 'starter' || currentEngineState === 'legacy') {
-      return { label: 'Base Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
+    const isStandard = currentTier === 'starter' || currentEngineState === 'legacy';
+    if (isStandard) {
+      return { label: 'Standard Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
     }
-    if (currentTier === 'business') {
-      return { label: 'Dual AI (500 mins)', color: '#E6A23C', icon: 'layers' as const };
-    }
-    return { label: 'Pro Plan (250 mins)', color: '#2FE0A8', icon: 'activity' as const };
+    return { label: 'Pro Plan (110 mins)', color: '#2FE0A8', icon: 'activity' as const };
   })();
 
   // Default to the user's native language (set in their profile) until they

@@ -19,37 +19,43 @@ if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
 
 const PLANS = {
   starter: {
-    name: 'Base Plan',
-    modelName: 'Gemini 2.5 Flash',
+    name: 'Standard Plan',
+    modelName: 'Gemini 2.5 Live',
     engine: 'legacy',
-    amountCents: 999, // $9.99
+    amountCents: 499, // $4.99 USD
+    amountPaise: 49900, // ₹499 INR
     minutesIncluded: 100,
     currency: 'USD',
-    displayPrice: '$9.99',
+    displayPrice: '$4.99',
+    displayPriceINR: '₹499',
     displayMinutes: '100 min / month',
-    description: '100 min/mo Turn-by-Turn Translation (Gemini 2.5 Flash)',
+    description: '100 min/mo Turn-by-Turn Translation (Gemini 2.5 Live)',
   },
   pro: {
     name: 'Pro Plan',
     modelName: 'Gemini 3.5 Live',
     engine: 'livekit',
-    amountCents: 2499, // $24.99
-    minutesIncluded: 250,
+    amountCents: 1499, // $14.99 USD
+    amountPaise: 149900, // ₹1,499 INR
+    minutesIncluded: 110,
     currency: 'USD',
-    displayPrice: '$24.99',
-    displayMinutes: '250 min / month',
-    description: '250 min/mo Simultaneous Live Translation (Gemini 3.5 Live)',
+    displayPrice: '$14.99',
+    displayPriceINR: '₹1,499',
+    displayMinutes: '110 min / month',
+    description: '110 min/mo Real-Time Simultaneous Live Translation (Gemini 3.5 Live)',
   },
   business: {
-    name: 'Dual AI All-Access',
-    modelName: 'Dual Gemini 3.5 & 2.5',
+    name: 'Pro Plan',
+    modelName: 'Gemini 3.5 Live',
     engine: 'livekit',
-    amountCents: 4999, // $49.99
-    minutesIncluded: 500,
+    amountCents: 1499,
+    amountPaise: 149900,
+    minutesIncluded: 110,
     currency: 'USD',
-    displayPrice: '$49.99',
-    displayMinutes: '500 min / month',
-    description: '500 min/mo Dual AI Translation Access',
+    displayPrice: '$14.99',
+    displayPriceINR: '₹1,499',
+    displayMinutes: '110 min / month',
+    description: '110 min/mo Real-Time Simultaneous Live Translation',
   },
 };
 
@@ -57,27 +63,40 @@ const PLANS = {
  * Creates a Razorpay Order via REST API.
  * Supports plan purchases or wallet minutes top-ups.
  */
-async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) {
+async function createOrder({ tier, amountCents, email, userId, type = 'plan', currency = 'USD' }) {
   let finalAmount = 0;
-  let currency = 'USD';
+  let finalCurrency = (currency || 'USD').toUpperCase();
   let planName = 'ShakTalk Wallet Top-up';
   let displayPrice = '';
   let minutes = 0;
 
   if (type === 'wallet_topup') {
     finalAmount = Number(amountCents);
-    if (finalAmount < 600) {
-      throw new Error('Minimum wallet top-up is 60 minutes ($6.00)');
+    if (finalCurrency === 'INR') {
+      if (finalAmount < 29900) {
+        throw new Error('Minimum wallet top-up is 60 minutes (₹299)');
+      }
+      minutes = 60;
+      displayPrice = `₹${(finalAmount / 100).toFixed(0)}`;
+    } else {
+      if (finalAmount < 600) {
+        throw new Error('Minimum wallet top-up is 60 minutes ($6.00)');
+      }
+      minutes = Math.floor(finalAmount / 10);
+      displayPrice = `$${(finalAmount / 100).toFixed(2)}`;
     }
-    minutes = Math.floor(finalAmount / 10);
-    displayPrice = `$${(finalAmount / 100).toFixed(2)}`;
     planName = `ShakTalk Wallet - ${minutes} Minutes Top-up`;
   } else {
     const plan = PLANS[tier] || PLANS.pro;
-    finalAmount = plan.amountCents;
-    planName = `${plan.name} (${plan.minutesIncluded} mins/mo)`;
-    displayPrice = plan.displayPrice;
-    minutes = plan.minutesIncluded;
+    minutes = plan.minutesIncluded; // 110 or 100
+    if (finalCurrency === 'INR') {
+      finalAmount = Number(amountCents) || plan.amountPaise; // 149900 paise = ₹1,499
+      displayPrice = plan.displayPriceINR;
+    } else {
+      finalAmount = Number(amountCents) || plan.amountCents; // 1499 cents = $14.99
+      displayPrice = plan.displayPrice;
+    }
+    planName = `${plan.name} (${minutes} mins/mo)`;
   }
 
   const authHeader = 'Basic ' + Buffer.from(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`).toString('base64');
@@ -91,7 +110,7 @@ async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) 
     },
     body: JSON.stringify({
       amount: finalAmount,
-      currency,
+      currency: finalCurrency,
       receipt,
       notes: {
         type,
@@ -136,27 +155,25 @@ function verifyPaymentSignature({ orderId, paymentId, signature }) {
 /**
  * Renders the hosted Razorpay Checkout page that opens in the app's browser modal.
  */
-function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir.hussain1@gmail.com', type = 'plan', returnScheme = 'shaktalk' }) {
-  let title = 'ShakTalk Pro Plan';
-  let displayPrice = '$24.99';
-  let desc = '250 minutes of real-time live AI voice translation with Gemini 3.5 Live.';
-  let badge = 'Active Subscription';
-  let amount = 2499;
+function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir.hussain1@gmail.com', type = 'plan', returnScheme = 'shaktalk', currency = 'USD' }) {
+  let finalCurrency = (currency || 'USD').toUpperCase();
+  const plan = PLANS[tier] || PLANS.pro;
+  let title = plan.name;
+  let displayPrice = finalCurrency === 'INR' ? plan.displayPriceINR : plan.displayPrice;
+  let desc = `${plan.minutesIncluded} minutes / month of live translation with ${plan.modelName}.`;
+  let badge = 'Monthly Plan';
+  let amount = finalCurrency === 'INR' ? plan.amountPaise : plan.amountCents;
 
   if (type === 'wallet_topup') {
-    amount = Number(amountCents) || 600;
-    const mins = Math.floor(amount / 10);
+    amount = Number(amountCents) || (finalCurrency === 'INR' ? 29900 : 600);
+    const mins = 60;
     title = `${mins} Minutes Wallet Top-up`;
-    displayPrice = `$${(amount / 100).toFixed(2)}`;
+    displayPrice = finalCurrency === 'INR' ? `₹${(amount / 100).toFixed(0)}` : `$${(amount / 100).toFixed(2)}`;
     desc = `Add ${mins} minutes to your ShakTalk translation wallet. Valid for all calls.`;
     badge = 'Prepaid Minutes';
-  } else {
-    const plan = PLANS[tier] || PLANS.pro;
-    title = plan.name;
-    displayPrice = plan.displayPrice;
-    desc = `${plan.minutesIncluded} minutes / month of live translation with ${plan.modelName}.`;
-    badge = 'Monthly Plan';
-    amount = plan.amountCents;
+  } else if (amountCents) {
+    amount = Number(amountCents);
+    displayPrice = finalCurrency === 'INR' ? `₹${(amount / 100).toFixed(0)}` : `$${(amount / 100).toFixed(2)}`;
   }
 
   return `<!DOCTYPE html>
@@ -283,7 +300,7 @@ function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir
     var orderId = "${orderId}";
     var tier = "${tier}";
     var amount = ${amount};
-    var currency = "USD";
+    var currency = "${finalCurrency}";
     var type = "${type}";
     var returnScheme = "${returnScheme}";
 

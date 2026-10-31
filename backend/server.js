@@ -234,6 +234,24 @@ const httpServer = http.createServer(async (req, res) => {
           { onConflict: 'user_id' }
         );
       if (error) throw error;
+      // Also sync to billingService and walletService
+      try {
+        const isPro = tier === 'pro' || engine === 'livekit';
+        const planTier = isPro ? 'pro' : 'standard';
+        await billingService.getOrCreateAccount(userId).then(acc => {
+          if (!acc.plan || acc.plan === 'trial' || acc.plan === 'none') {
+            return billingService.activateSubscription({
+              userId,
+              planTier,
+              amountCents: isPro ? 1499 : 499,
+            });
+          }
+        });
+        walletService.activateUserPlan(userId, isPro ? 'pro' : 'starter');
+      } catch (syncErr) {
+        console.warn('[user/set-plan] Billing sync notice:', syncErr.message);
+      }
+
       console.log(`[server] Saved plan for user ${userId}: engine=${engine}, model=${modelId}, tier=${tier || 'default'}`);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
@@ -419,14 +437,14 @@ const httpServer = http.createServer(async (req, res) => {
   if (req.method === 'POST' && req.url === '/payment/create-order') {
     try {
       const body = await readJsonBody(req);
-      const { tier, email, type, amountCents } = body || {};
+      const { tier, email, type, amountCents, currency } = body || {};
       let userId = null;
       try {
         const token = bearerToken(req);
         if (token) userId = await verifyClerkToken(token);
       } catch (_) {}
 
-      const order = await paymentService.createOrder({ tier, amountCents, email, userId, type: type || 'plan' });
+      const order = await paymentService.createOrder({ tier, amountCents, email, userId, type: type || 'plan', currency });
       const host = req.headers.host || 'www.shaktalk.com';
       const proto = req.headers['x-forwarded-proto'] || (host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
       const checkoutUrl = `${proto}://${host}/payment/checkout?order_id=${order.orderId}&tier=${order.tier}&type=${order.type || 'plan'}&amount_cents=${order.amount}`;
@@ -446,15 +464,16 @@ const httpServer = http.createServer(async (req, res) => {
       const orderId = u.searchParams.get('order_id');
       const tier = u.searchParams.get('tier') || 'pro';
       const type = u.searchParams.get('type') || 'plan';
-      const amountCents = u.searchParams.get('amount_cents') || 2499;
+      const amountCents = u.searchParams.get('amount_cents') || 1499;
       const email = u.searchParams.get('email') || 'aabir.hussain1@gmail.com';
+      const currency = u.searchParams.get('currency') || 'USD';
       if (!orderId) {
         res.writeHead(400, { 'Content-Type': 'text/plain' });
         res.end('order_id is required');
         return;
       }
       const returnScheme = u.searchParams.get('return_scheme') || 'shaktalk';
-      const html = paymentService.renderCheckoutHtml({ orderId, tier, amountCents, email, type, returnScheme });
+      const html = paymentService.renderCheckoutHtml({ orderId, tier, amountCents, email, type, returnScheme, currency });
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (err) {

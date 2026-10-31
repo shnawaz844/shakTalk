@@ -7,6 +7,7 @@ export interface CheckoutOptions {
   type: 'plan' | 'wallet_topup';
   tier?: PlanTier;
   amountCents?: number;
+  currency?: 'USD' | 'INR';
   email?: string;
   authToken?: string | null;
   userId?: string | null;
@@ -66,6 +67,7 @@ export async function startRazorpayCheckout(
       type: options.type,
       tier: options.tier,
       amountCents: options.amountCents,
+      currency: options.currency,
       email: options.email || 'aabir.hussain1@gmail.com',
       userId: options.userId || undefined,
     }),
