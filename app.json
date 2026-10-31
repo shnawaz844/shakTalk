@@ -2,14 +2,14 @@
   "expo": {
     "name": "ShakTranslate",
     "slug": "shaktalk",
-    "owner": "devlopershahs-team",
+    "owner": "talk123s-team",
     "scheme": "shaktranslate",
     "version": "1.1.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/96f33856-71d1-4146-9a64-7f00a2625437",
+      "url": "https://u.expo.dev/2fc10504-246d-41d8-b8b7-85cd063e6883",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cis.shaktranslate",
-      "buildNumber": "74",
+      "buildNumber": "75",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -45,7 +45,7 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "versionCode": 27,
+      "versionCode": 28,
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "cover",
@@ -170,7 +170,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "96f33856-71d1-4146-9a64-7f00a2625437"
+        "projectId": "2fc10504-246d-41d8-b8b7-85cd063e6883"
       }
     }
   }

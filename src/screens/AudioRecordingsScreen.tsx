@@ -101,7 +101,7 @@ export function AudioRecordingsScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Player state
+  // Player state.....
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentMsgId, setCurrentMsgId] = useState<string | null>(null);
   const [positionMs, setPositionMs] = useState(0);
@@ -127,7 +127,7 @@ export function AudioRecordingsScreen({
       shouldPlayInBackground: false,
       interruptionMode: 'duckOthers',
       shouldRouteThroughEarpiece: false, // Keeping speaker for playback screen
-    }).catch(() => {});
+    }).catch(() => { });
 
     return () => {
       stopPlayback();
@@ -170,12 +170,12 @@ export function AudioRecordingsScreen({
     if (updatePositionIntervalRef.current) clearInterval(updatePositionIntervalRef.current);
     if (currentSubRef.current) { currentSubRef.current.remove(); currentSubRef.current = null; }
     if (currentSoundRef.current) {
-      try { currentSoundRef.current.pause(); currentSoundRef.current.remove(); } catch (_) {}
+      try { currentSoundRef.current.pause(); currentSoundRef.current.remove(); } catch (_) { }
       currentSoundRef.current = null;
     }
     if (nextSubRef.current) { nextSubRef.current.remove(); nextSubRef.current = null; }
     if (nextSoundRef.current) {
-      try { nextSoundRef.current.remove(); } catch (_) {}
+      try { nextSoundRef.current.remove(); } catch (_) { }
       nextSoundRef.current = null;
       nextIndexRef.current = -1;
     }
@@ -235,7 +235,7 @@ export function AudioRecordingsScreen({
     if (index >= playlistRef.current.length) return;
     if (nextSubRef.current) { nextSubRef.current.remove(); nextSubRef.current = null; }
     if (nextSoundRef.current) {
-      try { nextSoundRef.current.remove(); } catch (_) {}
+      try { nextSoundRef.current.remove(); } catch (_) { }
       nextSoundRef.current = null;
     }
     const entry = playlistRef.current[index];
@@ -271,7 +271,7 @@ export function AudioRecordingsScreen({
     if (nextIndexRef.current === index && nextSoundRef.current) {
       if (currentSubRef.current) { currentSubRef.current.remove(); currentSubRef.current = null; }
       if (currentSoundRef.current) {
-        try { currentSoundRef.current.remove(); } catch (_) {}
+        try { currentSoundRef.current.remove(); } catch (_) { }
       }
       currentSoundRef.current = nextSoundRef.current;
       currentIndexRef.current = index;
@@ -336,9 +336,9 @@ export function AudioRecordingsScreen({
   const handleScrubberTap = (evt: GestureResponderEvent) => {
     const fraction = evt.nativeEvent.locationX / scrubberWidthRef.current;
     if (fraction < 0 || fraction > 1 || !totalDurationMs) return;
-    
+
     const targetMs = fraction * totalDurationMs;
-    
+
     let accumulatedMs = 0;
     for (let i = 0; i < playlistRef.current.length; i++) {
       const entry = playlistRef.current[i];
@@ -347,11 +347,11 @@ export function AudioRecordingsScreen({
         // Seek here
         const offsetWithinClip = targetMs - accumulatedMs;
         if (currentIndexRef.current === i && currentSoundRef.current) {
-           currentSoundRef.current.seekTo((entry.skipMs + offsetWithinClip) / 1000);
+          currentSoundRef.current.seekTo((entry.skipMs + offsetWithinClip) / 1000);
         } else {
-           // We'd need to playFrom(i) and seek, but playFrom currently starts at skipMs.
-           // Modifying playFrom to accept an offset is slightly complex, so we just restart the clip.
-           playFrom(i);
+          // We'd need to playFrom(i) and seek, but playFrom currently starts at skipMs.
+          // Modifying playFrom to accept an offset is slightly complex, so we just restart the clip.
+          playFrom(i);
         }
         break;
       }
@@ -429,7 +429,7 @@ export function AudioRecordingsScreen({
         {/* Unified Player Bar */}
         {messages.length > 0 && (
           <BlurView intensity={60} tint="dark" style={styles.playerBar}>
-            <View 
+            <View
               style={styles.scrubberContainer}
               onLayout={(e) => scrubberWidthRef.current = e.nativeEvent.layout.width}
               onStartShouldSetResponder={() => true}
@@ -440,12 +440,12 @@ export function AudioRecordingsScreen({
                 <View style={[styles.scrubberHandle, { left: `${scrubberFraction * 100}%` }]} />
               </View>
             </View>
-            
+
             <View style={styles.timeRow}>
               <Text style={styles.timeDisplay}>{formatTime(positionMs)}</Text>
               <Text style={styles.timeDisplay}>{totalDurationMs > 0 ? formatTime(totalDurationMs) : '--:--'}</Text>
             </View>
-            
+
             <View style={styles.playerControls}>
               <View style={styles.btnRow}>
                 <TouchableOpacity onPress={handlePrev} style={styles.ctrlBtn}>
