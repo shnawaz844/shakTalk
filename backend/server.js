@@ -1373,6 +1373,10 @@ function cleanupSession(sessionId, disconnectedRole) {
     clearTimeout(session.graceTimeout);
     session.graceTimeout = null;
   }
+  if (session.hostDisconnectTimeout) {
+    clearTimeout(session.hostDisconnectTimeout);
+    session.hostDisconnectTimeout = null;
+  }
 
   // Bill call minutes: "From translator ready (gemini_ready) to call end; last part rounded up to 1 minute. Waiting for the partner is free."
   if (session.connectedAt && session.hostUserId) {
@@ -1512,7 +1516,28 @@ wss.on('connection', (ws) => {
       } else {
         hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       }
-      const sessionId = uuidv4();
+      const sessionId = message.sessionId || uuidv4();
+      if (sessions.has(sessionId)) {
+        const session = sessions.get(sessionId);
+        if (session.hostDisconnectTimeout) {
+          clearTimeout(session.hostDisconnectTimeout);
+          session.hostDisconnectTimeout = null;
+        }
+        session.hostDisconnected = false;
+        session.host = ws;
+        currentSessionId = sessionId;
+        currentRole = 'host';
+        console.log(`[server] Host reattached to existing session ${sessionId}`);
+        send(ws, {
+          type: 'session_resumed',
+          sessionId,
+          shortCode: session.shortCode,
+          partnerConnected: !!session.guest,
+          partnerLang: session.guestLang,
+          engine: session.hostEngine,
+        });
+        return;
+      }
       sessions.set(sessionId, {
         hostEngine,
         host: ws, hostLang: lang, hostUserId: userId || null,
@@ -1741,12 +1766,78 @@ wss.on('connection', (ws) => {
       return;
     }
 
+
+    // ── PING / HEARTBEAT ─────────────────────────────────────────────────────
+    if (type === 'ping') {
+      send(ws, { type: 'pong', timestamp: Date.now() });
+      return;
+    }
+
+    // ── RECONNECT SESSION (Host returning from WhatsApp or background) ─────────
+    if (type === 'reconnect_session') {
+      const { sessionId, role, lang } = message;
+      const targetSessionId = resolveSessionId(sessionId);
+      const session = sessions.get(targetSessionId);
+
+      if (!session) {
+        console.log(`[server] reconnect_session: session ${targetSessionId} not found`);
+        send(ws, { type: 'error', message: 'Session has expired or was ended.' });
+        return;
+      }
+
+      if (role === 'host') {
+        if (session.hostDisconnectTimeout) {
+          clearTimeout(session.hostDisconnectTimeout);
+          session.hostDisconnectTimeout = null;
+        }
+        session.hostDisconnected = false;
+        session.host = ws;
+        currentSessionId = targetSessionId;
+        currentRole = 'host';
+        console.log(`[server] Host reconnected to session ${targetSessionId}`);
+        send(ws, {
+          type: 'session_resumed',
+          sessionId: targetSessionId,
+          shortCode: session.shortCode,
+          partnerConnected: !!session.guest,
+          partnerLang: session.guestLang,
+          engine: session.hostEngine,
+        });
+
+        if (session.guest) {
+          send(ws, {
+            type: 'session_ready',
+            partnerLang: session.guestLang,
+            engine: session.hostEngine,
+          });
+        }
+        return;
+      }
+    }
+
     send(ws, { type: 'error', message: `Unknown message type: ${type}` });
   });
 
   ws.on('close', () => {
     console.log(`[server] Connection closed. Role: ${currentRole}, Session: ${currentSessionId}`);
-    if (currentSessionId && currentRole) cleanupSession(currentSessionId, currentRole);
+    if (currentSessionId && currentRole) {
+      const session = sessions.get(currentSessionId);
+      // If host disconnected while waiting in the lobby (no guest yet, call not started):
+      // Don't kill the session immediately; give 2 minutes grace period for sharing invite (WhatsApp, etc.)
+      if (session && currentRole === 'host' && !session.guest && !session.connectedAt) {
+        console.log(`[server] Host disconnected while in lobby for session ${currentSessionId}. Holding session for 120s...`);
+        session.hostDisconnected = true;
+        session.host = null;
+        if (session.hostDisconnectTimeout) clearTimeout(session.hostDisconnectTimeout);
+        session.hostDisconnectTimeout = setTimeout(() => {
+          console.log(`[server] Host lobby grace period expired for session ${currentSessionId}. Cleaning up.`);
+          cleanupSession(currentSessionId, 'host');
+        }, 120000);
+        return;
+      }
+
+      cleanupSession(currentSessionId, currentRole);
+    }
   });
 
   ws.on('error', (err) => { console.error('[server] WebSocket error:', err.message); });

@@ -17,7 +17,10 @@ import {
   Linking,
   TextInput,
   Clipboard,
+  AppState,
+  AppStateStatus,
 } from 'react-native';
+import { websocketService } from '../services/websocketService';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 import { LanguageSelector } from '../components/LanguageSelector';
 import { QRCodeDisplay } from '../components/QRCodeDisplay';
@@ -285,7 +288,7 @@ ${msg}`);
   const [connectingMsg, setConnectingMsg] = useState<string | null>(null);
   const pendingJoinRef = useRef<string | null>(null);
 
-  const { status, sessionId, shortCode, myLang: wsMyLang, partnerLang, role: wsRole, callEngine, createSession, joinSession, endSession } = useWebSocket({
+  const { status, sessionId, shortCode, myLang: wsMyLang, partnerLang, role: wsRole, callEngine, createSession, joinSession, reconnectHostSession, endSession } = useWebSocket({
     onError: (msg) => {
       setErrorMsg(msg);
       setConnectingMsg(null);
@@ -365,6 +368,27 @@ ${msg}`);
       sub.remove();
     };
   }, [myLang, userId, speakerGender, speakerAge]);
+
+
+  useEffect(() => {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        if (showQR && roleRef.current === 'host' && sessionId) {
+          if (!websocketService.isConnected() || status === 'disconnected') {
+            console.log('[HomeScreen] App active; reattaching host to waiting lobby session:', sessionId);
+            try {
+              await reconnectHostSession(sessionId, myLang, userId, speakerGender, speakerAge);
+            } catch (err) {
+              console.warn('[HomeScreen] Failed to reattach lobby session:', err);
+            }
+          }
+        }
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [showQR, sessionId, myLang, userId, speakerGender, speakerAge, status, reconnectHostSession]);
 
   const checkMicPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'web') return true;
