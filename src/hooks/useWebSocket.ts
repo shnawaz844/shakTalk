@@ -21,6 +21,8 @@ interface UseWebSocketOptions {
   onWebRTCAnswer?: (sdp: any) => void;
   onWebRTCIceCandidate?: (candidate: any) => void;
   onWebRTCReady?: () => void;
+  onMinutesLow?: (minutesLeft: number) => void;
+  onMinutesOut?: (graceSeconds: number) => void;
 }
 
 export function useWebSocket(options: UseWebSocketOptions = {}) {

@@ -21,6 +21,15 @@ import {
   subscribePlanTierChange,
 } from '../utils/enginePreference';
 
+
+const isIndia = (() => {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India')) return true;
+  } catch (_) {}
+  return false;
+})();
+
 interface WalletModalProps {
   visible: boolean;
   onClose: () => void;
@@ -29,10 +38,10 @@ interface WalletModalProps {
 
 // Preset top-up packages in minutes
 const MINUTE_PRESETS = [
+  { minutes: 60, cents: 600, label: '60 Mins' },
   { minutes: 100, cents: 1000, label: '100 Mins' },
-  { minutes: 250, cents: 2500, label: '250 Mins' },
-  { minutes: 500, cents: 5000, label: '500 Mins' },
-  { minutes: 750, cents: 7500, label: '750 Mins' },
+  { minutes: 150, cents: 1500, label: '150 Mins' },
+  { minutes: 200, cents: 2000, label: '200 Mins' },
 ];
 
 const PLAN_INFO: Record<
@@ -47,7 +56,7 @@ const PLAN_INFO: Record<
   }
 > = {
   starter: {
-    name: 'Base Plan',
+    name: 'Standard Plan',
     model: 'Turn-by-Turn Voice Translation',
     monthlyMinutes: '100 mins',
     color: '#39FF14',
@@ -57,26 +66,26 @@ const PLAN_INFO: Record<
   pro: {
     name: 'Pro Plan',
     model: 'Simultaneous Live Voice Translation',
-    monthlyMinutes: '250 mins',
+    monthlyMinutes: '110 mins',
     color: '#2FE0A8',
     icon: 'activity',
-    description: '250 min/mo Simultaneous Live Translation',
+    description: '110 min/mo Simultaneous Live Translation',
   },
   business: {
-    name: 'Dual AI All-Access',
-    model: 'Dual Turn-by-Turn & Live Translation',
-    monthlyMinutes: '500 mins',
-    color: '#E6A23C',
-    icon: 'layers',
-    description: '500 min/mo Dual AI Translation Access',
+    name: 'Pro Plan',
+    model: 'Simultaneous Live Voice Translation',
+    monthlyMinutes: '110 mins',
+    color: '#2FE0A8',
+    icon: 'activity',
+    description: '110 min/mo Simultaneous Live Translation',
   },
   payg: {
-    name: 'Standard Plan',
-    model: 'Standard Voice Translation',
-    monthlyMinutes: '0 mins',
-    color: '#8A9793',
-    icon: 'zap',
-    description: 'Standard translation access',
+    name: 'Free Trial',
+    model: 'Simultaneous Live Voice Translation',
+    monthlyMinutes: '10 mins',
+    color: '#2FE0A8',
+    icon: 'activity',
+    description: '10 mins one-time trial included',
   },
 };
 
@@ -88,8 +97,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
   const [planMinutesTotal, setPlanMinutesTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [processingTopup, setProcessingTopup] = useState(false);
-  const [selectedMinutes, setSelectedMinutes] = useState(100);
-  const [selectedAmountCents, setSelectedAmountCents] = useState(1000);
+  const [selectedMinutes, setSelectedMinutes] = useState(60);
+  const [selectedAmountCents, setSelectedAmountCents] = useState(600);
   const [customMinutes, setCustomMinutes] = useState('');
   const [currentTier, setCurrentTier] = useState<PlanTier>('starter');
 
@@ -110,6 +119,27 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
       const url = user?.id
         ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
         : `${API_URL}/wallet/balance`;
+
+      if (user?.id) {
+        try {
+          const bRes = await fetch(`${API_URL}/billing/me?userId=${encodeURIComponent(user.id)}`, { headers });
+          if (bRes.ok) {
+            const bData = await bRes.json();
+            if (bData.ok) {
+              setBalanceMinutes(bData.topupMinutesRemaining ?? 0);
+              setPlanMinutesRemaining(bData.planMinutesRemaining ?? 0);
+              setPlanMinutesTotal(bData.plan === 'pro' ? 110 : (bData.plan === 'trial' ? 10 : 100));
+              if (bData.plan === 'pro' || bData.plan === 'standard') {
+                setCurrentTier(bData.plan === 'pro' ? 'pro' : 'starter');
+              }
+              const pName = bData.plan ? (bData.plan.charAt(0).toUpperCase() + bData.plan.slice(1)) : 'Pro';
+              onBalanceUpdated?.(`${pName} · ${bData.totalMinutes} min left`);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
 
       const res = await fetch(url, { headers });
       const data = await res.json();
@@ -159,8 +189,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
   };
 
   const handleTopup = async () => {
-    if (!selectedMinutes || selectedMinutes < 100) {
-      const msg = 'Minimum top-up is 100 minutes. Please enter at least 100 minutes.';
+    if (!selectedMinutes || selectedMinutes < 60) {
+      const msg = 'Minimum top-up is 60 minutes. Please enter at least 60 minutes.';
       if (Platform.OS === 'web') {
         alert(msg);
       } else {
@@ -283,25 +313,48 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             {/* Preset Minutes Selection */}
             <Text style={styles.sectionLabel}>CHOOSE TOP-UP MINUTES</Text>
             <View style={styles.amountGrid}>
-              {MINUTE_PRESETS.map((opt) => {
-                const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
-                return (
-                  <TouchableOpacity
-                    key={opt.minutes}
-                    style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
-                    onPress={() => {
-                      setCustomMinutes('');
-                      setSelectedMinutes(opt.minutes);
-                      setSelectedAmountCents(opt.cents);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <View style={styles.presetRow}>
+                {MINUTE_PRESETS.slice(0, 2).map((opt) => {
+                  const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
+                  return (
+                    <TouchableOpacity
+                      key={opt.minutes}
+                      style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
+                      onPress={() => {
+                        setCustomMinutes('');
+                        setSelectedMinutes(opt.minutes);
+                        setSelectedAmountCents(opt.cents);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={styles.presetRow}>
+                {MINUTE_PRESETS.slice(2, 4).map((opt) => {
+                  const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
+                  return (
+                    <TouchableOpacity
+                      key={opt.minutes}
+                      style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
+                      onPress={() => {
+                        setCustomMinutes('');
+                        setSelectedMinutes(opt.minutes);
+                        setSelectedAmountCents(opt.cents);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
 
             {/* Custom Minutes Input */}
@@ -321,7 +374,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   ]}
                   value={customMinutes}
                   onChangeText={handleCustomMinutesChange}
-                  placeholder="e.g. 150 (min 100)"
+                  placeholder="e.g. 60 (min 60)"
                   placeholderTextColor="rgba(255, 255, 255, 0.3)"
                   keyboardType="number-pad"
                   maxLength={5}
@@ -329,13 +382,13 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                 {isCustomActive && selectedMinutes > 0 && (
                   <View style={[
                     styles.customCalcBadge,
-                    selectedMinutes < 100 && { backgroundColor: 'rgba(255, 165, 0, 0.15)' },
+                    selectedMinutes < 60 && { backgroundColor: 'rgba(255, 165, 0, 0.15)' },
                   ]}>
                     <Text style={[
                       styles.customCalcText,
-                      selectedMinutes < 100 && { color: '#FFA500' },
+                      selectedMinutes < 60 && { color: '#FFA500' },
                     ]}>
-                      {selectedMinutes < 100 ? 'Min 100 Mins' : `${selectedMinutes} Mins`}
+                      {selectedMinutes < 60 ? 'Min 60 Mins' : `${selectedMinutes} Mins`}
                     </Text>
                   </View>
                 )}
@@ -343,8 +396,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   <TouchableOpacity
                     onPress={() => {
                       setCustomMinutes('');
-                      setSelectedMinutes(100);
-                      setSelectedAmountCents(1000);
+                      setSelectedMinutes(60);
+                      setSelectedAmountCents(600);
                     }}
                     style={styles.clearBtn}
                     activeOpacity={0.7}
@@ -359,10 +412,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             <TouchableOpacity
               style={[
                 styles.topupBtn,
-                (processingTopup || selectedMinutes < 100) && { opacity: 0.6 },
+                (processingTopup || selectedMinutes < 60) && { opacity: 0.6 },
               ]}
               onPress={handleTopup}
-              disabled={processingTopup || selectedMinutes < 100}
+              disabled={processingTopup || selectedMinutes < 60}
               activeOpacity={0.85}
             >
               {processingTopup ? (
@@ -371,9 +424,9 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                 <>
                   <Feather name="plus-circle" size={18} color="#000" style={{ marginRight: 8 }} />
                   <Text style={styles.topupBtnText}>
-                    {selectedMinutes >= 100
-                      ? `Top-up ${selectedMinutes} Minutes with Razorpay`
-                      : 'Enter at least 100 minutes'}
+                    {selectedMinutes >= 60
+                      ? `Top-up ${selectedMinutes} Minutes with ShakTalk`
+                      : 'Enter at least 60 minutes'}
                   </Text>
                 </>
               )}
@@ -439,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   scrollBody: {
-    paddingBottom: 4,
+    paddingBottom: 24,
   },
   planCard: {
     borderRadius: 16,
@@ -553,19 +606,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   amountGrid: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  presetRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
+    gap: 10,
   },
   amountBtn: {
     flex: 1,
-    minWidth: '45%',
+    height: 48,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,
-    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -649,7 +703,9 @@ const styles = StyleSheet.create({
   topupBtn: {
     backgroundColor: '#2FE0A8',
     borderRadius: 16,
-    paddingVertical: 15,
+    height: 52,
+    marginTop: 8,
+    marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

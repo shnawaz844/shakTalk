@@ -32,9 +32,11 @@ import { WS_URL, APP_NAME_PREFIX, APP_NAME_SUFFIX, APP_LOGO, JOIN_BASE_URL, APP_
 import { colors, DESKTOP_BREAKPOINT } from '../theme';
 import {
   getStoredPlanTier,
+  setStoredPlanTier,
   subscribePlanTierChange,
   PlanTier,
   getStoredEngine,
+  setStoredEngine,
   subscribeEngineChange,
   CallEngine,
 } from '../utils/enginePreference';
@@ -132,6 +134,29 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
         ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
         : `${API_URL}/wallet/balance`;
 
+      if (user?.id) {
+        try {
+          const billingRes = await fetch(`${API_URL}/billing/me?userId=${encodeURIComponent(user.id)}`, { headers });
+          if (billingRes.ok) {
+            const bData = await billingRes.json();
+            if (bData.ok && bData.totalMinutes !== undefined) {
+              const planKey = (bData.plan || 'pro').toLowerCase();
+              const isStandard = planKey === 'standard' || planKey === 'starter';
+              const pTier: PlanTier = isStandard ? 'starter' : 'pro';
+              const pEngine: CallEngine = isStandard ? 'legacy' : 'livekit';
+
+              setCurrentTier(pTier);
+              setCurrentEngineState(pEngine);
+              setStoredPlanTier(pTier);
+              setStoredEngine(pEngine);
+
+              setWalletBalance(`${bData.totalMinutes} mins`);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
       const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok) {
@@ -193,13 +218,11 @@ ${msg}`);
   }, [currentTier, fetchWalletBalance]);
 
   const planInfo = (() => {
-    if (currentTier === 'starter' || currentEngineState === 'legacy') {
-      return { label: 'Base Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
+    const isStandard = currentTier === 'starter' || currentEngineState === 'legacy';
+    if (isStandard) {
+      return { label: 'Standard Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
     }
-    if (currentTier === 'business') {
-      return { label: 'Dual AI (500 mins)', color: '#E6A23C', icon: 'layers' as const };
-    }
-    return { label: 'Pro Plan (250 mins)', color: '#2FE0A8', icon: 'activity' as const };
+    return { label: 'Pro Plan (110 mins)', color: '#2FE0A8', icon: 'activity' as const };
   })();
 
   // Default to the user's native language (set in their profile) until they
@@ -391,14 +414,35 @@ ${msg}`);
   };
 
   const handleShareWhatsApp = async (sid: string) => {
-    const msg = buildShareMessage(sid);
-    const waUrl = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    const canOpen = await Linking.canOpenURL(waUrl);
-    if (canOpen) {
-      await Linking.openURL(waUrl);
-    } else {
-      // Fallback: native share sheet (works even if WhatsApp not installed)
-      await Share.share({ message: msg });
+    try {
+      const msg = buildShareMessage(sid);
+      const encoded = encodeURIComponent(msg);
+      const waScheme = `whatsapp://send?text=${encoded}`;
+      const waWeb = `https://wa.me/?text=${encoded}`;
+
+      // 1. Try native WhatsApp scheme directly
+      const canOpen = await Linking.canOpenURL(waScheme).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(waScheme);
+        return;
+      }
+
+      // 2. Try opening scheme anyway (iOS canOpenURL can return false if not whitelisted)
+      try {
+        await Linking.openURL(waScheme);
+        return;
+      } catch (_) {}
+
+      // 3. Fallback to universal wa.me link
+      try {
+        await Linking.openURL(waWeb);
+        return;
+      } catch (_) {}
+
+      // 4. Ultimate fallback: native OS share sheet
+      await Share.share({ message: msg, title: `Join my ${APP_NAME} call` });
+    } catch (err) {
+      console.warn('[handleShareWhatsApp] error:', err);
     }
   };
 
@@ -741,6 +785,7 @@ ${msg}`);
                       style={styles.waBtn}
                       onPress={() => handleShareWhatsApp(sessionId)}
                       activeOpacity={0.8}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       accessibilityLabel="Share on WhatsApp"
                     >
                       <FontAwesome name="whatsapp" size={20} color="#FFFFFF" />

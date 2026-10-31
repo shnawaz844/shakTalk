@@ -47,7 +47,7 @@ function saveUsageData(data) {
 function activateUserPlan(userId, tier = 'starter') {
   if (!userId) userId = 'test_user_wallet';
   let minutes = 100;
-  if (tier === 'pro') minutes = 250;
+  if (tier === 'pro') minutes = 110;
   if (tier === 'business') minutes = 500;
 
   const usage = loadUsageData();
@@ -84,9 +84,9 @@ async function getUserMinutes(userId, knownWalletMinutes) {
         if (m.includes('3.5') && m.includes('2.5')) {
           planTier = 'business';
           planMinutesTotal = 500;
-        } else if (m.includes('3.5')) {
+        } else if (m.includes('3.5') || m.includes('pro') || m.includes('livekit')) {
           planTier = 'pro';
-          planMinutesTotal = 250;
+          planMinutesTotal = 110;
         } else {
           planTier = 'starter';
           planMinutesTotal = 100;
@@ -216,7 +216,7 @@ async function getWallet(userId) {
 async function topUpWallet(userId, amountCents, paymentId, description = 'Wallet Minutes Top-up via Razorpay') {
   if (!userId) userId = 'test_user_wallet';
   const cents = Number(amountCents) || 0;
-  if (cents < 1000) throw new Error('Minimum wallet top-up is 100 minutes ($10.00)');
+  if (cents < 600) throw new Error('Minimum wallet top-up is 60 minutes ($6.00)');
 
   const wallet = await getWallet(userId);
   const newBalance = wallet.balanceCents + cents;
