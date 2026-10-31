@@ -1,15 +1,15 @@
 {
   "expo": {
     "name": "ShakTranslate",
-    "slug": "shaktalk123",
-    "owner": "devlopershahs-team",
+    "slug": "shaktalk",
+    "owner": "talk123s-team",
     "scheme": "shaktranslate",
     "version": "1.1.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/91fdc89a-4f64-4624-9c11-e43f8377d568",
+      "url": "https://u.expo.dev/2fc10504-246d-41d8-b8b7-85cd063e6883",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -170,7 +170,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "91fdc89a-4f64-4624-9c11-e43f8377d568"
+        "projectId": "2fc10504-246d-41d8-b8b7-85cd063e6883"
       }
     }
   }
