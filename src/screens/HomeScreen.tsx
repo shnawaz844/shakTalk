@@ -405,14 +405,35 @@ ${msg}`);
   };
 
   const handleShareWhatsApp = async (sid: string) => {
-    const msg = buildShareMessage(sid);
-    const waUrl = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-    const canOpen = await Linking.canOpenURL(waUrl);
-    if (canOpen) {
-      await Linking.openURL(waUrl);
-    } else {
-      // Fallback: native share sheet (works even if WhatsApp not installed)
-      await Share.share({ message: msg });
+    try {
+      const msg = buildShareMessage(sid);
+      const encoded = encodeURIComponent(msg);
+      const waScheme = `whatsapp://send?text=${encoded}`;
+      const waWeb = `https://wa.me/?text=${encoded}`;
+
+      // 1. Try native WhatsApp scheme directly
+      const canOpen = await Linking.canOpenURL(waScheme).catch(() => false);
+      if (canOpen) {
+        await Linking.openURL(waScheme);
+        return;
+      }
+
+      // 2. Try opening scheme anyway (iOS canOpenURL can return false if not whitelisted)
+      try {
+        await Linking.openURL(waScheme);
+        return;
+      } catch (_) {}
+
+      // 3. Fallback to universal wa.me link
+      try {
+        await Linking.openURL(waWeb);
+        return;
+      } catch (_) {}
+
+      // 4. Ultimate fallback: native OS share sheet
+      await Share.share({ message: msg, title: `Join my ${APP_NAME} call` });
+    } catch (err) {
+      console.warn('[handleShareWhatsApp] error:', err);
     }
   };
 
@@ -755,6 +776,7 @@ ${msg}`);
                       style={styles.waBtn}
                       onPress={() => handleShareWhatsApp(sessionId)}
                       activeOpacity={0.8}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                       accessibilityLabel="Share on WhatsApp"
                     >
                       <FontAwesome name="whatsapp" size={20} color="#FFFFFF" />

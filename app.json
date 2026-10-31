@@ -33,6 +33,9 @@
         "NSMicrophoneUsageDescription": "Allow ShakTranslate to access your microphone for calls and live translation.",
         "UIBackgroundModes": [
           "audio"
+        ],
+        "LSApplicationQueriesSchemes": [
+          "whatsapp"
         ]
       },
       "associatedDomains": [

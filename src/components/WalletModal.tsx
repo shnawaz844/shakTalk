@@ -313,25 +313,48 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             {/* Preset Minutes Selection */}
             <Text style={styles.sectionLabel}>CHOOSE TOP-UP MINUTES</Text>
             <View style={styles.amountGrid}>
-              {MINUTE_PRESETS.map((opt) => {
-                const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
-                return (
-                  <TouchableOpacity
-                    key={opt.minutes}
-                    style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
-                    onPress={() => {
-                      setCustomMinutes('');
-                      setSelectedMinutes(opt.minutes);
-                      setSelectedAmountCents(opt.cents);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
-                      {opt.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+              <View style={styles.presetRow}>
+                {MINUTE_PRESETS.slice(0, 2).map((opt) => {
+                  const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
+                  return (
+                    <TouchableOpacity
+                      key={opt.minutes}
+                      style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
+                      onPress={() => {
+                        setCustomMinutes('');
+                        setSelectedMinutes(opt.minutes);
+                        setSelectedAmountCents(opt.cents);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <View style={styles.presetRow}>
+                {MINUTE_PRESETS.slice(2, 4).map((opt) => {
+                  const isSelected = !isCustomActive && selectedMinutes === opt.minutes;
+                  return (
+                    <TouchableOpacity
+                      key={opt.minutes}
+                      style={[styles.amountBtn, isSelected && styles.amountBtnSelected]}
+                      onPress={() => {
+                        setCustomMinutes('');
+                        setSelectedMinutes(opt.minutes);
+                        setSelectedAmountCents(opt.cents);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.amountText, isSelected && styles.amountTextSelected]}>
+                        {opt.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
 
             {/* Custom Minutes Input */}
@@ -469,7 +492,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   scrollBody: {
-    paddingBottom: 4,
+    paddingBottom: 24,
   },
   planCard: {
     borderRadius: 16,
@@ -583,19 +606,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   amountGrid: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  presetRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 14,
+    gap: 10,
   },
   amountBtn: {
     flex: 1,
-    minWidth: '45%',
+    height: 48,
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,
-    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -679,7 +703,9 @@ const styles = StyleSheet.create({
   topupBtn: {
     backgroundColor: '#2FE0A8',
     borderRadius: 16,
-    paddingVertical: 15,
+    height: 52,
+    marginTop: 8,
+    marginBottom: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
