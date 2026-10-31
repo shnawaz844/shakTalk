@@ -296,7 +296,7 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
         {/* Trust & Security Badge */}
         <View style={styles.securityRow}>
           <Feather name="shield" size={13} color="rgba(255,255,255,0.4)" />
-          <Text style={styles.securityText}>Secured via 256-bit Razorpay Payment Gateway</Text>
+          <Text style={styles.securityText}>Secured via 256-bit Encrypted Payment Gateway</Text>
         </View>
 
         <Text style={styles.footerNote}>

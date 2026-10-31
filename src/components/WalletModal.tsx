@@ -425,7 +425,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   <Feather name="plus-circle" size={18} color="#000" style={{ marginRight: 8 }} />
                   <Text style={styles.topupBtnText}>
                     {selectedMinutes >= 60
-                      ? `Top-up ${selectedMinutes} Minutes with Razorpay`
+                      ? `Top-up ${selectedMinutes} Minutes with ShakTalk`
                       : 'Enter at least 60 minutes'}
                   </Text>
                 </>
