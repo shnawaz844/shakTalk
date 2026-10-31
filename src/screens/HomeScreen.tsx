@@ -568,11 +568,6 @@ ${msg}`);
                   <Feather name="user" size={16} color={colors.muted} />
                 )}
               </TouchableOpacity>
-
-              {/* Sign Out Button */}
-              <TouchableOpacity onPress={() => signOut()} style={styles.signOutBtn} activeOpacity={0.75}>
-                <Feather name="log-out" size={16} color={colors.muted} />
-              </TouchableOpacity>
             </View>
           </View>
 

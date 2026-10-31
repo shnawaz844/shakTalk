@@ -595,6 +595,36 @@ const httpServer = http.createServer(async (req, res) => {
   }
 
 
+
+  // POST /billing/cancel-autopay
+  if (req.method === 'POST' && req.url === '/billing/cancel-autopay') {
+    try {
+      let userId = null;
+      try {
+        const token = bearerToken(req);
+        if (token) userId = await verifyClerkToken(token);
+      } catch (_) {}
+      if (!userId) {
+        const body = await readJsonBody(req);
+        userId = body?.userId;
+      }
+      if (!userId) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+        return;
+      }
+      const result = await billingService.setAutopayStatus(userId, false);
+      if (CLERK_SECRET_KEY) {
+        await updateClerkMetadata(userId, { willRenew: false, autopayEnabled: false }).catch(() => {});
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      sendHttpError(res, err, '/billing/cancel-autopay');
+    }
+    return;
+  }
+
   if (req.method === 'GET' && req.url?.match(/^\/conversations(\?.*)?$/)) {
     try {
       const url = new URL(req.url, `http://localhost`);
@@ -1844,6 +1874,14 @@ wss.on('connection', (ws) => {
 });
 
 console.log(`[server] ${APP_NAME} server starting on port ${PORT}`);
+
+// Automated 30-day recurring subscription renewal scheduler
+setInterval(() => {
+  billingService.processAutopayRenewals().catch(err => {
+    console.warn('[billing] Periodic autopay renewal notice:', err.message);
+  });
+}, 30 * 60 * 1000);
+
 httpServer.listen(PORT, () => {
   console.log(`[server] HTTP + WebSocket server listening on port ${PORT}`);
 });

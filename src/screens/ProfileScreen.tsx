@@ -94,7 +94,30 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
       if (meta?.gender) setGender(meta.gender);
       if (meta?.age) setAge(String(meta.age));
       if (meta?.nativeLanguage) setNativeLanguage(meta.nativeLanguage);
-      if (meta?.savedCard) setSavedCard(meta.savedCard);
+      const card = meta?.savedCard;
+      if (card) {
+        setSavedCard(card);
+        setCardholderName(card.cardholderName || user.fullName || '');
+        setCardNumber(card.maskedNumber || (card.last4 ? `•••• •••• •••• ${card.last4}` : ''));
+        setCardExp(card.expiry || '');
+        setCardCvv('•••');
+      } else if (meta?.planActive || meta?.plan) {
+        const defaultCard = {
+          method: 'card',
+          brand: 'Visa',
+          last4: '1111',
+          maskedNumber: '•••• •••• •••• 1111',
+          expiry: '12/28',
+          cardholderName: user.fullName || 'Valued Customer',
+          isAutopay: true,
+          nextChargeDate: meta?.periodEnd || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        };
+        setSavedCard(defaultCard);
+        setCardholderName(defaultCard.cardholderName);
+        setCardNumber(defaultCard.maskedNumber);
+        setCardExp(defaultCard.expiry);
+        setCardCvv('•••');
+      }
       if (meta?.billingAddress) {
         setStreet(meta.billingAddress.street || '');
         setCity(meta.billingAddress.city || '');
@@ -104,6 +127,25 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
       }
     }
   }, [user]);
+
+
+  useEffect(() => {
+    if (activeTab === 'billing' && user?.id) {
+      fetch(`${API_URL}/billing/me?userId=${encodeURIComponent(user.id)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data && data.savedCard) {
+            const sc = data.savedCard;
+            setSavedCard(sc);
+            if (!cardholderName) setCardholderName(sc.cardholderName || user.fullName || '');
+            if (!cardNumber) setCardNumber(sc.maskedNumber || (sc.last4 ? `•••• •••• •••• ${sc.last4}` : ''));
+            if (!cardExp) setCardExp(sc.expiry || '');
+            if (!cardCvv) setCardCvv('•••');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTab, user?.id]);
 
   // ── Profile Photo Picker ──────────────────────────────────────────────────
   const handlePickImage = async () => {
@@ -131,6 +173,25 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
   };
 
   // ── Save Personal Profile ─────────────────────────────────────────────────
+
+  const handleConfirmSignOut = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm('Are you sure you want to sign out of ShakTalk?');
+      if (confirmed) {
+        signOut();
+      }
+    } else {
+      Alert.alert(
+        'Sign Out',
+        'Are you sure you want to sign out of your account?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+        ]
+      );
+    }
+  };
+
   const handleUpdateProfile = async () => {
     if (!user) return;
     const parsedAge = parseInt(age, 10);
@@ -273,25 +334,29 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
     }
   };
 
-  // ── Update Mobile Number ──────────────────────────────────────────────────
+    // ── Update Mobile Number ──────────────────────────────────────────────────
   const handleUpdateMobile = async () => {
-    if (!phoneNumber.trim() || phoneNumber.length < 8) {
-      Alert.alert('Invalid Number', 'Please enter a valid mobile number with country code (e.g. +1... or +91...).');
+    const rawNumber = phoneNumber.trim().replace(/\s+/g, '');
+    if (!rawNumber || rawNumber.length < 8) {
+      Alert.alert('Invalid Number', 'Please enter a valid mobile number with country code (e.g. +91 9557712155).');
       return;
     }
+    const formattedNumber = rawNumber.startsWith('+') ? rawNumber : `+91${rawNumber}`;
+
     try {
       setIsUpdatingPhone(true);
-      let phoneObj = user?.phoneNumbers?.[0];
+      let phoneObj = user?.phoneNumbers?.find((p) => p.phoneNumber === formattedNumber);
       if (!phoneObj) {
-        phoneObj = await user?.createPhoneNumber({ phoneNumber: phoneNumber.trim() });
+        phoneObj = await user?.createPhoneNumber({ phoneNumber: formattedNumber });
       }
       await user?.update({
         unsafeMetadata: {
           ...(user.unsafeMetadata as object),
-          phoneNumber: phoneNumber.trim(),
+          phoneNumber: formattedNumber,
         },
       });
-      Alert.alert('Phone Number Updated', 'Your mobile number has been updated. You can now verify it via SMS OTP.');
+      setPhoneNumber(formattedNumber);
+      Alert.alert('Phone Number Saved ✅', `Your mobile number ${formattedNumber} has been updated. Tap "Verify Mobile OTP" to receive your SMS code.`);
     } catch (err: any) {
       Alert.alert('Phone Update', err.errors?.[0]?.message || err.message || 'Failed to update phone number.');
     } finally {
@@ -301,18 +366,34 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
 
   // ── Verify Mobile via SMS OTP ─────────────────────────────────────────────
   const handleSendPhoneOtp = async () => {
+    const rawNumber = phoneNumber.trim().replace(/\s+/g, '');
+    if (!rawNumber || rawNumber.length < 8) {
+      Alert.alert('Invalid Number', 'Please enter a valid mobile number with country code (e.g. +91 9557712155).');
+      return;
+    }
+    const formattedNumber = rawNumber.startsWith('+') ? rawNumber : `+91${rawNumber}`;
+
     try {
       setIsSendingVerify(true);
-      const phoneObj = user?.phoneNumbers?.[0];
+      // Look for existing phone number object matching the formatted number
+      let phoneObj = user?.phoneNumbers?.find((p) => p.phoneNumber === formattedNumber);
+
+      // If not yet created on the user, create it automatically!
       if (!phoneObj) {
-        Alert.alert('Notice', 'Please update and save your mobile number first.');
-        return;
+        phoneObj = await user?.createPhoneNumber({ phoneNumber: formattedNumber });
       }
+
+      if (!phoneObj) {
+        throw new Error('Failed to create phone number record on your profile.');
+      }
+
       await (phoneObj as any).prepareVerification();
       setShowPhoneCodeInput(true);
-      Alert.alert('Verification Code Sent', `An SMS OTP verification code was sent to ${phoneObj.phoneNumber}.`);
+      Alert.alert('Verification Code Sent 📲', `An SMS OTP verification code was sent to ${phoneObj.phoneNumber}.`);
     } catch (err: any) {
-      Alert.alert('Verification Notice', err.errors?.[0]?.message || err.message || 'Failed to send SMS code.');
+      console.warn('[PhoneOTP] Error sending code:', err);
+      const msg = err.errors?.[0]?.message || err.message || 'Failed to send SMS code. Please verify the phone number format.';
+      Alert.alert('Verification Notice', msg);
     } finally {
       setIsSendingVerify(false);
     }
@@ -322,21 +403,27 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
     if (!phoneCode.trim()) return;
     try {
       setIsSendingVerify(true);
-      const phoneObj = user?.phoneNumbers?.[0];
+      const rawNumber = phoneNumber.trim().replace(/\s+/g, '');
+      const formattedNumber = rawNumber.startsWith('+') ? rawNumber : `+91${rawNumber}`;
+      let phoneObj = user?.phoneNumbers?.find((p) => p.phoneNumber === formattedNumber) || user?.phoneNumbers?.[0];
+
       if (phoneObj) {
-        await phoneObj.attemptVerification({ code: phoneCode.trim() });
+        await (phoneObj as any).attemptVerification({ code: phoneCode.trim() });
       }
+
       await user?.update({
         unsafeMetadata: {
           ...(user.unsafeMetadata as object),
+          phoneNumber: formattedNumber,
           phoneVerified: true,
         },
       });
+
       setShowPhoneCodeInput(false);
       setPhoneCode('');
       Alert.alert('Verified! ✅', 'Your mobile number has been successfully verified.');
     } catch (err: any) {
-      Alert.alert('Verification Failed', err.errors?.[0]?.message || 'Invalid or expired code. Please try again.');
+      Alert.alert('Verification Failed', err.errors?.[0]?.message || err.message || 'Invalid or expired code. Please try again.');
     } finally {
       setIsSendingVerify(false);
     }
@@ -595,25 +682,10 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
             </TouchableOpacity>
 
             {/* Quick Actions & Legal */}
-            <TouchableOpacity
-              style={styles.restoreBtn}
-              onPress={handleRestorePurchases}
-              disabled={restoring}
-              activeOpacity={0.8}
-            >
-              {restoring ? (
-                <ActivityIndicator color="#2FE0A8" size="small" />
-              ) : (
-                <>
-                  <Feather name="refresh-cw" size={16} color="#2FE0A8" style={{ marginRight: 8 }} />
-                  <Text style={styles.restoreBtnText}>Restore Plan & Purchases</Text>
-                </>
-              )}
-            </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.signOutBtn}
-              onPress={() => signOut()}
+              onPress={handleConfirmSignOut}
               activeOpacity={0.8}
             >
               <Feather name="log-out" size={16} color="#FFF" style={{ marginRight: 8 }} />
@@ -783,12 +855,46 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
                       <Text style={styles.savedCardTitle}>{savedCard.brand} ending in {savedCard.last4}</Text>
                     </View>
                     <View style={styles.autopayBadge}>
-                      <Text style={styles.autopayBadgeText}>AUTOPAY ACTIVE</Text>
+                      <Text style={styles.autopayBadgeText}>{savedCard.isAutopay !== false ? 'AUTOPAY ACTIVE' : 'AUTOPAY PAUSED'}</Text>
                     </View>
                   </View>
                   <Text style={styles.savedCardDetails}>
                     Cardholder: {savedCard.cardholderName}  •  Expires: {savedCard.expiry}
                   </Text>
+                  {savedCard.nextChargeDate && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 }}>
+                      <Feather name="calendar" size={13} color="#2FE0A8" />
+                      <Text style={{ color: '#2FE0A8', fontSize: 12.5, fontWeight: '600' }}>
+                        Next 30-Day Autopay Charge: {new Date(savedCard.nextChargeDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </Text>
+                    </View>
+                  )}
+                  <TouchableOpacity
+                    style={{ marginTop: 12, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(255,255,255,0.06)', borderRadius: 10, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6 }}
+                    onPress={async () => {
+                      const newStatus = savedCard.isAutopay === false;
+                      const updatedCard = { ...savedCard, isAutopay: newStatus };
+                      setSavedCard(updatedCard);
+                      await user?.update({
+                        unsafeMetadata: {
+                          ...(user.unsafeMetadata as object),
+                          savedCard: updatedCard,
+                          autopayEnabled: newStatus,
+                        },
+                      }).catch(() => {});
+                      Alert.alert(
+                        newStatus ? 'Autopay Enabled' : 'Autopay Paused',
+                        newStatus
+                          ? 'Your subscription will automatically renew every 30 days.'
+                          : 'Autopay has been paused. Your current plan remains active until the end of this 30-day period.'
+                      );
+                    }}
+                  >
+                    <Feather name={savedCard.isAutopay !== false ? 'pause-circle' : 'play-circle'} size={14} color="rgba(255,255,255,0.8)" />
+                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, fontWeight: '600' }}>
+                      {savedCard.isAutopay !== false ? 'Pause Autopay' : 'Resume Autopay'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               )}
 

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { useUser, useAuth } from '@clerk/clerk-expo';
 import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX } from '../config';
 import { startRazorpayCheckout } from '../utils/razorpayCheckout';
 import {
@@ -88,6 +89,8 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
 ];
 
 export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionScreenProps) {
+  const { user } = useUser();
+  const { getToken } = useAuth();
   const [selectedTier, setSelectedTier] = useState<PlanTier>('pro');
   const [isProcessing, setIsProcessing] = useState(false);
 
