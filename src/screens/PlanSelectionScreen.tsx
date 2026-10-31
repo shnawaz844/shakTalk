@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { useUser } from '@clerk/clerk-expo';
 import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX } from '../config';
 import { startRazorpayCheckout } from '../utils/razorpayCheckout';
 import {
@@ -32,7 +31,7 @@ const isIndia = (() => {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
     if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India')) return true;
-  } catch (_) {}
+  } catch (_) { }
   return false;
 })();
 
@@ -95,24 +94,15 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
   const selectedBundle =
     MONTHLY_BUNDLES.find((b) => b.id === selectedTier) || MONTHLY_BUNDLES[1];
 
-  const { user } = useUser();
   const handleContinueWithPayment = async () => {
     setIsProcessing(true);
     try {
-      const amount = isIndia
-        ? (selectedBundle.id === 'pro' ? 149900 : 49900)
-        : (selectedBundle.id === 'pro' ? 1499 : 499);
-      const currency = isIndia ? 'INR' : 'USD';
-
       const result = await startRazorpayCheckout({
         type: 'plan',
         tier: selectedBundle.id,
-        amountCents: amount,
-        currency,
         name: 'ShakTalk',
         description: `${selectedBundle.name} Monthly Subscription`,
-        email: user?.primaryEmailAddress?.emailAddress || 'aabir.hussain1@gmail.com',
-        userId: user?.id,
+        email: 'aabir.hussain1@gmail.com',
       });
 
       if (result.success) {
