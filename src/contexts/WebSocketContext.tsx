@@ -52,6 +52,7 @@ interface WebSocketContextType {
   callEngine: CallEngine;
   createSession: (lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => Promise<void>;
   joinSession: (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => Promise<void>;
+  reconnectHostSession: (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => Promise<void>;
   sendAudioStreamChunk: (
     audioBase64: string,
     mimeType: string,
@@ -145,6 +146,19 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       setRole('host');
       setStatus('waiting');
       setIsGeminiReady(false);
+    }
+
+    if (type === 'session_resumed') {
+      const elapsed = Date.now() - connectStartTimeRef.current;
+      console.log(`[LATENCY][CALL_CONNECT] Host session resumed in ${elapsed}ms (sessionId=${message.sessionId}). Waiting for partner...`);
+      setSessionId(message.sessionId);
+      if (message.shortCode) setShortCode(message.shortCode);
+      setRole('host');
+      if (message.partnerConnected) {
+        setStatus('connected');
+      } else {
+        setStatus('waiting');
+      }
     }
 
     if (type === 'session_ready') {
@@ -305,6 +319,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
+      websocketService.startHeartbeat();
       setLiveKit(null);
       setMyLang(lang);
       const engine = preferredEngine || await getStoredEngine();
@@ -333,6 +348,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
       websocketService.onError(() => { setStatus('error'); });
       await websocketService.connect(WS_URL);
+      websocketService.startHeartbeat();
       setLiveKit(null);
       setMyLang(lang);
       const engine = preferredEngine || await getStoredEngine();
@@ -351,6 +367,63 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [handleMessage]);
 
+  const reconnectHostSession = useCallback(async (sid: string, lang: string, userId?: string, speakerGender?: string, speakerAge?: number, preferredEngine?: CallEngine) => {
+    connectStartTimeRef.current = Date.now();
+    console.log(`[LATENCY][CALL_CONNECT] Reconnecting host to session ${sid}...`);
+    try {
+      websocketService.onMessage(handleMessage);
+      websocketService.onClose(() => {
+        setStatus('disconnected');
+        setIsProcessing(false);
+      });
+      websocketService.onError(() => { setStatus('error'); });
+      await websocketService.connect(WS_URL);
+      websocketService.startHeartbeat();
+      setLiveKit(null);
+      setMyLang(lang);
+      const engine = preferredEngine || await getStoredEngine();
+      setCallEngine(engine);
+      const authToken = await getTokenRef.current({ skipCache: true }).catch(() => getTokenRef.current().catch(() => null));
+      websocketService.send({
+        type: 'reconnect_session',
+        sessionId: sid,
+        role: 'host',
+        authToken: authToken || undefined,
+        lang,
+        userId,
+        engine,
+        ...(speakerGender ? { speakerGender } : {}),
+        ...(speakerAge !== undefined ? { speakerAge } : {}),
+      });
+      setSessionId(sid);
+      setRole('host');
+      setStatus('waiting');
+    } catch (e) {
+      console.warn('[WebSocketContext] Host reconnect error, trying fallback create:', e);
+      try {
+        await websocketService.connect(WS_URL);
+        websocketService.startHeartbeat();
+        const engine = preferredEngine || await getStoredEngine();
+        const authToken = await getTokenRef.current().catch(() => null);
+        websocketService.send({
+          type: 'create_session',
+          sessionId: sid,
+          authToken: authToken || undefined,
+          lang,
+          userId,
+          engine,
+          ...(speakerGender ? { speakerGender } : {}),
+          ...(speakerAge !== undefined ? { speakerAge } : {}),
+        });
+        setSessionId(sid);
+        setRole('host');
+        setStatus('waiting');
+      } catch (err2) {
+        setStatus('disconnected');
+      }
+    }
+  }, [handleMessage]);
+
   const sendAudioStreamChunk = useCallback(
     (audioBase64: string, mimeType: string, role: string, sid: string, clientSentAt?: number) => {
       // Fired continuously (~10x/sec) while the mic is live. Language and voice
@@ -358,19 +431,15 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // so each chunk only carries what's needed to forward it to Gemini.
       websocketService.send({
         type: 'audio_stream_chunk',
-        sessionId: sid,
         role,
+        sessionId: sid,
         audioBase64,
         mimeType,
-        clientSentAt: clientSentAt || Date.now(),
+        clientSentAt,
       });
     },
     []
   );
-
-  const sendCancelQueue = useCallback((role: string, sid: string) => {
-    websocketService.send({ type: 'cancel_queue', role, sessionId: sid });
-  }, []);
 
   const sendPauseQueue = useCallback((role: string, sid: string) => {
     websocketService.send({ type: 'pause_queue', role, sessionId: sid });
@@ -380,12 +449,16 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     websocketService.send({ type: 'resume_queue', role, sessionId: sid });
   }, []);
 
-  const claimTurn = useCallback((role: string, sid: string, confidence: number = 1) => {
-    websocketService.send({ type: 'claim_turn', sessionId: sid, role, confidence });
+  const sendCancelQueue = useCallback((role: string, sid: string) => {
+    websocketService.send({ type: 'cancel_queue', role, sessionId: sid });
+  }, []);
+
+  const claimTurn = useCallback((role: string, sid: string, confidence?: number) => {
+    websocketService.send({ type: 'claim_turn', role, sessionId: sid, confidence });
   }, []);
 
   const releaseTurn = useCallback((role: string, sid: string) => {
-    websocketService.send({ type: 'release_turn', sessionId: sid, role });
+    websocketService.send({ type: 'release_turn', role, sessionId: sid });
   }, []);
 
   const sendWebRTCOffer = useCallback((sdp: any, role: string, sid: string) => {
@@ -406,6 +479,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const endSession = useCallback((role: string, sid: string) => {
     websocketService.send({ type: 'end_session', sessionId: sid, role });
+    websocketService.stopHeartbeat();
     websocketService.disconnect();
     setStatus('idle');
     setRole(null);
@@ -441,6 +515,7 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         queueDepth,
         createSession,
         joinSession,
+        reconnectHostSession,
         sendAudioStreamChunk,
         sendPauseQueue,
         sendResumeQueue,

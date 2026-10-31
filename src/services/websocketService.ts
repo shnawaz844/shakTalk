@@ -9,6 +9,23 @@ class WebSocketService {
   private closeHandler: ((code: number, reason: string) => void) | null = null;
   private errorHandler: ((error: any) => void) | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
+  startHeartbeat(intervalMs: number = 8000) {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.isConnected()) {
+        this.send({ type: 'ping' });
+      }
+    }, intervalMs);
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
 
   connect(url: string = WS_URL): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -49,6 +66,7 @@ class WebSocketService {
   }
 
   disconnect() {
+    this.stopHeartbeat();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;

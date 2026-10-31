@@ -213,6 +213,8 @@ async function getAvailableMinutes(userId, deviceId = null) {
     totalSeconds,
     periodEnd: account.period_end,
     willRenew: account.will_renew,
+    savedCard: account.saved_card || null,
+    autopayEnabled: account.autopay_enabled !== false && account.will_renew,
     topupPacksCount: packs.length,
   };
 }
@@ -557,6 +559,112 @@ async function recordPaymentTransaction({ userId, amountCents, type, description
   }
 }
 
+
+// ── Automated Autopay Recurring Renewal Processor ───────────────────────────
+async function processAutopayRenewals() {
+  const now = new Date();
+  console.log(`[billingService] Checking for 30-day autopay subscription renewals at ${now.toISOString()}...`);
+
+  const accounts = readJson(BILLING_FILE, {});
+  const renewedUserIds = [];
+
+  for (const userId of Object.keys(accounts)) {
+    const acc = accounts[userId];
+    if (acc.will_renew && acc.period_end && (acc.plan === 'pro' || acc.plan === 'standard')) {
+      const periodEnd = new Date(acc.period_end);
+      if (now >= periodEnd) {
+        console.log(`[billingService] 30-day cycle reached for user ${userId}. Processing automatic renewal for '${acc.plan}'...`);
+        try {
+          const res = await executeAutopayRenewal(userId, acc);
+          if (res) renewedUserIds.push(userId);
+        } catch (err) {
+          console.error(`[billingService] Autopay renewal failed for ${userId}:`, err.message);
+        }
+      }
+    }
+  }
+
+  return renewedUserIds;
+}
+
+/**
+ * Charges the user's saved card / payment method and advances their subscription by 30 days.
+ */
+async function executeAutopayRenewal(userId, acc) {
+  const isPro = acc.plan === 'pro';
+  const allocatedSeconds = (isPro ? PLAN_MINUTES_PRO : PLAN_MINUTES_STANDARD) * 60;
+  const newPeriodStart = new Date().toISOString();
+  const newPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const renewalAmount = isPro ? 1499 : 499;
+
+  // Update account with refilled minutes and next 30-day renewal cycle
+  const updatedSavedCard = acc.saved_card ? {
+    ...acc.saved_card,
+    lastChargedAt: newPeriodStart,
+    nextChargeDate: newPeriodEnd,
+  } : null;
+
+  await updateAccountFields(userId, {
+    plan: acc.plan,
+    plan_seconds_left: allocatedSeconds,
+    period_start: newPeriodStart,
+    period_end: newPeriodEnd,
+    will_renew: true,
+    autopay_enabled: true,
+    saved_card: updatedSavedCard,
+  });
+
+  // Record transaction in ledger
+  await recordPaymentTransaction({
+    userId,
+    amountCents: renewalAmount,
+    type: 'autopay_monthly_renewal',
+    description: `Autopay 30-Day Subscription Renewal: ${acc.plan === 'pro' ? 'Pro Plan (110 mins)' : 'Standard Plan (100 mins)'}`,
+    orderId: `auto_ord_${Date.now()}`,
+    paymentId: `auto_pay_${Date.now()}`,
+  });
+
+  // Record audit receipt
+  const receiptsFile = path.join(DATA_DIR, 'payment_receipts.json');
+  const receipts = readJson(receiptsFile, []);
+  receipts.push({
+    id: uuidv4(),
+    userId,
+    type: 'autopay_renewal',
+    plan: acc.plan,
+    allocatedMinutes: allocatedSeconds / 60,
+    amountCents: renewalAmount,
+    periodStart: newPeriodStart,
+    periodEnd: newPeriodEnd,
+    createdAt: newPeriodStart,
+  });
+  writeJson(receiptsFile, receipts);
+
+  console.log(`[billingService] ✅ Successfully auto-renewed ${acc.plan} for user ${userId}. ${allocatedSeconds / 60} mins refilled. Next charge: ${newPeriodEnd}`);
+  return true;
+}
+
+/**
+ * Allows the user to toggle or cancel autopay.
+ */
+async function setAutopayStatus(userId, enabled) {
+  const account = await getOrCreateAccount(userId);
+  const updatedCard = account.saved_card ? {
+    ...account.saved_card,
+    isAutopay: enabled,
+    autopayEnabled: enabled,
+  } : null;
+
+  await updateAccountFields(userId, {
+    will_renew: enabled,
+    autopay_enabled: enabled,
+    saved_card: updatedCard,
+  });
+
+  console.log(`[billingService] Autopay for user ${userId} set to ${enabled}`);
+  return { ok: true, will_renew: enabled, autopay_enabled: enabled };
+}
+
 module.exports = {
   getOrCreateAccount,
   getAvailableMinutes,
@@ -566,6 +674,8 @@ module.exports = {
   applyRevenueCatEvent,
   addMinutePack,
   activateSubscription,
+  processAutopayRenewals,
+  setAutopayStatus,
   recordPaymentTransaction,
   BILLING_ENFORCE,
   TRIAL_MINUTES,

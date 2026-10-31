@@ -50,6 +50,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     queueDepth: context.queueDepth,
     createSession: context.createSession,
     joinSession: context.joinSession,
+    reconnectHostSession: context.reconnectHostSession,
     sendAudioStreamChunk: context.sendAudioStreamChunk,
     sendPauseQueue: context.sendPauseQueue,
     sendResumeQueue: context.sendResumeQueue,
