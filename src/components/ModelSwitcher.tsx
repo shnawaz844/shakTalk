@@ -35,7 +35,7 @@ interface PlanDetails {
 
 const PLAN_MAP: Record<CallEngine, PlanDetails> = {
   legacy: {
-    name: 'Base Plan',
+    name: 'Standard Plan',
     tier: 'starter',
     price: '$9.99/mo',
     amount: '$9.99',
@@ -224,7 +224,7 @@ export function ModelSwitcher({ style }: ModelSwitcherProps) {
                     engine === 'legacy' ? styles.btnTitleActiveLegacy : styles.btnTitleInactive,
                   ]}
                 >
-                  Base Plan
+                  Standard Plan
                 </Text>
               </View>
               {engine === 'legacy' && (
