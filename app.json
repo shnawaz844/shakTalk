@@ -9,7 +9,7 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/96f33856-71d1-4146-9a64-7f00a2625437",
+      "url": "https://u.expo.dev/213b141c-fbf7-4731-80b7-092a59cf5835",
       "enabled": true,
       "checkAutomatically": "ON_LOAD",
       "fallbackToCacheTimeout": 0
@@ -170,7 +170,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "96f33856-71d1-4146-9a64-7f00a2625437"
+        "projectId": "213b141c-fbf7-4731-80b7-092a59cf5835"
       }
     }
   }
