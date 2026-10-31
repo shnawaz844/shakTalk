@@ -2,7 +2,7 @@
   "expo": {
     "name": "ShakTranslate",
     "slug": "shaktalk",
-    "owner": "devlopershahs-team",
+    "owner": "shahahmad",
     "scheme": "shaktranslate",
     "version": "1.1.0",
     "runtimeVersion": {
@@ -24,7 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.cis.shaktranslate",
-      "buildNumber": "74",
+      "buildNumber": "75",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSAppTransportSecurity": {
@@ -45,7 +45,7 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "versionCode": 27,
+      "versionCode": 28,
       "splash": {
         "image": "./assets/splash.png",
         "resizeMode": "cover",
