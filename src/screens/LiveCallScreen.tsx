@@ -61,6 +61,7 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
   const [partnerSpeaking, setPartnerSpeaking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [minutesBanner, setMinutesBanner] = useState<{ text: string; urgent: boolean } | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [durationSec, setDurationSec] = useState(0);
   // AI translation notice, shown at the start of every call (covers the ~1 s connect).
@@ -109,6 +110,12 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
     onError: useCallback((msg: string) => {
       setPartnerSpeaking(false);
       Alert.alert('Error', msg);
+    }, []),
+    onMinutesLow: useCallback((minutesLeft: number) => {
+      setMinutesBanner({ text: `5 minutes left in call balance (${minutesLeft}m left)`, urgent: false });
+    }, []),
+    onMinutesOut: useCallback((graceSeconds: number) => {
+      setMinutesBanner({ text: `Out of minutes — call ends in ${graceSeconds}s`, urgent: true });
     }, []),
   });
 
@@ -257,6 +264,15 @@ export function LiveCallScreen({ sessionId, role, myLang, partnerLang, onEnd }: 
                 <Text style={styles.timer}>{formatDuration(durationSec)}</Text>
               </View>
               <AiTranslationLabel />
+              {minutesBanner && (
+                <View style={[
+                  styles.minutesWarningBanner,
+                  minutesBanner.urgent ? styles.minutesWarningUrgent : styles.minutesWarningLow
+                ]}>
+                  <Feather name={minutesBanner.urgent ? 'alert-octagon' : 'clock'} size={13} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.minutesWarningText}>{minutesBanner.text}</Text>
+                </View>
+              )}
 
               <View style={styles.stageMid}>
                 <View style={styles.orbWrap}>

@@ -92,6 +92,7 @@ export function SessionScreen({
     isPausedRef.current = isPaused;
   }, [isPaused]);
   const [hasError, setHasError] = useState(false);
+  const [minutesBanner, setMinutesBanner] = useState<{ text: string; urgent: boolean } | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);
   const [durationSec, setDurationSec] = useState(0);
   // AI translation notice, shown at the start of every call (covers the ~1 s connect).
@@ -559,6 +560,14 @@ export function SessionScreen({
       Alert.alert('Error', msg);
     }, []),
 
+    onMinutesLow: useCallback((minutesLeft: number) => {
+      setMinutesBanner({ text: `5 minutes left in call balance (${minutesLeft}m left)`, urgent: false });
+    }, []),
+
+    onMinutesOut: useCallback((graceSeconds: number) => {
+      setMinutesBanner({ text: `Out of minutes — call ends in ${graceSeconds}s`, urgent: true });
+    }, []),
+
     onPartnerSpeaking: useCallback(() => {
       // IMPORTANT: Do NOT pre-gate the mic here.
       // Pre-gating (isPlayingAudioRef = true before any audio arrives) caused
@@ -834,6 +843,15 @@ export function SessionScreen({
                 <Text style={styles.timer}>{formatDuration(durationSec)}</Text>
               </View>
               <AiTranslationLabel />
+              {minutesBanner && (
+                <View style={[
+                  styles.minutesWarningBanner,
+                  minutesBanner.urgent ? styles.minutesWarningUrgent : styles.minutesWarningLow
+                ]}>
+                  <Feather name={minutesBanner.urgent ? 'alert-octagon' : 'clock'} size={13} color="#FFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.minutesWarningText}>{minutesBanner.text}</Text>
+                </View>
+              )}
 
               <View style={styles.stageMid}>
                 <View style={styles.orbWrap}>
@@ -1176,6 +1194,27 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     color: colors.muted,
     textAlign: 'center',
+  },
+  minutesWarningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'center',
+  },
+  minutesWarningLow: {
+    backgroundColor: 'rgba(230, 162, 60, 0.9)',
+  },
+  minutesWarningUrgent: {
+    backgroundColor: 'rgba(232, 92, 92, 0.95)',
+  },
+  minutesWarningText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
   },
 });
 

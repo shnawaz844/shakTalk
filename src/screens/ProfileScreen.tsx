@@ -9,6 +9,7 @@ import {
   Image,
   ScrollView,
   Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -18,7 +19,6 @@ import { TERMS_URL, PRIVACY_URL, SUPPORT_URL } from '../legal/legal';
 import { Alert } from '../utils/alertCompat';
 import * as ImagePicker from 'expo-image-picker';
 import { LanguageSelector } from '../components/LanguageSelector';
-import { ModelSwitcher } from '../components/ModelSwitcher';
 import { setStoredEngine, setStoredPlanTier, CallEngine, PlanTier } from '../utils/enginePreference';
 import type { Gender } from './OnboardingScreen';
 
@@ -270,8 +270,27 @@ export function ProfileScreen({ onBack }: ProfileScreenProps) {
             <LanguageSelector label="" selected={nativeLanguage} onSelect={setNativeLanguage} />
           </View>
 
-          <View style={{ marginVertical: 14 }}>
-            <ModelSwitcher />
+          <View style={styles.manageSubscriptionCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <Feather name="credit-card" size={16} color="#2FE0A8" style={{ marginRight: 8 }} />
+              <Text style={styles.manageSubscriptionTitle}>Manage Subscription</Text>
+            </View>
+            <Text style={styles.manageSubscriptionSub}>
+              Plans and minutes are managed securely via Apple App Store or Google Play. View, upgrade, or cancel your monthly subscription anytime.
+            </Text>
+            <TouchableOpacity
+              style={styles.manageStoreBtn}
+              onPress={() => {
+                const storeUrl = Platform.OS === 'ios'
+                  ? 'https://apps.apple.com/account/subscriptions'
+                  : 'https://play.google.com/store/account/subscriptions';
+                Linking.openURL(storeUrl).catch(() => {});
+              }}
+              activeOpacity={0.8}
+            >
+              <Feather name="external-link" size={14} color="#000" style={{ marginRight: 6 }} />
+              <Text style={styles.manageStoreBtnText}>Open Store Subscriptions</Text>
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity
@@ -427,6 +446,39 @@ const styles = StyleSheet.create({
   restoreBtnText: {
     color: '#2FE0A8',
     fontSize: 15,
+    fontWeight: '700',
+  },
+  manageSubscriptionCard: {
+    backgroundColor: '#121615',
+    borderWidth: 1,
+    borderColor: 'rgba(47, 224, 168, 0.25)',
+    borderRadius: 16,
+    padding: 16,
+    marginVertical: 14,
+  },
+  manageSubscriptionTitle: {
+    color: '#2FE0A8',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  manageSubscriptionSub: {
+    color: 'rgba(255, 255, 255, 0.6)',
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  manageStoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2FE0A8',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  manageStoreBtnText: {
+    color: '#000',
+    fontSize: 14,
     fontWeight: '700',
   },
 });

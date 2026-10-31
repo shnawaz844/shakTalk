@@ -21,6 +21,15 @@ import {
   subscribePlanTierChange,
 } from '../utils/enginePreference';
 
+
+const isIndia = (() => {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India')) return true;
+  } catch (_) {}
+  return false;
+})();
+
 interface WalletModalProps {
   visible: boolean;
   onClose: () => void;
@@ -47,7 +56,7 @@ const PLAN_INFO: Record<
   }
 > = {
   starter: {
-    name: 'Base Plan',
+    name: 'Standard Plan',
     model: 'Turn-by-Turn Voice Translation',
     monthlyMinutes: '100 mins',
     color: '#39FF14',
@@ -57,26 +66,26 @@ const PLAN_INFO: Record<
   pro: {
     name: 'Pro Plan',
     model: 'Simultaneous Live Voice Translation',
-    monthlyMinutes: '250 mins',
+    monthlyMinutes: '110 mins',
     color: '#2FE0A8',
     icon: 'activity',
-    description: '250 min/mo Simultaneous Live Translation',
+    description: '110 min/mo Simultaneous Live Translation',
   },
   business: {
-    name: 'Dual AI All-Access',
-    model: 'Dual Turn-by-Turn & Live Translation',
-    monthlyMinutes: '500 mins',
-    color: '#E6A23C',
-    icon: 'layers',
-    description: '500 min/mo Dual AI Translation Access',
+    name: 'Pro Plan',
+    model: 'Simultaneous Live Voice Translation',
+    monthlyMinutes: '110 mins',
+    color: '#2FE0A8',
+    icon: 'activity',
+    description: '110 min/mo Simultaneous Live Translation',
   },
   payg: {
-    name: 'Standard Plan',
-    model: 'Standard Voice Translation',
-    monthlyMinutes: '0 mins',
-    color: '#8A9793',
-    icon: 'zap',
-    description: 'Standard translation access',
+    name: 'Free Trial',
+    model: 'Simultaneous Live Voice Translation',
+    monthlyMinutes: '10 mins',
+    color: '#2FE0A8',
+    icon: 'activity',
+    description: '10 mins one-time trial included',
   },
 };
 
@@ -110,6 +119,27 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
       const url = user?.id
         ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
         : `${API_URL}/wallet/balance`;
+
+      if (user?.id) {
+        try {
+          const bRes = await fetch(`${API_URL}/billing/me?userId=${encodeURIComponent(user.id)}`, { headers });
+          if (bRes.ok) {
+            const bData = await bRes.json();
+            if (bData.ok) {
+              setBalanceMinutes(bData.topupMinutesRemaining ?? 0);
+              setPlanMinutesRemaining(bData.planMinutesRemaining ?? 0);
+              setPlanMinutesTotal(bData.plan === 'pro' ? 110 : (bData.plan === 'trial' ? 10 : 100));
+              if (bData.plan === 'pro' || bData.plan === 'standard') {
+                setCurrentTier(bData.plan === 'pro' ? 'pro' : 'starter');
+              }
+              const pName = bData.plan ? (bData.plan.charAt(0).toUpperCase() + bData.plan.slice(1)) : 'Pro';
+              onBalanceUpdated?.(`${pName} · ${bData.totalMinutes} min left`);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
 
       const res = await fetch(url, { headers });
       const data = await res.json();

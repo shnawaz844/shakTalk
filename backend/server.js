@@ -15,6 +15,7 @@ const { signedUrlFor } = require('./storageService');
 const { SUPPORTED_LANGUAGES } = require('./liveTranslate');
 const paymentService = require('./paymentService');
 const walletService = require('./walletService');
+const billingService = require('./billingService');
 
 const PORT = process.env.PORT || 8080;
 const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://expo.dev/accounts/shahahmad/projects/shak-translate/builds/bb9de5af-858f-4444-948e-8a1a54ca988f';
@@ -287,6 +288,63 @@ const httpServer = http.createServer(async (req, res) => {
       }));
     } catch (err) {
       sendHttpError(res, err, '/user/account-state');
+    }
+    return;
+  }
+
+  // ── GET /billing/me ────────────────────────────────────────────────────────
+  if (req.method === 'GET' && req.url?.startsWith('/billing/me')) {
+    try {
+      const u = new URL(req.url, 'http://localhost');
+      const deviceId = u.searchParams.get('deviceId') || null;
+      let userId = u.searchParams.get('userId') || null;
+      try {
+        const token = bearerToken(req);
+        if (token) {
+          const verified = await verifyClerkToken(token);
+          if (verified) userId = verified;
+        }
+      } catch (_) {}
+
+      if (!userId) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Authentication required' }));
+        return;
+      }
+
+      const billing = await billingService.getAvailableMinutes(userId, deviceId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...billing }));
+    } catch (err) {
+      sendHttpError(res, err, '/billing/me');
+    }
+    return;
+  }
+
+  // ── POST /billing/revenuecat-webhook ───────────────────────────────────────
+  if (req.method === 'POST' && req.url === '/billing/revenuecat-webhook') {
+    try {
+      const secret = process.env.REVENUECAT_WEBHOOK_SECRET || 'shaktalk_rc_wh_sec_2026';
+      const authHeader = req.headers['authorization'] || '';
+      const secretHeader = req.headers['x-revenuecat-webhook-secret'] || '';
+      const providedToken = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+      if (secret && providedToken !== secret && secretHeader !== secret) {
+        console.warn('[billing] Unauthorized RevenueCat webhook attempt');
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Unauthorized webhook secret' }));
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      const event = body?.event || body;
+      const result = await billingService.applyRevenueCatEvent(event);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, ...result }));
+    } catch (err) {
+      console.error('[billing] RevenueCat webhook error:', err);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, error: err.message }));
     }
     return;
   }
@@ -1160,6 +1218,7 @@ async function startLiveKitCall(session, sessionId) {
     if (!sessions.has(sessionId)) { bot.close(); return; }
     send(session.host, { type: 'gemini_ready' });
     send(session.guest, { type: 'gemini_ready' });
+    startCallBilling(session, sessionId);
   } catch (err) {
     console.error(`[server] LiveKit call setup failed for ${sessionId}:`, err.message);
     send(session.host, { type: 'error', message: 'Could not start the translated call: ' + err.message });
@@ -1188,19 +1247,91 @@ function relayTranslationText(session, sessionId, role, seg) {
   }
 }
 
+function startCallBilling(session, sessionId) {
+  if (!session || !session.hostUserId || session.billingInterval) return;
+  session.connectedAt = Date.now();
+  session.billedSecondsCharged = 0;
+  session.sentLowMinutes = false;
+  session.sentOutMinutes = false;
+
+  console.log(`[billing] Call started for host ${session.hostUserId} in session ${sessionId} (engine=${session.hostEngine}). Waiting for partner was free.`);
+
+  // Heartbeat every 15 seconds (Build Plan: Charge host every 15s; send minutes_low at 5 min, minutes_out at 0, end after 1 grace minute)
+  session.billingInterval = setInterval(async () => {
+    try {
+      if (!sessions.has(sessionId)) {
+        clearInterval(session.billingInterval);
+        return;
+      }
+      const updated = await billingService.charge(session.hostUserId, 15, session.hostEngine);
+      session.billedSecondsCharged = (session.billedSecondsCharged || 0) + 15;
+
+      // 5 min remaining warning
+      if (updated.totalMinutes <= 5 && !session.sentLowMinutes) {
+        session.sentLowMinutes = true;
+        send(session.host, { type: 'minutes_low', minutesLeft: updated.totalMinutes });
+      }
+
+      // 0 min remaining -> minutes_out + 1 grace minute
+      if (updated.totalSeconds <= 0 && !session.sentOutMinutes) {
+        session.sentOutMinutes = true;
+        send(session.host, { type: 'minutes_out', graceSeconds: 60 });
+        session.graceTimeout = setTimeout(() => {
+          if (sessions.has(sessionId)) {
+            console.log(`[billing] Grace minute ended for session ${sessionId}. Out of minutes.`);
+            send(session.host, { type: 'call_ended', reason: 'Out of minutes' });
+            if (session.guest) send(session.guest, { type: 'call_ended', reason: 'Host ran out of minutes' });
+            cleanupSession(sessionId, 'system');
+          }
+        }, 60000);
+      }
+    } catch (err) {
+      console.warn(`[billing] Heartbeat billing error in session ${sessionId}:`, err.message);
+    }
+  }, 15000);
+}
+
 function cleanupSession(sessionId, disconnectedRole) {
   const session = sessions.get(sessionId);
   if (!session) return;
 
-  // Bill call minutes if call was connected and host is known
+  if (session.billingInterval) {
+    clearInterval(session.billingInterval);
+    session.billingInterval = null;
+  }
+  if (session.graceTimeout) {
+    clearTimeout(session.graceTimeout);
+    session.graceTimeout = null;
+  }
+
+  // Bill call minutes: "From translator ready (gemini_ready) to call end; last part rounded up to 1 minute. Waiting for the partner is free."
   if (session.connectedAt && session.hostUserId) {
-    const durationSec = Math.floor((Date.now() - session.connectedAt) / 1000);
+    const elapsedSec = Math.floor((Date.now() - session.connectedAt) / 1000);
+    const callStart = session.connectedAt;
     session.connectedAt = null; // Prevent double billing
-    walletService.deductCallMinutes(session.hostUserId, durationSec)
-      .then(res => {
-        console.log(`[billing] Call ended for ${session.hostUserId}: ${durationSec}s -> ${res.minutesBilled} mins billed (Plan: ${res.planMinutesRemaining}m left, Wallet: ${res.walletMinutes}m left, Total: ${res.totalMinutes}m)`);
-      })
-      .catch(err => console.error('[billing] Call deduction failed:', err.message));
+
+    if (elapsedSec >= 15) { // 15s drop protection
+      const totalRoundedBilledSeconds = Math.ceil(elapsedSec / 60) * 60;
+      const remainingToCharge = Math.max(0, totalRoundedBilledSeconds - (session.billedSecondsCharged || 0));
+
+      if (remainingToCharge > 0) {
+        billingService.charge(session.hostUserId, remainingToCharge, session.hostEngine)
+          .catch(err => console.error('[billing] Final minute rounding charge failed:', err.message));
+      }
+
+      billingService.recordCallUsage({
+        userId: session.hostUserId,
+        sessionId,
+        engine: session.hostEngine,
+        startedAt: callStart,
+        endedAt: Date.now(),
+        billedSeconds: totalRoundedBilledSeconds,
+      }).catch(err => console.error('[billing] Failed to record call usage:', err.message));
+
+      console.log(`[billing] Call completed: ${session.hostUserId} spoke ${elapsedSec}s -> billed ${totalRoundedBilledSeconds / 60} mins (${totalRoundedBilledSeconds}s).`);
+    } else {
+      console.log(`[billing] Call ended quickly (${elapsedSec}s < 15s) - connection-drop protection, no final charge.`);
+    }
   }
 
   session.roleState.host.paused = false;
@@ -1289,23 +1420,29 @@ wss.on('connection', (ws) => {
       try { userId = await wsCaller(message); }
       catch (err) { send(ws, { type: 'error', message: err.message }); return; }
 
+      let hostEngine = DEFAULT_CALL_ENGINE;
       if (userId) {
         try {
-          const minutesInfo = await walletService.getUserMinutes(userId);
-          if (minutesInfo.totalMinutes <= 0) {
+          const billingInfo = await billingService.getAvailableMinutes(userId, message.deviceId);
+          if (billingService.BILLING_ENFORCE && billingInfo.totalMinutes <= 0) {
             send(ws, {
               type: 'error',
               code: 'NO_MINUTES',
-              message: 'You have 0 call minutes remaining. Please top up your wallet to make calls.',
+              message: 'You have 0 call minutes remaining. Please top up your account to make calls.',
+              plan: billingInfo.plan,
             });
             return;
           }
+          // Build plan: Ignore the app's engine; use the plan's (trial/pro -> livekit, standard -> legacy)
+          hostEngine = billingService.getEngineForPlan(billingInfo.plan);
         } catch (err) {
           console.warn('[billing] Pre-call balance check error:', err.message);
+          hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
         }
+      } else {
+        hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       }
       const sessionId = uuidv4();
-      const hostEngine = message.engine === 'livekit' ? 'livekit' : (message.engine === 'legacy' ? 'legacy' : DEFAULT_CALL_ENGINE);
       sessions.set(sessionId, {
         hostEngine,
         host: ws, hostLang: lang, hostUserId: userId || null,
@@ -1423,6 +1560,7 @@ wss.on('connection', (ws) => {
           console.log(`[LATENCY][CALL_CONNECT] 🎉 Session ${sessionId} FULLY CONNECTED! Gemini AI ready in ${warmupDuration}ms after guest joined.`);
           send(session.host, { type: 'gemini_ready' });
           send(session.guest, { type: 'gemini_ready' });
+          startCallBilling(session, sessionId);
         }).catch((err) => {
           console.error(`[server] Gemini warmup failed for ${sessionId}:`, err.message);
           send(session.host, { type: 'gemini_ready' });

@@ -91,6 +91,8 @@ interface WebSocketCallbacks {
   onWebRTCAnswer?: (sdp: any) => void;
   onWebRTCIceCandidate?: (candidate: any) => void;
   onWebRTCReady?: () => void;
+  onMinutesLow?: (minutesLeft: number) => void;
+  onMinutesOut?: (graceSeconds: number) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -255,6 +257,14 @@ export const WebSocketProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       if (type === 'queue_resumed') {
         callbacks.onQueueResumed?.();
+      }
+
+      if (type === 'minutes_low') {
+        callbacks.onMinutesLow?.(message.minutesLeft ?? 5);
+      }
+
+      if (type === 'minutes_out') {
+        callbacks.onMinutesOut?.(message.graceSeconds ?? 60);
       }
 
       if (type === 'error') {

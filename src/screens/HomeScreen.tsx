@@ -132,6 +132,20 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
         ? `${API_URL}/wallet/balance?userId=${encodeURIComponent(user.id)}`
         : `${API_URL}/wallet/balance`;
 
+      if (user?.id) {
+        try {
+          const billingRes = await fetch(`${API_URL}/billing/me?userId=${encodeURIComponent(user.id)}`, { headers });
+          if (billingRes.ok) {
+            const bData = await billingRes.json();
+            if (bData.ok && bData.totalMinutes !== undefined) {
+              const pName = bData.plan ? (bData.plan.charAt(0).toUpperCase() + bData.plan.slice(1)) : 'Pro';
+              setWalletBalance(`${pName} · ${bData.totalMinutes} min left`);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
       const res = await fetch(url, { headers });
       const data = await res.json();
       if (data.ok) {

@@ -26,6 +26,15 @@ interface PlanSelectionScreenProps {
   onLoginPress?: () => void;
 }
 
+
+const isIndia = (() => {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (tz.includes('Kolkata') || tz.includes('Calcutta') || tz.includes('India')) return true;
+  } catch (_) {}
+  return false;
+})();
+
 interface MonthlyBundle {
   id: PlanTier;
   engine: CallEngine;
@@ -47,11 +56,11 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
   {
     id: 'starter',
     engine: 'legacy',
-    name: 'Base Plan',
-    modelName: 'Gemini 2.5 Flash',
-    modelId: 'live-2.5-flash-native-audio',
+    name: 'Standard Plan',
+    modelName: 'Gemini 2.5 Live',
+    modelId: 'shaktalk_standard_monthly',
     subtitle: 'Turn-by-Turn Translation (One-by-One)',
-    price: '$9.99',
+    price: isIndia ? '₹499' : '$4.99',
     billingPeriod: '/month',
     minutes: 100,
     minutesLabel: '100 min / month',
@@ -65,32 +74,16 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
     engine: 'livekit',
     name: 'Pro Plan',
     modelName: 'Gemini 3.5 Live',
-    modelId: 'gemini-3.5-live-translate-preview',
+    modelId: 'shaktalk_pro_monthly',
     subtitle: 'Real-Time Live Translation (Simultaneous)',
-    price: '$24.99',
+    price: isIndia ? '₹1,499' : '$14.99',
     billingPeriod: '/month',
-    minutes: 250,
-    minutesLabel: '250 min / month',
+    minutes: 110,
+    minutesLabel: '110 min / month',
     accentColor: '#2FE0A8',
     bgColor: '#0A1E1A',
     borderColor: '#2FE0A8',
     iconName: 'activity',
-  },
-  {
-    id: 'business',
-    engine: 'livekit',
-    name: 'Dual AI All-Access',
-    modelName: 'Both Gemini 3.5 Live & 2.5 Flash',
-    modelId: 'gemini-3.5-live + live-2.5-flash',
-    subtitle: 'Both Turn-by-Turn & Live Translation',
-    price: '$49.99',
-    billingPeriod: '/month',
-    minutes: 500,
-    minutesLabel: '500 min / month',
-    accentColor: '#E6A23C',
-    bgColor: '#1D170A',
-    borderColor: '#E6A23C',
-    iconName: 'layers',
   },
 ];
 
@@ -307,7 +300,7 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
         </View>
 
         <Text style={styles.footerNote}>
-          Cancel or change your subscription model anytime in your profile settings.
+          Subscriptions auto-renew monthly until canceled in Store settings. 10 free Pro minutes included for new accounts on first device.
         </Text>
       </ScrollView>
     </SafeAreaView>
