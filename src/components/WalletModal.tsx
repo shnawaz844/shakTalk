@@ -38,10 +38,10 @@ interface WalletModalProps {
 
 // Preset top-up packages in minutes
 const MINUTE_PRESETS = [
+  { minutes: 60, cents: 600, label: '60 Mins' },
   { minutes: 100, cents: 1000, label: '100 Mins' },
-  { minutes: 250, cents: 2500, label: '250 Mins' },
-  { minutes: 500, cents: 5000, label: '500 Mins' },
-  { minutes: 750, cents: 7500, label: '750 Mins' },
+  { minutes: 150, cents: 1500, label: '150 Mins' },
+  { minutes: 200, cents: 2000, label: '200 Mins' },
 ];
 
 const PLAN_INFO: Record<
@@ -97,8 +97,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
   const [planMinutesTotal, setPlanMinutesTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [processingTopup, setProcessingTopup] = useState(false);
-  const [selectedMinutes, setSelectedMinutes] = useState(100);
-  const [selectedAmountCents, setSelectedAmountCents] = useState(1000);
+  const [selectedMinutes, setSelectedMinutes] = useState(60);
+  const [selectedAmountCents, setSelectedAmountCents] = useState(600);
   const [customMinutes, setCustomMinutes] = useState('');
   const [currentTier, setCurrentTier] = useState<PlanTier>('starter');
 
@@ -189,8 +189,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
   };
 
   const handleTopup = async () => {
-    if (!selectedMinutes || selectedMinutes < 100) {
-      const msg = 'Minimum top-up is 100 minutes. Please enter at least 100 minutes.';
+    if (!selectedMinutes || selectedMinutes < 60) {
+      const msg = 'Minimum top-up is 60 minutes. Please enter at least 60 minutes.';
       if (Platform.OS === 'web') {
         alert(msg);
       } else {
@@ -351,7 +351,7 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   ]}
                   value={customMinutes}
                   onChangeText={handleCustomMinutesChange}
-                  placeholder="e.g. 150 (min 100)"
+                  placeholder="e.g. 60 (min 60)"
                   placeholderTextColor="rgba(255, 255, 255, 0.3)"
                   keyboardType="number-pad"
                   maxLength={5}
@@ -359,13 +359,13 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                 {isCustomActive && selectedMinutes > 0 && (
                   <View style={[
                     styles.customCalcBadge,
-                    selectedMinutes < 100 && { backgroundColor: 'rgba(255, 165, 0, 0.15)' },
+                    selectedMinutes < 60 && { backgroundColor: 'rgba(255, 165, 0, 0.15)' },
                   ]}>
                     <Text style={[
                       styles.customCalcText,
-                      selectedMinutes < 100 && { color: '#FFA500' },
+                      selectedMinutes < 60 && { color: '#FFA500' },
                     ]}>
-                      {selectedMinutes < 100 ? 'Min 100 Mins' : `${selectedMinutes} Mins`}
+                      {selectedMinutes < 60 ? 'Min 60 Mins' : `${selectedMinutes} Mins`}
                     </Text>
                   </View>
                 )}
@@ -373,8 +373,8 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                   <TouchableOpacity
                     onPress={() => {
                       setCustomMinutes('');
-                      setSelectedMinutes(100);
-                      setSelectedAmountCents(1000);
+                      setSelectedMinutes(60);
+                      setSelectedAmountCents(600);
                     }}
                     style={styles.clearBtn}
                     activeOpacity={0.7}
@@ -389,10 +389,10 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
             <TouchableOpacity
               style={[
                 styles.topupBtn,
-                (processingTopup || selectedMinutes < 100) && { opacity: 0.6 },
+                (processingTopup || selectedMinutes < 60) && { opacity: 0.6 },
               ]}
               onPress={handleTopup}
-              disabled={processingTopup || selectedMinutes < 100}
+              disabled={processingTopup || selectedMinutes < 60}
               activeOpacity={0.85}
             >
               {processingTopup ? (
@@ -401,9 +401,9 @@ export function WalletModal({ visible, onClose, onBalanceUpdated }: WalletModalP
                 <>
                   <Feather name="plus-circle" size={18} color="#000" style={{ marginRight: 8 }} />
                   <Text style={styles.topupBtnText}>
-                    {selectedMinutes >= 100
+                    {selectedMinutes >= 60
                       ? `Top-up ${selectedMinutes} Minutes with Razorpay`
-                      : 'Enter at least 100 minutes'}
+                      : 'Enter at least 60 minutes'}
                   </Text>
                 </>
               )}

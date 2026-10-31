@@ -66,8 +66,8 @@ async function createOrder({ tier, amountCents, email, userId, type = 'plan' }) 
 
   if (type === 'wallet_topup') {
     finalAmount = Number(amountCents);
-    if (finalAmount < 1000) {
-      throw new Error('Minimum wallet top-up is 100 minutes ($10.00)');
+    if (finalAmount < 600) {
+      throw new Error('Minimum wallet top-up is 60 minutes ($6.00)');
     }
     minutes = Math.floor(finalAmount / 10);
     displayPrice = `$${(finalAmount / 100).toFixed(2)}`;
@@ -144,7 +144,7 @@ function renderCheckoutHtml({ orderId, tier = 'pro', amountCents, email = 'aabir
   let amount = 2499;
 
   if (type === 'wallet_topup') {
-    amount = Number(amountCents) || 1000;
+    amount = Number(amountCents) || 600;
     const mins = Math.floor(amount / 10);
     title = `${mins} Minutes Wallet Top-up`;
     displayPrice = `$${(amount / 100).toFixed(2)}`;
