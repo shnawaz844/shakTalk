@@ -490,6 +490,24 @@ const httpServer = http.createServer(async (req, res) => {
       if (type === 'wallet_topup') {
         const targetUser = userId || 'test_user_wallet';
         const updated = await walletService.topUpWallet(targetUser, amountCents, paymentId);
+
+        // Add 12-month minute pack to billing service & database
+        try {
+          const account = await billingService.getOrCreateAccount(targetUser);
+          const packEngine = billingService.getEngineForPlan(account.plan);
+          await billingService.addMinutePack(targetUser, packEngine, paymentId);
+          await billingService.recordPaymentTransaction({
+            userId: targetUser,
+            amountCents,
+            type: 'wallet_topup',
+            description: `Wallet Top-up (+${billingService.TOPUP_MINUTES} mins)`,
+            orderId,
+            paymentId,
+          });
+        } catch (packErr) {
+          console.warn('[payment] Minute pack record warning:', packErr.message);
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           ok: true,
@@ -502,6 +520,7 @@ const httpServer = http.createServer(async (req, res) => {
       }
 
       // Handle Plan Subscription
+      let subReceipt = null;
       if (userId) {
         const plan = paymentService.PLANS[tier] || paymentService.PLANS.pro;
         await supabase.from('user_plans').upsert(
@@ -514,10 +533,42 @@ const httpServer = http.createServer(async (req, res) => {
           { onConflict: 'user_id' }
         );
         walletService.activateUserPlan(userId, tier || 'starter');
+
+        // Full billing account update & receipt logging
+        try {
+          subReceipt = await billingService.activateSubscription({
+            userId,
+            planTier: tier,
+            paymentId,
+            orderId,
+            amountCents,
+            email: body.email,
+          });
+
+          await billingService.recordPaymentTransaction({
+            userId,
+            amountCents,
+            type: 'plan_subscription',
+            description: `Subscription Plan: ${tier || 'pro'}`,
+            orderId,
+            paymentId,
+          });
+
+          if (CLERK_SECRET_KEY) {
+            await updateClerkMetadata(userId, {
+              plan: tier,
+              planActive: true,
+              periodEnd: subReceipt?.periodEnd,
+              updatedAt: new Date().toISOString(),
+            }).catch(e => console.warn('[payment] Clerk metadata sync skipped:', e.message));
+          }
+        } catch (bErr) {
+          console.warn('[payment] Billing service subscription activation warning:', bErr.message);
+        }
       }
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, status: 'verified', paymentId, tier }));
+      res.end(JSON.stringify({ ok: true, status: 'verified', paymentId, tier, receipt: subReceipt }));
     } catch (err) {
       sendHttpError(res, err, '/payment/verify');
     }

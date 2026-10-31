@@ -496,6 +496,67 @@ async function updateAccountFields(userId, fields) {
   writeJson(BILLING_FILE, accounts);
 }
 
+
+// ── Activate Subscription on Plan Purchase ──────────────────────────────────
+async function activateSubscription({ userId, planTier, paymentId, orderId, amountCents, email }) {
+  if (!userId) return null;
+  const isPro = planTier === 'pro';
+  const plan = isPro ? 'pro' : 'standard';
+  const allocatedSeconds = (isPro ? PLAN_MINUTES_PRO : PLAN_MINUTES_STANDARD) * 60; // 110m or 100m
+  const periodStart = new Date().toISOString();
+  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+
+  // 1. Update billing_accounts
+  await updateAccountFields(userId, {
+    plan,
+    plan_seconds_left: allocatedSeconds,
+    period_end: periodEnd,
+    will_renew: true,
+  });
+
+  // 2. Record full receipt in audit log
+  const receiptsFile = path.join(DATA_DIR, 'payment_receipts.json');
+  const receipts = readJson(receiptsFile, []);
+  const receipt = {
+    id: uuidv4(),
+    userId,
+    email: email || null,
+    type: 'plan_subscription',
+    plan,
+    planTier,
+    engine: isPro ? 'livekit' : 'legacy',
+    allocatedMinutes: allocatedSeconds / 60,
+    amountCents: amountCents || (isPro ? 1499 : 499),
+    orderId: orderId || null,
+    paymentId: paymentId || null,
+    periodStart,
+    periodEnd,
+    createdAt: periodStart,
+  };
+  receipts.push(receipt);
+  writeJson(receiptsFile, receipts);
+
+  console.log(`[billingService] Saved full subscription details for user ${userId}: plan=${plan}, minutes=${allocatedSeconds / 60}, periodEnd=${periodEnd}, paymentId=${paymentId}`);
+  return receipt;
+}
+
+// ── Record Payment Transaction in Ledger ────────────────────────────────────
+async function recordPaymentTransaction({ userId, amountCents, type, description, orderId, paymentId }) {
+  if (supabase) {
+    try {
+      await supabase.from('wallet_transactions').insert({
+        user_id: userId,
+        amount_cents: amountCents || 0,
+        type: type || 'payment',
+        description: `${description} [Order: ${orderId || 'N/A'}, Payment: ${paymentId || 'N/A'}]`,
+        created_at: new Date().toISOString(),
+      });
+    } catch (e) {
+      console.warn('[billingService] Supabase recordPaymentTransaction fallback:', e.message);
+    }
+  }
+}
+
 module.exports = {
   getOrCreateAccount,
   getAvailableMinutes,
@@ -504,6 +565,8 @@ module.exports = {
   recordCallUsage,
   applyRevenueCatEvent,
   addMinutePack,
+  activateSubscription,
+  recordPaymentTransaction,
   BILLING_ENFORCE,
   TRIAL_MINUTES,
   PLAN_MINUTES_STANDARD,
