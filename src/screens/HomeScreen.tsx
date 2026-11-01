@@ -58,6 +58,7 @@ interface HomeScreenProps {
     engine?: 'legacy' | 'livekit';
   }) => void;
   onOpenProfile: () => void;
+  onOpenPlans?: () => void;
   onOpenConversation: (conversationId: string, myUserId: string) => void;
   onOpenRecordings: (conversationId: string, myUserId: string, myLang: string, partnerLang: string) => void;
 }
@@ -98,7 +99,7 @@ function extractSessionIdFromUrl(url: string | null): string | null {
   return null;
 }
 
-export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, onOpenRecordings }: HomeScreenProps) {
+export function HomeScreen({ onSessionReady, onOpenProfile, onOpenPlans, onOpenConversation, onOpenRecordings }: HomeScreenProps) {
   const { signOut, getToken } = useAuth();
   const authFetch = useAuthFetch();
   const { user } = useUser();
@@ -112,7 +113,7 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
   const isDesktop = Platform.OS === 'web' && width >= DESKTOP_BREAKPOINT;
 
   const [myLang, setMyLang] = useState('English');
-  const [currentTier, setCurrentTier] = useState<PlanTier>('pro');
+  const [currentTier, setCurrentTier] = useState<PlanTier>('trial');
   const [showWallet, setShowWallet] = useState(false);
   const [walletBalance, setWalletBalance] = useState<string | null>(null);
   const [currentEngineState, setCurrentEngineState] = useState<CallEngine>('livekit');
@@ -143,10 +144,23 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
           if (billingRes.ok) {
             const bData = await billingRes.json();
             if (bData.ok && bData.totalMinutes !== undefined) {
-              const planKey = (bData.plan || 'pro').toLowerCase();
-              const isStandard = planKey === 'standard' || planKey === 'starter';
-              const pTier: PlanTier = isStandard ? 'starter' : 'pro';
-              const pEngine: CallEngine = isStandard ? 'legacy' : 'livekit';
+              const planKey = (bData.plan || '').toLowerCase();
+              let pTier: PlanTier;
+              let pEngine: CallEngine;
+
+              if (planKey === 'trial') {
+                pTier = 'trial';
+                pEngine = 'livekit';
+              } else if (planKey === 'standard' || planKey === 'starter') {
+                pTier = 'starter';
+                pEngine = 'legacy';
+              } else if (planKey === 'pro') {
+                pTier = 'pro';
+                pEngine = 'livekit';
+              } else {
+                pTier = await getStoredPlanTier();
+                pEngine = pTier === 'starter' ? 'legacy' : 'livekit';
+              }
 
               setCurrentTier(pTier);
               setCurrentEngineState(pEngine);
@@ -170,16 +184,18 @@ export function HomeScreen({ onSessionReady, onOpenProfile, onOpenConversation, 
               ? Number(data.balanceMinutes)
               : (data.balanceCents !== undefined ? Math.floor(Number(data.balanceCents) / 10) : 0));
 
-        // Plan minutes (e.g. 100 mins for starter)
-        let planMins = 100;
+        // Plan minutes
+        let planMins = 10;
         if (data.planMinutesRemaining !== undefined) {
           planMins = Number(data.planMinutesRemaining);
-        } else if (currentTier === 'business') {
-          planMins = 500;
-        } else if (currentTier === 'pro') {
-          planMins = 250;
+        } else if (currentTier === 'trial') {
+          planMins = 10;
         } else if (currentTier === 'starter') {
           planMins = 100;
+        } else if (currentTier === 'pro') {
+          planMins = 110;
+        } else if (currentTier === 'business') {
+          planMins = 500;
         }
 
         // Total available minutes = plan minutes + wallet minutes (e.g. 100 plan + 200 wallet = 300 mins)
@@ -221,9 +237,11 @@ ${msg}`);
   }, [currentTier, fetchWalletBalance]);
 
   const planInfo = (() => {
-    const isStandard = currentTier === 'starter' || currentEngineState === 'legacy';
-    if (isStandard) {
-      return { label: 'Standard Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
+    if (currentTier === 'trial') {
+      return { label: 'Free Trial (10 mins)', color: '#38BDF8', icon: 'gift' as const };
+    }
+    if (currentTier === 'starter' || currentEngineState === 'legacy') {
+      return { label: 'Basic Plan (100 mins)', color: '#39FF14', icon: 'zap' as const };
     }
     return { label: 'Pro Plan (110 mins)', color: '#2FE0A8', icon: 'activity' as const };
   })();

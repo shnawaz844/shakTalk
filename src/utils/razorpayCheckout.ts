@@ -96,14 +96,14 @@ export async function startRazorpayCheckout(
       })();
 
       // Enforce authoritative Build Plan PDF pricing:
-      // Pro: ₹1,499 (149900 paise) / $14.99 (1499 cents)
+      // Pro: ₹1,000 (100000 paise) / $14.99 (1499 cents)
       // Standard: ₹499 (49900 paise) / $4.99 (499 cents)
       let targetAmount = options.amountCents || orderData.amount;
       let targetCurrency = options.currency || orderData.currency || (isIndia ? 'INR' : 'USD');
 
       if (options.type === 'plan') {
         if (options.tier === 'pro') {
-          targetAmount = isIndia ? 149900 : 1499;
+          targetAmount = isIndia ? 100000 : 1499;
           targetCurrency = isIndia ? 'INR' : 'USD';
         } else {
           targetAmount = isIndia ? 49900 : 499;

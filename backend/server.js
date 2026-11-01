@@ -236,18 +236,15 @@ const httpServer = http.createServer(async (req, res) => {
       if (error) throw error;
       // Also sync to billingService and walletService
       try {
-        const isPro = tier === 'pro' || engine === 'livekit';
-        const planTier = isPro ? 'pro' : 'standard';
-        await billingService.getOrCreateAccount(userId).then(acc => {
-          if (!acc.plan || acc.plan === 'trial' || acc.plan === 'none') {
-            return billingService.activateSubscription({
-              userId,
-              planTier,
-              amountCents: isPro ? 1499 : 499,
-            });
-          }
+        const isTrial = tier === 'trial';
+        const isPro = tier === 'pro' || (engine === 'livekit' && !isTrial);
+        const planTier = isTrial ? 'trial' : (isPro ? 'pro' : 'standard');
+        await billingService.activateSubscription({
+          userId,
+          planTier,
+          amountCents: isTrial ? 0 : (isPro ? 1000 : 499),
         });
-        walletService.activateUserPlan(userId, isPro ? 'pro' : 'starter');
+        walletService.activateUserPlan(userId, planTier);
       } catch (syncErr) {
         console.warn('[user/set-plan] Billing sync notice:', syncErr.message);
       }
@@ -285,7 +282,9 @@ const httpServer = http.createServer(async (req, res) => {
       // 2. Fetch Wallet & Minutes Info from walletService
       const wallet = await walletService.getWallet(userId);
 
-      const hasPurchasedPlan = !!planRecord;
+      const usage = walletService.loadUsageData ? walletService.loadUsageData() : null;
+      const userUsage = usage && usage[userId];
+      const hasPurchasedPlan = !!planRecord || !!(userUsage && userUsage.planTier);
       const planTier = wallet.planTier || 'starter';
       const planEngine = planRecord?.plan_engine || (planTier === 'starter' ? 'legacy' : 'livekit');
 
