@@ -5,7 +5,7 @@ const ENGINE_STORAGE_KEY = 'shak_call_engine_preference';
 const PLAN_TIER_STORAGE_KEY = 'shak_subscription_tier_preference';
 
 export type CallEngine = 'legacy' | 'livekit';
-export type PlanTier = 'payg' | 'starter' | 'pro' | 'business';
+export type PlanTier = 'payg' | 'starter' | 'pro' | 'business' | 'trial';
 
 let currentEngine: CallEngine = CALL_ENGINE;
 let currentPlanTier: PlanTier = 'starter';
@@ -45,7 +45,7 @@ export function subscribeEngineChange(cb: (engine: CallEngine) => void): () => v
 export async function getStoredPlanTier(): Promise<PlanTier> {
   try {
     const saved = await storage.getItem(PLAN_TIER_STORAGE_KEY);
-    if (saved === 'payg' || saved === 'starter' || saved === 'pro' || saved === 'business') {
+    if (saved === 'payg' || saved === 'starter' || saved === 'pro' || saved === 'business' || saved === 'trial') {
       currentPlanTier = saved;
       return saved;
     }

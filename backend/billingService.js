@@ -502,18 +502,22 @@ async function updateAccountFields(userId, fields) {
 // ── Activate Subscription on Plan Purchase ──────────────────────────────────
 async function activateSubscription({ userId, planTier, paymentId, orderId, amountCents, email }) {
   if (!userId) return null;
+  await getOrCreateAccount(userId);
+  const isTrial = planTier === 'trial';
   const isPro = planTier === 'pro';
-  const plan = isPro ? 'pro' : 'standard';
-  const allocatedSeconds = (isPro ? PLAN_MINUTES_PRO : PLAN_MINUTES_STANDARD) * 60; // 110m or 100m
+  const plan = isTrial ? 'trial' : (isPro ? 'pro' : 'standard');
+  const allocatedSeconds = isTrial
+    ? TRIAL_MINUTES * 60
+    : (isPro ? PLAN_MINUTES_PRO : PLAN_MINUTES_STANDARD) * 60; // 10m, 110m, or 100m
   const periodStart = new Date().toISOString();
-  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
+  const periodEnd = isTrial ? null : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days
 
   // 1. Update billing_accounts
   await updateAccountFields(userId, {
     plan,
     plan_seconds_left: allocatedSeconds,
     period_end: periodEnd,
-    will_renew: true,
+    will_renew: !isTrial,
   });
 
   // 2. Record full receipt in audit log

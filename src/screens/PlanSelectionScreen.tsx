@@ -13,8 +13,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
-import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX } from '../config';
+import { APP_LOGO, APP_NAME_PREFIX, APP_NAME_SUFFIX, API_URL } from '../config';
 import { startRazorpayCheckout } from '../utils/razorpayCheckout';
+import { storage } from '../utils/storageCompat';
 import {
   CallEngine,
   setStoredEngine,
@@ -26,7 +27,6 @@ interface PlanSelectionScreenProps {
   onContinue: () => void;
   onLoginPress?: () => void;
 }
-
 
 const isIndia = (() => {
   try {
@@ -43,6 +43,7 @@ interface MonthlyBundle {
   modelName: string;
   modelId: string;
   subtitle: string;
+  badge?: string;
   price: string;
   billingPeriod: string;
   minutes: number;
@@ -50,14 +51,31 @@ interface MonthlyBundle {
   accentColor: string;
   bgColor: string;
   borderColor: string;
-  iconName: 'zap' | 'activity' | 'layers';
+  iconName: 'gift' | 'zap' | 'activity' | 'layers';
 }
 
 const MONTHLY_BUNDLES: MonthlyBundle[] = [
   {
+    id: 'trial',
+    engine: 'livekit',
+    name: 'Free Trial',
+    modelName: 'Gemini 3.5 Live',
+    modelId: 'shaktalk_trial_free',
+    subtitle: 'Real-Time Live Translation (Simultaneous)',
+    badge: '10 min free trial',
+    price: 'Free',
+    billingPeriod: '',
+    minutes: 10,
+    minutesLabel: '10 min (one-time trial)',
+    accentColor: '#38BDF8',
+    bgColor: '#081D26',
+    borderColor: '#38BDF8',
+    iconName: 'gift',
+  },
+  {
     id: 'starter',
     engine: 'legacy',
-    name: 'Standard Plan',
+    name: 'Basic Plan',
     modelName: 'Gemini 2.5 Live',
     modelId: 'shaktalk_standard_monthly',
     subtitle: 'Turn-by-Turn Translation (One-by-One)',
@@ -77,7 +95,7 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
     modelName: 'Gemini 3.5 Live',
     modelId: 'shaktalk_pro_monthly',
     subtitle: 'Real-Time Live Translation (Simultaneous)',
-    price: isIndia ? '₹1,499' : '$14.99',
+    price: isIndia ? '₹1,000' : '$14.99',
     billingPeriod: '/month',
     minutes: 110,
     minutesLabel: '110 min / month',
@@ -90,27 +108,114 @@ const MONTHLY_BUNDLES: MonthlyBundle[] = [
 
 export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionScreenProps) {
   const { user } = useUser();
-  const { getToken } = useAuth();
-  const [selectedTier, setSelectedTier] = useState<PlanTier>('pro');
+  const { getToken, signOut } = useAuth();
+  const [selectedTier, setSelectedTier] = useState<PlanTier>('trial');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const selectedBundle =
-    MONTHLY_BUNDLES.find((b) => b.id === selectedTier) || MONTHLY_BUNDLES[1];
+    MONTHLY_BUNDLES.find((b) => b.id === selectedTier) || MONTHLY_BUNDLES[0];
+
+  const markPlanChosen = async (tier: PlanTier) => {
+    if (user) {
+      try {
+        await user.update({
+          unsafeMetadata: {
+            ...(user.unsafeMetadata || {}),
+            planChosen: true,
+            planTier: tier,
+          },
+        });
+      } catch (e: any) {
+        console.warn('[PlanSelection] Metadata save notice:', e?.message);
+      }
+      try {
+        await storage.setItem(`shak_plan_chosen_${user.id}`, 'true');
+      } catch (_) {}
+    }
+  };
 
   const handleContinueWithPayment = async () => {
     setIsProcessing(true);
     try {
+      // 1. FREE TRIAL SELECTION (10 mins, Gemini 3.5 Live) - No Payment Required
+      if (selectedBundle.id === 'trial') {
+        await setStoredEngine('livekit');
+        await setStoredPlanTier('trial');
+        await markPlanChosen('trial');
+
+        try {
+          const token = await getToken();
+          if (token) {
+            await fetch(`${API_URL}/user/set-plan`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                engine: 'livekit',
+                modelId: 'shaktalk_trial_free',
+                tier: 'trial',
+              }),
+            });
+          }
+        } catch (e: any) {
+          console.warn('[PlanSelection] Trial sync notice:', e?.message);
+        }
+
+        if (Platform.OS === 'web') {
+          window.alert('🎉 10-Minute Free Trial Activated! You have 10 minutes of Real-Time Live Translation ready to use.');
+          onContinue();
+        } else {
+          Alert.alert(
+            'Free Trial Activated! 🎉',
+            'You have 10 free minutes of Real-Time Live Translation powered by Gemini 3.5 Live. Welcome to ShakTalk!',
+            [
+              {
+                text: 'Start Translating',
+                onPress: () => onContinue(),
+              },
+            ]
+          );
+        }
+        return;
+      }
+
+      // 2. PAID PLANS (Basic & Pro) - Razorpay Checkout
+      const userEmail =
+        user?.primaryEmailAddress?.emailAddress ||
+        user?.emailAddresses?.[0]?.emailAddress ||
+        'user@shaktalk.com';
+
       const result = await startRazorpayCheckout({
         type: 'plan',
         tier: selectedBundle.id,
         name: 'ShakTalk',
         description: `${selectedBundle.name} Monthly Subscription`,
-        email: 'aabir.hussain1@gmail.com',
+        email: userEmail,
       });
 
       if (result.success) {
         await setStoredEngine(selectedBundle.engine);
         await setStoredPlanTier(selectedBundle.id);
+        await markPlanChosen(selectedBundle.id);
+
+        try {
+          const token = await getToken();
+          if (token) {
+            await fetch(`${API_URL}/user/set-plan`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                engine: selectedBundle.engine,
+                modelId:
+                  selectedBundle.id === 'starter'
+                    ? 'gemini-live-2.5-flash-native-audio'
+                    : 'gemini-3.5-live-translate-preview',
+                tier: selectedBundle.id,
+              }),
+            });
+          }
+        } catch (e: any) {
+          console.warn('[PlanSelection] Plan sync notice:', e?.message);
+        }
 
         if (Platform.OS === 'web') {
           window.alert(`🎉 Payment Successful! Your ${selectedBundle.name} subscription is now active.`);
@@ -145,6 +250,7 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
             onPress: async () => {
               await setStoredEngine(selectedBundle.engine);
               await setStoredPlanTier(selectedBundle.id);
+              await markPlanChosen(selectedBundle.id);
               onContinue();
             },
           },
@@ -156,23 +262,44 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
     }
   };
 
+  const userEmailDisplay = user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress;
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.glowTopRight} />
       <View style={styles.glowBottomLeft} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {/* Top Action Bar for Returning Users */}
+        {/* Top Action Bar */}
         <View style={styles.topBarRow}>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            style={styles.topSignInPill}
-            onPress={onLoginPress || onContinue}
-            activeOpacity={0.8}
-          >
-            <Feather name="log-in" size={13} color="#2FE0A8" style={{ marginRight: 6 }} />
-            <Text style={styles.topSignInPillText}>Existing User? Sign In</Text>
-          </TouchableOpacity>
+          {userEmailDisplay ? (
+            <View style={styles.userBadge}>
+              <Feather name="user" size={13} color="#2FE0A8" style={{ marginRight: 6 }} />
+              <Text style={styles.userBadgeText} numberOfLines={1}>{userEmailDisplay}</Text>
+            </View>
+          ) : (
+            <View style={{ flex: 1 }} />
+          )}
+
+          {user ? (
+            <TouchableOpacity
+              style={styles.signOutPill}
+              onPress={() => signOut().catch(() => {})}
+              activeOpacity={0.8}
+            >
+              <Feather name="log-out" size={12} color="rgba(255,255,255,0.6)" style={{ marginRight: 4 }} />
+              <Text style={styles.signOutPillText}>Sign Out</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.topSignInPill}
+              onPress={onLoginPress || onContinue}
+              activeOpacity={0.8}
+            >
+              <Feather name="log-in" size={13} color="#2FE0A8" style={{ marginRight: 6 }} />
+              <Text style={styles.topSignInPillText}>Existing User? Sign In</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Header */}
@@ -184,7 +311,7 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
           </Text>
           <Text style={styles.headline}>Choose Your Monthly Plan</Text>
           <Text style={styles.subheadline}>
-            Select a monthly subscription to get your included translation minutes.
+            Select a plan to get your included translation minutes. Free 10-minute trial included for everyone.
           </Text>
         </View>
 
@@ -226,9 +353,16 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
                       />
                     </View>
                     <View>
-                      <Text style={[styles.cardTitle, isActive && { color: bundle.accentColor }]}>
-                        {bundle.name}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Text style={[styles.cardTitle, isActive && { color: bundle.accentColor }]}>
+                          {bundle.name}
+                        </Text>
+                        {bundle.badge && (
+                          <View style={[styles.cardBadge, { backgroundColor: bundle.accentColor + '20', borderColor: bundle.accentColor + '55' }]}>
+                            <Text style={[styles.cardBadgeText, { color: bundle.accentColor }]}>{bundle.badge}</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.cardSubtitle}>{bundle.subtitle}</Text>
                     </View>
                   </View>
@@ -254,7 +388,32 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
                     <Text style={[styles.costAmount, isActive && { color: bundle.accentColor }]}>
                       {bundle.minutes}
                     </Text>
-                    <Text style={styles.costPeriodLabel}>min / month</Text>
+                    <Text style={styles.costPeriodLabel}>
+                      {bundle.id === 'trial' ? 'min (one-time trial)' : 'min / month'}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1 }} />
+                  <View
+                    style={[
+                      styles.pricePill,
+                      {
+                        backgroundColor: isActive
+                          ? bundle.accentColor + '20'
+                          : 'rgba(255, 255, 255, 0.05)',
+                        borderColor: isActive
+                          ? bundle.accentColor + '55'
+                          : 'rgba(255, 255, 255, 0.1)',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.pricePillText,
+                        isActive && { color: bundle.accentColor },
+                      ]}
+                    >
+                      {bundle.price}{bundle.billingPeriod}
+                    </Text>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -262,7 +421,7 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
           })}
         </View>
 
-        {/* Continue to Payment Button */}
+        {/* Continue Button */}
         <TouchableOpacity
           style={[
             styles.continueBtn,
@@ -278,23 +437,27 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
           ) : (
             <>
               <Text style={styles.continueBtnText}>
-                Continue with {selectedBundle.name} ({selectedBundle.minutes} mins)
+                {selectedBundle.id === 'trial'
+                  ? `Start with Free Trial (${selectedBundle.minutes} mins)`
+                  : `Continue with ${selectedBundle.name} (${selectedBundle.minutes} mins)`}
               </Text>
               <Feather name="arrow-right" size={18} color="#000" />
             </>
           )}
         </TouchableOpacity>
 
-        {/* Already have an account shortcut */}
-        <TouchableOpacity
-          style={styles.loginShortcutBtn}
-          onPress={onLoginPress || onContinue}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.loginShortcutText}>
-            Already have an active account or plan? <Text style={styles.loginShortcutHighlight}>Sign In</Text>
-          </Text>
-        </TouchableOpacity>
+        {/* Already have an account shortcut (shown if not logged in) */}
+        {!user && (
+          <TouchableOpacity
+            style={styles.loginShortcutBtn}
+            onPress={onLoginPress || onContinue}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.loginShortcutText}>
+              Already have an active account or plan? <Text style={styles.loginShortcutHighlight}>Sign In</Text>
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Trust & Security Badge */}
         <View style={styles.securityRow}>
@@ -336,7 +499,37 @@ const styles = StyleSheet.create({
   topBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
+  },
+  userBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    maxWidth: '70%',
+  },
+  userBadgeText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  signOutPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  signOutPillText: {
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 12,
+    fontWeight: '600',
   },
   topSignInPill: {
     flexDirection: 'row',
@@ -405,7 +598,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: 10,
   },
-  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   iconCircle: {
     width: 36,
     height: 36,
@@ -414,8 +607,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: -0.2 },
+  cardBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  cardBadgeText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
   cardSubtitle: { color: 'rgba(255,255,255,0.48)', fontSize: 12, marginTop: 3 },
-  cardRight: { justifyContent: 'center', alignItems: 'center' },
+  cardRight: { justifyContent: 'center', alignItems: 'center', marginLeft: 8 },
   checkCircle: {
     width: 24,
     height: 24,
@@ -428,24 +632,22 @@ const styles = StyleSheet.create({
 
   costRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     marginTop: 10,
   },
   costAmount: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  minutesChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  costPeriodLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '500' },
+  pricePill: {
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
   },
-  minutesChipText: {
-    fontSize: 12,
+  pricePillText: {
+    fontSize: 13,
     fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.75)',
+    color: 'rgba(255,255,255,0.8)',
   },
-  costPeriodLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 13, fontWeight: '500' },
 
   continueBtn: {
     flexDirection: 'row',

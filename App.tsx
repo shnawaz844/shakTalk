@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Image, Platform } from 'react-native';
+import { View, Image, Platform, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { APP_OPENING_SCREEN } from './src/config';
 import { ClerkProvider, useAuth, useUser } from '@clerk/clerk-expo';
@@ -12,16 +12,18 @@ import { AuthScreen } from './src/screens/AuthScreen';
 import { ProfileScreen } from './src/screens/ProfileScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { ConsentScreen, saveConsent } from './src/screens/ConsentScreen';
-import { hasAcceptedCurrentTerms, pendingAgreement } from './src/legal/legal';
+import { hasAcceptedCurrentTerms, pendingAgreement, hasAcceptedLocalConsent } from './src/legal/legal';
 import { ConversationDetailScreen } from './src/screens/ConversationDetailScreen';
 import { AudioRecordingsScreen } from './src/screens/AudioRecordingsScreen';
 import { PlanSelectionScreen } from './src/screens/PlanSelectionScreen';
 import { WebSocketProvider } from './src/contexts/WebSocketContext';
+import { storage } from './src/utils/storageCompat';
 import {
   getCurrentEngine,
   getCurrentPlanTier,
   setStoredEngine,
   setStoredPlanTier,
+  getStoredPlanTier,
   CallEngine,
   PlanTier,
 } from './src/utils/enginePreference';
@@ -50,9 +52,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-
-type AppScreen = 'onboarding' | 'home' | 'session' | 'profile' | 'conversation' | 'recordings';
-type AuthFlow = 'plan-selection' | 'login';
+type AppScreen = 'onboarding' | 'home' | 'session' | 'profile' | 'plans' | 'conversation' | 'recordings';
 
 interface SessionParams {
   sessionId: string;
@@ -68,7 +68,7 @@ const publishableKey =
 
 /**
  * Signed-in users must have accepted the current Terms before using the app.
- * If they ticked the box on the sign-in screen, that is saved here silently;
+ * If they ticked the box on the consent screen or sign-in screen, that is saved here silently;
  * otherwise (existing users, or after the terms change) ConsentScreen asks.
  */
 function ConsentGate({ children }: { children: React.ReactNode }) {
@@ -118,6 +118,7 @@ function MainApp() {
           <HomeScreen
             onSessionReady={handleSessionReady}
             onOpenProfile={() => setScreen('profile')}
+            onOpenPlans={() => setScreen('plans')}
             onOpenConversation={(id, myUserId) => {
               setActiveConversation({ id, myUserId });
               setScreen('conversation');
@@ -130,6 +131,9 @@ function MainApp() {
         )}
         {screen === 'profile' && (
           <ProfileScreen onBack={() => setScreen('home')} />
+        )}
+        {screen === 'plans' && (
+          <PlanSelectionScreen onContinue={() => setScreen('home')} />
         )}
         {screen === 'session' && sessionParams && (sessionParams.engine || CALL_ENGINE) === 'livekit' && (
           <LiveCallScreen
@@ -177,49 +181,51 @@ function MainApp() {
 }
 
 function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const [authFlow, setAuthFlow] = React.useState<AuthFlow>('plan-selection');
+  const { isLoaded, isSignedIn } = useAuth();
+  const { user } = useUser();
+  const [deviceConsentChecked, setDeviceConsentChecked] = React.useState(false);
+  const [hasDeviceConsent, setHasDeviceConsent] = React.useState(false);
+  const [planChosen, setPlanChosen] = React.useState<boolean | null>(null);
 
-  // When user signs in, restore their purchased plan and credit state from server
+  // 1. Check local device consent on startup
   React.useEffect(() => {
-    if (!isSignedIn) return;
+    let mounted = true;
     (async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-
-        // Fetch user's existing subscription & credits from server
-        const res = await fetch(`${API_URL}/user/account-state`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const state = await res.json();
-
-        if (state.ok && state.hasPurchasedPlan) {
-          // Restore server's source of truth into local device storage
-          await setStoredEngine(state.planEngine as CallEngine);
-          await setStoredPlanTier(state.planTier as PlanTier);
-          console.log(`[App] Restored account state for ${state.userId}: Tier=${state.planTier}, Engine=${state.planEngine}, Total=${state.totalMinutes}m`);
-        } else {
-          // New user who chose a plan before sign up: save to backend
-          const engine = getCurrentEngine();
-          const tier = getCurrentPlanTier();
-          const MODEL_MAP: Record<string, string> = {
-            legacy: 'gemini-live-2.5-flash-native-audio',
-            livekit: 'gemini-3.5-live-translate-preview',
-          };
-          await fetch(`${API_URL}/user/set-plan`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-            body: JSON.stringify({ engine, modelId: MODEL_MAP[engine], tier }),
-          });
-        }
-      } catch (err) {
-        console.warn('[App] Account sync warning:', err);
+      const accepted = await hasAcceptedLocalConsent();
+      if (mounted) {
+        setHasDeviceConsent(accepted);
+        setDeviceConsentChecked(true);
       }
     })();
-  }, [isSignedIn]);
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  if (!isLoaded || !openingFinished) {
+  // 2. When user signs in with Clerk, determine whether they have completed plan selection
+  React.useEffect(() => {
+    if (!isSignedIn || !user) {
+      setPlanChosen(null);
+      return;
+    }
+    let mounted = true;
+    (async () => {
+      // Check if user has explicitly chosen a plan
+      const metaChosen = !!(user.unsafeMetadata as any)?.planChosen;
+      if (metaChosen) {
+        if (mounted) setPlanChosen(true);
+      } else {
+        // User has not chosen a plan yet -> Show PlanSelectionScreen!
+        if (mounted) setPlanChosen(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [isSignedIn, user]);
+
+  // Loading state (Branded Startup Screen)
+  if (!isLoaded || !openingFinished || !deviceConsentChecked) {
     return (
       <View style={{ flex: 1, backgroundColor: '#182527', width: '100%', height: '100%' }}>
         <StatusBar hidden={true} />
@@ -232,25 +238,57 @@ function AppNavigator({ openingFinished }: { openingFinished: boolean }) {
     );
   }
 
-  if (isSignedIn) {
+  // STEP 1: Consent checks as soon as user installs and opens app
+  if (!hasDeviceConsent) {
     return (
       <>
         <StatusBar style="light" hidden={false} />
-        <ConsentGate>
-          <MainApp />
-        </ConsentGate>
+        <ConsentScreen onAccept={() => setHasDeviceConsent(true)} />
       </>
     );
   }
 
+  // STEP 2: Ask user to sign up / sign in with Clerk
+  if (!isSignedIn) {
+    return (
+      <>
+        <StatusBar style="light" hidden={false} />
+        <AuthScreen />
+      </>
+    );
+  }
+
+  // Waiting for account state verification
+  if (planChosen === null) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0A0A0A', alignItems: 'center', justifyContent: 'center' }}>
+        <StatusBar style="light" hidden={false} />
+        <ActivityIndicator size="large" color="#2FE0A8" />
+      </View>
+    );
+  }
+
+  // STEP 3: After Clerk sign-in, show PlanSelectionScreen where all 3 plans are shown (1. Free 10 min, 2. Basic, 3. Pro)
+  if (!planChosen) {
+    return (
+      <>
+        <StatusBar style="light" hidden={false} />
+        <PlanSelectionScreen
+          onContinue={() => {
+            setPlanChosen(true);
+          }}
+        />
+      </>
+    );
+  }
+
+  // STEP 4: User is authenticated, consented, and has chosen plan / trial -> MainApp
   return (
     <>
       <StatusBar style="light" hidden={false} />
-      {authFlow === 'plan-selection' ? (
-        <PlanSelectionScreen onContinue={() => setAuthFlow('login')} onLoginPress={() => setAuthFlow('login')} />
-      ) : (
-        <AuthScreen />
-      )}
+      <ConsentGate>
+        <MainApp />
+      </ConsentGate>
     </>
   );
 }

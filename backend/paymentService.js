@@ -36,11 +36,11 @@ const PLANS = {
     modelName: 'Gemini 3.5 Live',
     engine: 'livekit',
     amountCents: 1499, // $14.99 USD
-    amountPaise: 149900, // ₹1,499 INR
+    amountPaise: 100000, // ₹1,000 INR
     minutesIncluded: 110,
     currency: 'USD',
     displayPrice: '$14.99',
-    displayPriceINR: '₹1,499',
+    displayPriceINR: '₹1,000',
     displayMinutes: '110 min / month',
     description: '110 min/mo Real-Time Simultaneous Live Translation (Gemini 3.5 Live)',
   },
@@ -49,11 +49,11 @@ const PLANS = {
     modelName: 'Gemini 3.5 Live',
     engine: 'livekit',
     amountCents: 1499,
-    amountPaise: 149900,
+    amountPaise: 100000,
     minutesIncluded: 110,
     currency: 'USD',
     displayPrice: '$14.99',
-    displayPriceINR: '₹1,499',
+    displayPriceINR: '₹1,000',
     displayMinutes: '110 min / month',
     description: '110 min/mo Real-Time Simultaneous Live Translation',
   },
@@ -90,7 +90,7 @@ async function createOrder({ tier, amountCents, email, userId, type = 'plan', cu
     const plan = PLANS[tier] || PLANS.pro;
     minutes = plan.minutesIncluded; // 110 or 100
     if (finalCurrency === 'INR') {
-      finalAmount = Number(amountCents) || plan.amountPaise; // 149900 paise = ₹1,499
+      finalAmount = Number(amountCents) || plan.amountPaise; // 100000 paise = ₹1,000
       displayPrice = plan.displayPriceINR;
     } else {
       finalAmount = Number(amountCents) || plan.amountCents; // 1499 cents = $14.99

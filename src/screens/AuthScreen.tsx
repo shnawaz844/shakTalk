@@ -34,7 +34,7 @@ export function AuthScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // Terms must be accepted before signing up or in (email, Google or Apple).
-  const [agreed, setAgreed] = useState(false);
+  const [agreed, setAgreed] = useState(true);
   const requireAgreement = useCallback(() => {
     if (agreed) { pendingAgreement.acceptedAt = new Date().toISOString(); return true; }
     setErrorMsg('Please accept the Terms of Use and Privacy Policy to continue.');

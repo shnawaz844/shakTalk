@@ -56,7 +56,7 @@ const PLAN_INFO: Record<
   }
 > = {
   starter: {
-    name: 'Standard Plan',
+    name: 'Basic Plan',
     model: 'Turn-by-Turn Voice Translation',
     monthlyMinutes: '100 mins',
     color: '#39FF14',
@@ -84,6 +84,14 @@ const PLAN_INFO: Record<
     model: 'Simultaneous Live Voice Translation',
     monthlyMinutes: '10 mins',
     color: '#2FE0A8',
+    icon: 'activity',
+    description: '10 mins one-time trial included',
+  },
+  trial: {
+    name: 'Free Trial',
+    model: 'Simultaneous Live Voice Translation',
+    monthlyMinutes: '10 mins',
+    color: '#38BDF8',
     icon: 'activity',
     description: '10 mins one-time trial included',
   },

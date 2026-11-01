@@ -6,17 +6,15 @@ import { useUser, useAuth } from '@clerk/clerk-expo';
 import { API_URL } from '../config';
 import { colors } from '../theme';
 import { Alert } from '../utils/alertCompat';
-import { CONSENT_VERSION, TERMS_URL, PRIVACY_URL } from '../legal/legal';
+import { CONSENT_VERSION, TERMS_URL, PRIVACY_URL, saveLocalConsent, pendingAgreement } from '../legal/legal';
 
 /**
- * Shown once after sign-in (and again whenever CONSENT_VERSION changes),
+ * Shown once after install/open (and again whenever CONSENT_VERSION changes),
  * before the app can be used. All four boxes must be ticked.
  *
  * The acceptance is saved twice:
- *  - in the user's Clerk profile (unsafeMetadata.consent), which the app reads;
- *  - on the server (POST /user/consent → Clerk publicMetadata, with the
- *    server's own timestamp), which the user cannot edit. This is the record
- *    to rely on if a user ever disputes what they agreed to.
+ *  - locally on the device (storageCompat);
+ *  - in the user's Clerk profile + server record once authenticated.
  */
 /** Save acceptance of the current terms (Clerk profile + server record). */
 export async function saveConsent(user: any, getToken: () => Promise<string | null>, source: 'signup' | 'consent-screen') {
@@ -50,7 +48,7 @@ const ITEMS: { key: string; text: string; links?: boolean }[] = [
   },
 ];
 
-export function ConsentScreen() {
+export function ConsentScreen({ onAccept }: { onAccept?: () => void } = {}) {
   const { user } = useUser();
   const { getToken, signOut } = useAuth();
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -58,28 +56,32 @@ export function ConsentScreen() {
   const allChecked = ITEMS.every((i) => checked[i.key]);
 
   const accept = useCallback(async () => {
-    if (!user || !allChecked) return;
+    if (!allChecked) return;
     setSaving(true);
     try {
-      await saveConsent(user, getToken, 'consent-screen');
-      // useUser() re-renders with the new metadata and the app moves on.
+      await saveLocalConsent();
+      pendingAgreement.acceptedAt = new Date().toISOString();
+      if (user) {
+        await saveConsent(user, getToken, 'consent-screen');
+      }
+      onAccept?.();
     } catch (err: any) {
       Alert.alert('Could not save', err?.message ?? 'Please check your connection and try again.');
     } finally {
       setSaving(false);
     }
-  }, [user, allChecked, getToken]);
+  }, [user, allChecked, getToken, onAccept]);
 
   const decline = useCallback(() => {
     Alert.alert(
       'Agreement required',
-      'ShakTalk can only be used after accepting these terms. You will be signed out.',
+      'ShakTalk can only be used after accepting these terms.',
       [
         { text: 'Go back', style: 'cancel' },
-        { text: 'Sign out', style: 'destructive', onPress: () => { signOut().catch(() => {}); } },
+        ...(user ? [{ text: 'Sign out', style: 'destructive' as const, onPress: () => { signOut().catch(() => {}); } }] : []),
       ],
     );
-  }, [signOut]);
+  }, [user, signOut]);
 
   return (
     <SafeAreaView style={styles.container}>

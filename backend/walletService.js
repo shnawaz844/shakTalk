@@ -14,11 +14,7 @@ const { supabase } = require('./supabaseClient');
 const DATA_DIR = path.join(__dirname, 'data');
 const USAGE_FILE = path.join(DATA_DIR, 'user_plans_usage.json');
 
-const memoryWallets = new Map([
-  ['test_user_wallet', 1000],
-  ['user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t', 2000],
-  ['user_3LCi3Ofse5jnAw7uwGMmDlgYJ8f', 2000],
-]);
+const memoryWallets = new Map();
 
 function loadUsageData() {
   try {
@@ -47,7 +43,8 @@ function saveUsageData(data) {
 function activateUserPlan(userId, tier = 'starter') {
   if (!userId) userId = 'test_user_wallet';
   let minutes = 100;
-  if (tier === 'pro') minutes = 110;
+  if (tier === 'trial') minutes = 10;
+  else if (tier === 'pro') minutes = 110;
   if (tier === 'business') minutes = 500;
 
   const usage = loadUsageData();
@@ -81,7 +78,10 @@ async function getUserMinutes(userId, knownWalletMinutes) {
 
       if (data) {
         const m = (data.model_id || '').toLowerCase();
-        if (m.includes('3.5') && m.includes('2.5')) {
+        if (m.includes('trial') || m.includes('free')) {
+          planTier = 'trial';
+          planMinutesTotal = 10;
+        } else if (m.includes('3.5') && m.includes('2.5')) {
           planTier = 'business';
           planMinutesTotal = 500;
         } else if (m.includes('3.5') || m.includes('pro') || m.includes('livekit')) {
@@ -170,12 +170,7 @@ async function getWallet(userId) {
     balanceCents = Math.max(balanceCents, memoryWallets.get(userId));
   }
 
-  // 3. For target user: Ensure verified payments (at least 2000 cents = 200 mins)
-  if (userId === 'user_3LCi3Ofse5jnAw7uwGMmDlgYJ8f' || userId === 'user_3LCi3Ofse5jnAw7uwGMmDlgYJ8t' || userId === 'test_user_wallet') {
-    if (balanceCents < 2000) {
-      balanceCents = 2000;
-    }
-  }
+  // 3. Dynamic balance enforcement
 
   memoryWallets.set(userId, balanceCents);
 
@@ -421,4 +416,5 @@ module.exports = {
   topUpWallet,
   deductWallet,
   deductCallMinutes,
+  loadUsageData,
 };
