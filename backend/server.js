@@ -1,4 +1,6 @@
 require('dotenv').config();
+const fs = require('fs');
+const path = require('path');
 const http = require('http');
 const { WebSocketServer } = require('ws');
 const { v4: uuidv4 } = require('uuid');
@@ -16,6 +18,7 @@ const { SUPPORTED_LANGUAGES } = require('./liveTranslate');
 const paymentService = require('./paymentService');
 const walletService = require('./walletService');
 const billingService = require('./billingService');
+const adminService = require('./adminService');
 
 const PORT = process.env.PORT || 8080;
 const LATEST_ANDROID_APK_URL = process.env.LATEST_ANDROID_APK_URL || 'https://expo.dev/accounts/shahahmad/projects/shak-translate/builds/bb9de5af-858f-4444-948e-8a1a54ca988f';
@@ -430,6 +433,159 @@ const httpServer = http.createServer(async (req, res) => {
       sendHttpError(res, err, '/wallet/pay-with-wallet');
     }
     return;
+  }
+
+  // ── DYNAMIC PRICING & ADMIN API ───────────────────────────────────────────
+  // GET /api/plans (Public - cached client pricing & active discounts)
+  if (req.method === 'GET' && (req.url === '/api/plans' || req.url === '/payment/plans')) {
+    try {
+      const plans = await adminService.getPlans();
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=15',
+      });
+      res.end(JSON.stringify({ ok: true, plans }));
+    } catch (err) {
+      sendHttpError(res, err, '/api/plans');
+    }
+    return;
+  }
+
+  // POST /api/admin/login
+  if (req.method === 'POST' && req.url === '/api/admin/login') {
+    try {
+      const body = await readJsonBody(req);
+      const { identifier, username, email, password } = body || {};
+      const loginRes = await adminService.loginAdmin({ identifier: identifier || username || email, password });
+      if (loginRes.ok) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(loginRes));
+      } else {
+        res.writeHead(401, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ ok: false, error: loginRes.error || 'Invalid admin credentials' }));
+      }
+    } catch (err) {
+      sendHttpError(res, err, '/api/admin/login');
+    }
+    return;
+  }
+
+  // POST /api/admin/change-password
+  if (req.method === 'POST' && req.url === '/api/admin/change-password') {
+    try {
+      const auth = req.headers['authorization'];
+      const adminUser = await adminService.verifyAdmin(auth);
+      if (!adminUser) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+        return;
+      }
+      const body = await readJsonBody(req);
+      const { oldPassword, newPassword } = body || {};
+      const result = await adminService.changeAdminPassword({ adminUser, oldPassword, newPassword });
+      res.writeHead(result.ok ? 200 : 400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      sendHttpError(res, err, '/api/admin/change-password');
+    }
+    return;
+  }
+
+  // GET /api/admin/plans (Admin only)
+  if (req.method === 'GET' && req.url === '/api/admin/plans') {
+    try {
+      const auth = req.headers['authorization'];
+      if (!await adminService.verifyAdmin(auth)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+        return;
+      }
+      const plans = await adminService.getPlans();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ ok: true, plans }));
+    } catch (err) {
+      sendHttpError(res, err, '/api/admin/plans');
+    }
+    return;
+  }
+
+  // PUT /api/admin/plans (Admin update plan pricing/discounts)
+  if (req.method === 'PUT' && req.url?.startsWith('/api/admin/plans')) {
+    try {
+      const auth = req.headers['authorization'];
+      if (!await adminService.verifyAdmin(auth)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+        return;
+      }
+      const parts = req.url.split('/');
+      const planId = parts[parts.length - 1];
+      const body = await readJsonBody(req);
+      const updated = await adminService.updatePlan(planId, body);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ ok: true, plan: updated }));
+    } catch (err) {
+      sendHttpError(res, err, '/api/admin/plans');
+    }
+    return;
+  }
+
+  // POST /api/admin/grant-user (Elevate user / demo account to Pro with custom minutes)
+  if (req.method === 'POST' && req.url === '/api/admin/grant-user') {
+    try {
+      const auth = req.headers['authorization'];
+      if (!await adminService.verifyAdmin(auth)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+        return;
+      }
+      const body = await readJsonBody(req);
+      const result = await adminService.grantUserPlan(body || {});
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ ok: true, result }));
+    } catch (err) {
+      sendHttpError(res, err, '/api/admin/grant-user');
+    }
+    return;
+  }
+
+  // GET /api/admin/users (List accounts & remaining minutes)
+  if (req.method === 'GET' && req.url === '/api/admin/users') {
+    try {
+      const auth = req.headers['authorization'];
+      if (!await adminService.verifyAdmin(auth)) {
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: false, error: 'Unauthorized' }));
+        return;
+      }
+      const users = await adminService.listUsers();
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+      res.end(JSON.stringify({ ok: true, users }));
+    } catch (err) {
+      sendHttpError(res, err, '/api/admin/users');
+    }
+    return;
+  }
+
+  // GET /admin (Serve the executive Admin Dashboard UI)
+  const reqPath = req.url ? req.url.split('?')[0] : '';
+  if (req.method === 'GET' && (reqPath === '/admin' || reqPath === '/admin/')) {
+    try {
+      const adminHtmlPath = path.join(__dirname, 'public', 'admin.html');
+      if (fs.existsSync(adminHtmlPath)) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(fs.readFileSync(adminHtmlPath, 'utf8'));
+        return;
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('admin.html not found');
+        return;
+      }
+    } catch (err) {
+      sendHttpError(res, err, '/admin');
+      return;
+    }
   }
 
   // POST /payment/create-order (Supports plan or wallet topup)
