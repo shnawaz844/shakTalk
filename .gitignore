@@ -8,7 +8,8 @@ node_modules/
 .expo/
 dist/
 web-build/
-public/
+/public/
+!backend/public/
 
 # Native
 .kotlin/

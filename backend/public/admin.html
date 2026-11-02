@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ShakTalk — Admin Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #071011;
+      --card-bg: #0F1E20;
+      --card-border: #1B3538;
+      --card-inner: #071415;
+      --primary: #2FE0A8;
+      --primary-hover: #26C291;
+      --primary-glow: rgba(47, 224, 168, 0.25);
+      --primary-dim: rgba(47, 224, 168, 0.12);
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --text-dim: #64748B;
+      --danger: #F43F5E;
+      --warning: #F59E0B;
+      --success: #10B981;
+      --info: #38BDF8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 10% 10%, rgba(47, 224, 168, 0.05) 0%, transparent 45%),
+        radial-gradient(circle at 90% 90%, rgba(56, 189, 248, 0.04) 0%, transparent 45%);
+      background-attachment: fixed;
+      overflow-x: hidden;
+    }
+
+    /* Header */
+    header {
+      background: rgba(15, 30, 32, 0.9);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 14px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-logo {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, #2FE0A8, #0D9488);
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: #081011;
+      font-size: 21px;
+      box-shadow: 0 4px 14px rgba(47, 224, 168, 0.25);
+      flex-shrink: 0;
+    }
+
+    .brand-text {
+      min-width: 0;
+    }
+
+    .brand-title {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+      background: linear-gradient(to right, #FFFFFF, #E2E8F0);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--primary-dim);
+      color: var(--primary);
+      border: 1px solid rgba(47, 224, 168, 0.3);
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--primary);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--primary);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    /* Container */
+    .container {
+      max-width: 1380px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px 24px;
+      flex: 1;
+    }
+
+    /* Auth Overlay */
+    #authOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(7, 16, 17, 0.96);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+
+    .login-box {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      padding: 40px 32px;
+      border-radius: 24px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+      text-align: center;
+    }
+
+    /* Tabs Bar */
+    .tabs-wrapper {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 28px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 14px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      max-width: 100%;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+    .tabs::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+      user-select: none;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      background: var(--primary-dim);
+      color: var(--primary);
+      border-color: rgba(47, 224, 168, 0.3);
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+
+    /* Stats Row - Responsive Grid */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .stat-clickable {
+      cursor: pointer;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+      position: relative;
+    }
+
+    .stat-clickable:hover {
+      transform: translateY(-2px);
+      border-color: rgba(47, 224, 168, 0.4);
+      box-shadow: 0 8px 24px rgba(47, 224, 168, 0.12);
+    }
+
+    .stat-clickable.selected {
+      border-color: var(--primary);
+      background: linear-gradient(180deg, #132D2F 0%, #0F1E20 100%);
+      box-shadow: 0 0 0 2px rgba(47, 224, 168, 0.3), 0 8px 24px rgba(47, 224, 168, 0.18);
+    }
+
+    .stat-clickable.selected .stat-lbl::after {
+      content: ' • FILTERED';
+      color: var(--primary);
+      font-weight: 800;
+    }
+
+    .filter-select {
+      background: #050E0F;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      width: auto;
+      min-width: 130px;
+      height: 38px;
+    }
+
+    .stat-val {
+      font-size: 26px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1.1;
+    }
+
+    .stat-lbl {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 4px;
+    }
+
+    /* Dynamic Plans Grid - Responsive */
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+      margin-bottom: 40px;
+    }
+
+    .plan-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 24px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: all 0.25s ease;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .plan-card:hover {
+      border-color: rgba(47, 224, 168, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(47, 224, 168, 0.08);
+    }
+
+    .plan-card.pro-tier {
+      border-color: rgba(47, 224, 168, 0.4);
+      background: linear-gradient(180deg, #102527 0%, #0F1E20 100%);
+    }
+
+    .plan-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      padding-bottom: 14px;
+      gap: 12px;
+    }
+
+    .plan-card-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .plan-card-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .badge-pill {
+      background: var(--primary-dim);
+      color: var(--primary);
+      border: 1px solid rgba(47, 224, 168, 0.3);
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      white-space: nowrap;
+    }
+
+    .price-box {
+      background: var(--card-inner);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .price-box-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field-lbl {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+    }
+
+    input, select {
+      background: #040B0C;
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 14px;
+      font-weight: 600;
+      outline: none;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(47, 224, 168, 0.15);
+      background: #081516;
+    }
+
+    input:disabled, select:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--primary);
+      color: #081011;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      width: 100%;
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px var(--primary-glow);
+    }
+
+    .btn-secondary {
+      background: #1B3538;
+      color: var(--text);
+      box-shadow: none;
+    }
+
+    .btn-secondary:hover {
+      background: #234549;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 8px;
+      width: auto;
+    }
+
+    /* Subscribers Table - Full Responsive Wrapper */
+    .table-container {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .table-toolbar {
+      padding: 18px 22px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--card-border);
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      width: 100%;
+      max-width: 320px;
+      position: relative;
+    }
+
+    .search-box input {
+      padding-left: 36px;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    .table-responsive {
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      min-width: 780px; /* guarantees clean columns on mobile scroll */
+    }
+
+    th {
+      background: #081314;
+      color: var(--text-muted);
+      padding: 14px 18px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--card-border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 15px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .index-col {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-dim);
+      font-weight: 600;
+      width: 44px;
+    }
+
+    .user-info-col {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 220px;
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #1B3538, #102425);
+      border: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      color: var(--primary);
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .user-email-text {
+      font-weight: 700;
+      color: #fff;
+      font-size: 13.5px;
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-id-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+
+    .tier-badge {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .tier-pro {
+      background: rgba(47, 224, 168, 0.15);
+      color: var(--primary);
+      border: 1px solid rgba(47, 224, 168, 0.3);
+    }
+
+    .tier-trial {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--info);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    .tier-basic {
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--primary);
+      color: #081011;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 12px 22px;
+      border-radius: 12px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 200;
+    }
+
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    #toast.error {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    /* ── MEDIA QUERIES FOR ALL SCREEN SIZES ───────────────────────── */
+    @media (max-width: 1280px) {
+      .stats-row {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+
+    @media (max-width: 1100px) {
+      .plans-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 768px) {
+      header {
+        padding: 12px 18px;
+      }
+      .container {
+        padding: 20px 16px;
+      }
+      .plans-grid {
+        grid-template-columns: 1fr;
+      }
+      .stats-row {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+      .stat-card {
+        padding: 14px 16px;
+      }
+      .stat-val {
+        font-size: 22px;
+      }
+      .tabs-wrapper {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+      .table-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .search-box {
+        max-width: 100%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .stats-row {
+        grid-template-columns: 1fr;
+      }
+      .brand-title {
+        font-size: 15px;
+      }
+      .brand-subtitle {
+        display: none;
+      }
+      .badge-status {
+        padding: 4px 8px;
+        font-size: 10px;
+      }
+      .field-row {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Admin Login Overlay -->
+  <div id="authOverlay">
+    <div class="login-box">
+      <div class="brand-logo" style="margin: 0 auto 18px auto; width: 52px; height: 52px; font-size: 26px;">S</div>
+      <h2 style="font-size: 22px; font-weight: 800; margin-bottom: 6px;">ShakTalk Admin</h2>
+      <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 24px;">Enter your admin password to manage dynamic pricing and accounts.</p>
+      <form id="loginForm" onsubmit="handleLogin(event)">
+        <div style="margin-bottom: 14px; text-align: left;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Admin Username or Email</label>
+          <input type="text" id="adminIdentifierInput" placeholder="admin or admin@shaktalk.com" value="admin" style="padding: 12px 14px; font-size: 14px;">
+        </div>
+        <div style="margin-bottom: 20px; text-align: left;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Admin Password</label>
+          <input type="password" id="adminPasswordInput" placeholder="••••••••••••" required autofocus style="padding: 12px 14px; font-size: 15px;">
+        </div>
+        <button type="submit" class="btn" style="padding: 13px; font-size: 15px;">Unlock Dashboard</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Change Password Modal -->
+  <div id="passwordModal" style="display: none; position: fixed; inset: 0; background: rgba(7, 16, 17, 0.88); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 150; align-items: center; justify-content: center; padding: 20px;">
+    <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 22px; padding: 32px 28px; width: 100%; max-width: 440px; box-shadow: 0 24px 60px rgba(0,0,0,0.6);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: var(--primary-dim); display: flex; align-items: center; justify-content: center; font-size: 16px;">🔑</div>
+          <h3 style="font-size: 18px; font-weight: 800; color: #fff;">Admin Security</h3>
+        </div>
+        <button onclick="togglePasswordModal(false)" style="background: none; border: none; color: var(--text-dim); font-size: 24px; cursor: pointer; line-height: 1;">&times;</button>
+      </div>
+      <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 22px;">Update your database-backed admin password stored securely in Supabase.</p>
+      <form onsubmit="handleChangePassword(event)">
+        <div style="margin-bottom: 16px; text-align: left;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">Current Password</label>
+          <input type="password" id="oldPasswordInput" placeholder="••••••••••••" required style="padding: 12px;">
+        </div>
+        <div style="margin-bottom: 24px; text-align: left;">
+          <label style="display: block; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">New Password (min 6 characters)</label>
+          <input type="password" id="newPasswordInput" placeholder="••••••••••••" minlength="6" required style="padding: 12px;">
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="togglePasswordModal(false)" style="flex: 1;">Cancel</button>
+          <button type="submit" class="btn" style="flex: 1.5;">Update Password</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <header>
+    <div class="brand">
+      <div class="brand-logo">S</div>
+      <div class="brand-text">
+        <div class="brand-title">ShakTalk Control Hub</div>
+        <div class="brand-subtitle">Dynamic Pricing, Discounts & Accounts</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <span class="badge-status">
+        <span class="badge-dot"></span>
+        Live & Synced
+      </span>
+      <button class="btn btn-secondary btn-sm" onclick="togglePasswordModal(true)">🔑 Security</button>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- Container -->
+  <div class="container">
+
+    <div class="tabs-wrapper">
+      <div class="tabs">
+        <button class="tab-btn active" id="btn_pricingTab" onclick="switchTab('pricingTab')">
+          <span>🏷️</span> Dynamic Plans & Discounts
+        </button>
+        <button class="tab-btn" id="btn_usersTab" onclick="switchTab('usersTab')">
+          <span>👥</span> Subscriber Accounts
+        </button>
+        <button class="tab-btn" id="btn_demoTab" onclick="switchTab('demoTab')">
+          <span>⚡</span> Elevate User / Demo
+        </button>
+      </div>
+
+      <div style="font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 8px;">
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--primary);"></span>
+        Real-time dynamic auto-sync enabled
+      </div>
+    </div>
+
+    <!-- TAB 1: Dynamic Plans & Discounts -->
+    <div id="pricingTab">
+      <div class="plans-grid" id="plansGrid">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
+    <!-- TAB 2: Subscriber Accounts -->
+    <div id="usersTab" style="display: none;">
+      <!-- Interactive Stats Row (Click to filter table) -->
+      <div class="stats-row">
+        <div class="stat-card stat-clickable selected" id="cardFilter_all" onclick="applyQuickTierFilter('all')">
+          <div>
+            <div class="stat-val" id="statTotalUsers">—</div>
+            <div class="stat-lbl">Total Registered</div>
+          </div>
+          <div style="font-size: 26px; opacity: 0.85;">👥</div>
+        </div>
+        <div class="stat-card stat-clickable" id="cardFilter_pro" onclick="applyQuickTierFilter('pro')">
+          <div>
+            <div class="stat-val" id="statProUsers" style="color: var(--primary);">—</div>
+            <div class="stat-lbl">Active Pro Plans</div>
+          </div>
+          <div style="font-size: 26px; opacity: 0.85;">⚡</div>
+        </div>
+        <div class="stat-card stat-clickable" id="cardFilter_trial" onclick="applyQuickTierFilter('trial')">
+          <div>
+            <div class="stat-val" id="statTrialUsers" style="color: var(--info);">—</div>
+            <div class="stat-lbl">Trial Accounts</div>
+          </div>
+          <div style="font-size: 26px; opacity: 0.85;">🎁</div>
+        </div>
+        <div class="stat-card stat-clickable" id="cardFilter_depleted" onclick="applyQuickStatusFilter('depleted')" title="Click to filter accounts with 0 minutes left">
+          <div>
+            <div class="stat-val" id="statDepletedUsers" style="color: var(--danger);">—</div>
+            <div class="stat-lbl">Depleted (0m Left)</div>
+          </div>
+          <div style="font-size: 26px; opacity: 0.85;">⚠️</div>
+        </div>
+        <div class="stat-card" id="card_poolMinutes" title="Total accumulated minutes across all accounts">
+          <div>
+            <div class="stat-val" id="statTotalMinutes" style="color: #fff;">—</div>
+            <div class="stat-lbl">Total Pool Minutes</div>
+          </div>
+          <div style="font-size: 26px; opacity: 0.85;">⏱️</div>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <div class="table-toolbar">
+          <div>
+            <h3 style="font-size: 16px; font-weight: 700;">Registered Subscriber Accounts</h3>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;" id="filterStatusSummary">Showing all accounts.</p>
+          </div>
+          
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end;">
+            <!-- Tier Filter -->
+            <select class="filter-select" id="tierFilterSelect" onchange="onFilterDropdownChange()">
+              <option value="all">All Tiers</option>
+              <option value="pro">Pro Plan (Gemini 3.5)</option>
+              <option value="starter">Basic Plan (Gemini 2.5)</option>
+              <option value="trial">Free Trial (10 mins)</option>
+            </select>
+
+            <!-- Status Filter -->
+            <select class="filter-select" id="statusFilterSelect" onchange="onFilterDropdownChange()">
+              <option value="all">All Status</option>
+              <option value="active">Active (&gt;0 mins)</option>
+              <option value="depleted">Depleted (0 mins)</option>
+            </select>
+
+            <!-- Search Box -->
+            <div class="search-box">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="userSearchInput" placeholder="Search email or user ID..." oninput="filterUsers()">
+            </div>
+
+            <button class="btn btn-secondary btn-sm" onclick="resetFilters()">↺ Reset</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadUsers()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>User & Email</th>
+                <th>Current Tier</th>
+                <th>Minutes Left</th>
+                <th>Validity</th>
+                <th>Status</th>
+                <th style="text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">Loading accounts...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: Elevate User / Demo -->
+    <div id="demoTab" style="display: none;">
+      <div style="max-width: 580px; background: var(--card-bg); border: 1px solid var(--card-border); padding: 32px; border-radius: 22px; box-shadow: 0 12px 36px rgba(0,0,0,0.3);">
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+          <div style="width: 36px; height: 36px; border-radius: 10px; background: var(--primary-dim); display: flex; align-items: center; justify-content: center; font-size: 18px;">⚡</div>
+          <h2 style="font-size: 20px; font-weight: 800;">Elevate Account / Grant Pro</h2>
+        </div>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 24px;">Enter a user's <strong>Email</strong> or Clerk User ID to immediately grant Pro tier (Gemini 3.5 LiveKit) without payment.</p>
+        
+        <form onsubmit="handleGrantUser(event)">
+          <div class="field-group" style="margin-bottom: 18px;">
+            <label class="field-lbl">User Email or Clerk User ID</label>
+            <input type="text" id="grantUserId" placeholder="e.g. user@gmail.com or user_3LWAf..." required style="padding: 12px;">
+          </div>
+
+          <div class="field-row" style="margin-bottom: 18px;">
+            <div class="field-group">
+              <label class="field-lbl">Plan Tier</label>
+              <select id="grantTier" style="padding: 12px;">
+                <option value="pro" selected>Pro Plan (Gemini 3.5 LiveKit)</option>
+                <option value="starter">Basic Plan (Gemini 2.5 Live)</option>
+                <option value="trial">Free Trial (10 mins)</option>
+              </select>
+            </div>
+            <div class="field-group">
+              <label class="field-lbl">Allocated Minutes</label>
+              <input type="number" id="grantMinutes" value="110" min="1" required style="padding: 12px;">
+            </div>
+          </div>
+
+          <div class="field-group" style="margin-bottom: 24px;">
+            <label class="field-lbl">Admin Reason / Note (Optional)</label>
+            <input type="text" id="grantNote" placeholder="e.g. VIP Demo Account for client testing" style="padding: 12px;">
+          </div>
+
+          <button type="submit" class="btn" style="padding: 14px; font-size: 15px;">Grant Instant Pro Access</button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="toast">Saved successfully!</div>
+
+  <script>
+    let adminToken = localStorage.getItem('shak_admin_token') || '';
+    let currentTab = localStorage.getItem('shak_admin_active_tab') || 'pricingTab';
+    let plansData = {};
+    let allUsersData = [];
+
+    // Live exchange rates relative to 1 USD
+    const CURRENCIES = {
+      USD: { symbol: '$', name: 'US Dollar', flag: '🇺🇸', rate: 1.0 },
+      EUR: { symbol: '€', name: 'Euro (EU)', flag: '🇪🇺', rate: 0.92 },
+      GBP: { symbol: '£', name: 'British Pound', flag: '🇬🇧', rate: 0.79 },
+      AED: { symbol: 'د.إ', name: 'UAE Dirham', flag: '🇦🇪', rate: 3.67 },
+      SAR: { symbol: '﷼', name: 'Saudi Riyal', flag: '🇸🇦', rate: 3.75 },
+      CAD: { symbol: 'CA$', name: 'Canadian Dollar', flag: '🇨🇦', rate: 1.39 },
+      AUD: { symbol: 'A$', name: 'Australian Dollar', flag: '🇦🇺', rate: 1.54 },
+      JPY: { symbol: '¥', name: 'Japanese Yen', flag: '🇯🇵', rate: 154.0 },
+      RUB: { symbol: '₽', name: 'Russian Ruble', flag: '🇷🇺', rate: 96.0 },
+      INR: { symbol: '₹', name: 'Indian Rupee', flag: '🇮🇳', rate: 86.5 }
+    };
+
+    function checkAuth() {
+      if (adminToken) {
+        document.getElementById('authOverlay').style.display = 'none';
+        switchTab(currentTab, false);
+        loadPlans();
+      } else {
+        document.getElementById('authOverlay').style.display = 'flex';
+      }
+    }
+
+    async function handleLogin(e) {
+      e.preventDefault();
+      const identifier = (document.getElementById('adminIdentifierInput')?.value || '').trim() || 'admin';
+      const password = document.getElementById('adminPasswordInput').value.trim();
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          adminToken = data.token;
+          localStorage.setItem('shak_admin_token', adminToken);
+          if (data.user) {
+            localStorage.setItem('shak_admin_user', JSON.stringify(data.user));
+          }
+          document.getElementById('authOverlay').style.display = 'none';
+          showToast(`✓ Welcome ${data.user?.username || 'Admin'} to ShakTalk Admin Hub!`);
+          loadPlans();
+        } else {
+          showToast(data.error || 'Invalid credentials', true);
+        }
+      } catch (err) {
+        showToast('Login failed: ' + err.message, true);
+      }
+    }
+
+    function togglePasswordModal(open) {
+      const modal = document.getElementById('passwordModal');
+      if (modal) modal.style.display = open ? 'flex' : 'none';
+      if (open) {
+        document.getElementById('oldPasswordInput').value = '';
+        document.getElementById('newPasswordInput').value = '';
+      }
+    }
+
+    async function handleChangePassword(e) {
+      e.preventDefault();
+      const oldPassword = document.getElementById('oldPasswordInput').value;
+      const newPassword = document.getElementById('newPasswordInput').value;
+
+      try {
+        const res = await fetch('/api/admin/change-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ oldPassword, newPassword }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('✓ ' + (data.message || 'Password updated successfully!'));
+          togglePasswordModal(false);
+        } else {
+          showToast(data.error || 'Failed to update password', true);
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('shak_admin_token');
+      adminToken = '';
+      document.getElementById('authOverlay').style.display = 'flex';
+    }
+
+    function switchTab(tabId, savePref = true) {
+      if (savePref) localStorage.setItem('shak_admin_active_tab', tabId);
+      currentTab = tabId;
+
+      document.querySelectorAll('.tabs .tab-btn').forEach(b => b.classList.remove('active'));
+      const activeBtn = document.getElementById(`btn_${tabId}`);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      document.getElementById('pricingTab').style.display = tabId === 'pricingTab' ? 'block' : 'none';
+      document.getElementById('usersTab').style.display = tabId === 'usersTab' ? 'block' : 'none';
+      document.getElementById('demoTab').style.display = tabId === 'demoTab' ? 'block' : 'none';
+
+      if (tabId === 'usersTab') loadUsers();
+    }
+
+    async function loadPlans() {
+      try {
+        const res = await fetch('/api/plans');
+        const data = await res.json();
+        if (data.ok && data.plans) {
+          plansData = data.plans;
+          renderPlans();
+        }
+      } catch (err) {
+        showToast('Failed to load plans: ' + err.message, true);
+      }
+    }
+
+    function renderPlans() {
+      const container = document.getElementById('plansGrid');
+      container.innerHTML = '';
+
+      Object.keys(plansData).forEach(key => {
+        const p = plansData[key];
+        const isFree = p.priceINR === 0 && p.priceUSD === 0;
+        const isPro = p.id === 'pro';
+
+        const card = document.createElement('div');
+        card.className = 'plan-card' + (isPro ? ' pro-tier' : '');
+        card.innerHTML = `
+          <div class="plan-card-header">
+            <div>
+              <div class="plan-card-title">${p.name}</div>
+              <div class="plan-card-sub">${p.subtitle || (p.minutes + ' minutes')}</div>
+            </div>
+            <span class="badge-pill" id="liveBadgePill_${p.id}">${p.activeBadge || p.badge || (isFree ? 'FREE' : 'ACTIVE')}</span>
+          </div>
+
+          <!-- India Pricing (INR ₹) -->
+          <div class="price-box">
+            <div class="price-box-title">
+              <span>🇮🇳 Indian Pricing (INR ₹)</span>
+              ${!isFree ? '<span style="color: var(--primary); font-size: 11px;">Active in India</span>' : ''}
+            </div>
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-lbl">Selling Price (₹)</label>
+                <input type="number" id="priceINR_${p.id}" value="${p.priceINR || 0}" step="1" ${isFree ? 'disabled' : ''} oninput="onPriceINRChange('${p.id}')">
+              </div>
+              <div class="field-group">
+                <label class="field-lbl">Strikethrough (₹)</label>
+                <input type="number" id="origINR_${p.id}" value="${p.originalPriceINR || p.priceINR || 0}" step="1" ${isFree ? 'disabled' : ''} oninput="onOrigINRChange('${p.id}')">
+              </div>
+            </div>
+          </div>
+
+          <!-- Global Country & Currency Pricing -->
+          <div class="price-box">
+            <div class="price-box-title">
+              <span>🌍 Global Country & Currency</span>
+              <span id="countryPreviewText_${p.id}" style="color: var(--info); font-size: 11px;">Active Outside India</span>
+            </div>
+            
+            <div class="field-group" style="margin-bottom: 8px;">
+              <label class="field-lbl">Select Target Country / Currency</label>
+              <select id="countrySelect_${p.id}" onchange="onCountrySelectChange('${p.id}')">
+                <option value="USD" selected>🇺🇸 United States (USD $)</option>
+                <option value="EUR">🇪🇺 European Union (EUR €)</option>
+                <option value="GBP">🇬🇧 United Kingdom (GBP £)</option>
+                <option value="AED">🇦🇪 United Arab Emirates (AED د.إ)</option>
+                <option value="SAR">🇸🇦 Saudi Arabia (SAR ﷼)</option>
+                <option value="CAD">🇨🇦 Canada (CAD CA$)</option>
+                <option value="AUD">🇦🇺 Australia (AUD A$)</option>
+                <option value="RUB">🇷🇺 Russia (RUB ₽)</option>
+                <option value="JPY">🇯🇵 Japan (JPY ¥)</option>
+              </select>
+            </div>
+
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-lbl" id="sellPriceLbl_${p.id}">Selling Price ($)</label>
+                <input type="number" id="priceUSD_${p.id}" value="${p.priceUSD || 0}" step="0.01" ${isFree ? 'disabled' : ''} oninput="onPriceUSDChange('${p.id}')">
+              </div>
+              <div class="field-group">
+                <label class="field-lbl" id="origPriceLbl_${p.id}">Strikethrough ($)</label>
+                <input type="number" id="origUSD_${p.id}" value="${p.originalPriceUSD || p.priceUSD || 0}" step="0.01" ${isFree ? 'disabled' : ''} oninput="onOrigUSDChange('${p.id}')">
+              </div>
+            </div>
+          </div>
+
+          <!-- Promotional Discount & Date Range -->
+          ${!isFree ? `
+          <div class="price-box" style="border-color: ${p.isCurrentlyDiscounted ? 'rgba(47, 224, 168, 0.4)' : 'var(--card-border)'};">
+            <div class="price-box-title">
+              <span>📅 Promotional Discount Schedule</span>
+              <span id="discStatusPill_${p.id}" style="font-size: 11px; font-weight: 700; color: ${p.isCurrentlyDiscounted ? 'var(--primary)' : 'var(--text-muted)'};">
+                ${p.isCurrentlyDiscounted ? '🟢 LIVE NOW' : (p.discountActive ? '⏳ SCHEDULED' : '⚪ INACTIVE')}
+              </span>
+            </div>
+
+            <div style="display: flex; align-items: center; justify-content: space-between; margin: 2px 0;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="discActive_${p.id}" ${p.discountActive ? 'checked' : ''} onchange="onDiscountToggle('${p.id}')" style="width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer;">
+                <label for="discActive_${p.id}" style="font-size: 12.5px; color: #fff; cursor: pointer; text-transform: none; margin: 0; font-weight: 600;">
+                  Enable Promotional Discount
+                </label>
+              </div>
+              <div id="discPercentBadge_${p.id}" style="font-size: 11.5px; font-weight: 800; color: var(--primary);">
+                ${p.priceINR && p.originalPriceINR && p.originalPriceINR > p.priceINR ? Math.round((1 - p.priceINR/p.originalPriceINR)*100) + '% OFF' : ''}
+              </div>
+            </div>
+
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-lbl">Discount Start Date</label>
+                <input type="datetime-local" id="discStart_${p.id}" value="${p.discountStartDate ? p.discountStartDate.slice(0, 16) : ''}" oninput="evaluateDateLive('${p.id}')" style="font-size: 12px; padding: 8px 10px;">
+              </div>
+              <div class="field-group">
+                <label class="field-lbl">Discount End Date</label>
+                <input type="datetime-local" id="discEnd_${p.id}" value="${p.discountEndDate ? p.discountEndDate.slice(0, 16) : ''}" oninput="evaluateDateLive('${p.id}')" style="font-size: 12px; padding: 8px 10px;">
+              </div>
+            </div>
+            <div style="font-size: 11px; color: var(--text-dim);">
+              * Automatically reverts to regular price after End Date.
+            </div>
+          </div>
+          ` : ''}
+
+          <!-- Plan Features & Badges -->
+          <div class="field-row">
+            <div class="field-group">
+              <label class="field-lbl">Included Minutes</label>
+              <input type="number" id="minutes_${p.id}" value="${p.minutes || 10}" min="1">
+            </div>
+            <div class="field-group">
+              <label class="field-lbl">Promo Badge Tag</label>
+              <input type="text" id="badge_${p.id}" value="${p.badge || ''}" placeholder="e.g. SAVE 33%" oninput="onBadgeInput('${p.id}')">
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-lbl">AI Translation Engine</label>
+            <select id="engine_${p.id}">
+              <option value="livekit" ${p.engine === 'livekit' ? 'selected' : ''}>Gemini 3.5 Live (Simultaneous / LiveKit)</option>
+              <option value="legacy" ${p.engine === 'legacy' ? 'selected' : ''}>Gemini 2.5 Live (Turn-by-Turn)</option>
+            </select>
+          </div>
+
+          <button class="btn" onclick="savePlan('${p.id}')">Save Changes</button>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // ── Real-Time Dynamic Synchronizers ──────────────────────────────────────
+    function onPriceINRChange(planId) {
+      const inr = Number(document.getElementById(`priceINR_${planId}`).value) || 0;
+      const currCode = document.getElementById(`countrySelect_${planId}`).value || 'USD';
+      const curr = CURRENCIES[currCode] || CURRENCIES.USD;
+      const rateFromInr = curr.rate / CURRENCIES.INR.rate;
+      const converted = currCode === 'JPY' || currCode === 'RUB' ? Math.round(inr * rateFromInr) : Number((inr * rateFromInr).toFixed(2));
+      document.getElementById(`priceUSD_${planId}`).value = converted;
+      recalculateDiscount(planId);
+    }
+
+    function onOrigINRChange(planId) {
+      const origInr = Number(document.getElementById(`origINR_${planId}`).value) || 0;
+      const currCode = document.getElementById(`countrySelect_${planId}`).value || 'USD';
+      const curr = CURRENCIES[currCode] || CURRENCIES.USD;
+      const rateFromInr = curr.rate / CURRENCIES.INR.rate;
+      const converted = currCode === 'JPY' || currCode === 'RUB' ? Math.round(origInr * rateFromInr) : Number((origInr * rateFromInr).toFixed(2));
+      document.getElementById(`origUSD_${planId}`).value = converted;
+      recalculateDiscount(planId);
+    }
+
+    function onPriceUSDChange(planId) {
+      const currCode = document.getElementById(`countrySelect_${planId}`).value || 'USD';
+      const curr = CURRENCIES[currCode] || CURRENCIES.USD;
+      const currVal = Number(document.getElementById(`priceUSD_${planId}`).value) || 0;
+      const inr = Math.round(currVal * (CURRENCIES.INR.rate / curr.rate));
+      document.getElementById(`priceINR_${planId}`).value = inr;
+      recalculateDiscount(planId);
+    }
+
+    function onOrigUSDChange(planId) {
+      const currCode = document.getElementById(`countrySelect_${planId}`).value || 'USD';
+      const curr = CURRENCIES[currCode] || CURRENCIES.USD;
+      const origVal = Number(document.getElementById(`origUSD_${planId}`).value) || 0;
+      const origInr = Math.round(origVal * (CURRENCIES.INR.rate / curr.rate));
+      document.getElementById(`origINR_${planId}`).value = origInr;
+      recalculateDiscount(planId);
+    }
+
+    function onCountrySelectChange(planId) {
+      const currCode = document.getElementById(`countrySelect_${planId}`).value;
+      const curr = CURRENCIES[currCode] || CURRENCIES.USD;
+      
+      document.getElementById(`sellPriceLbl_${planId}`).innerText = `Selling Price (${curr.symbol})`;
+      document.getElementById(`origPriceLbl_${planId}`).innerText = `Strikethrough (${curr.symbol})`;
+      
+      const inr = Number(document.getElementById(`priceINR_${planId}`).value) || 0;
+      const origInr = Number(document.getElementById(`origINR_${planId}`).value) || 0;
+      
+      const rateFromInr = curr.rate / CURRENCIES.INR.rate;
+      const convertedSell = currCode === 'JPY' || currCode === 'RUB' ? Math.round(inr * rateFromInr) : Number((inr * rateFromInr).toFixed(2));
+      const convertedOrig = currCode === 'JPY' || currCode === 'RUB' ? Math.round(origInr * rateFromInr) : Number((origInr * rateFromInr).toFixed(2));
+      
+      document.getElementById(`priceUSD_${planId}`).value = convertedSell;
+      document.getElementById(`origUSD_${planId}`).value = convertedOrig;
+      
+      document.getElementById(`countryPreviewText_${planId}`).innerText = `Active in ${curr.name}`;
+      showToast(`Switched currency to ${curr.name} (${curr.symbol})`);
+    }
+
+    function recalculateDiscount(planId) {
+      const inr = Number(document.getElementById(`priceINR_${planId}`).value) || 0;
+      const origInr = Number(document.getElementById(`origINR_${planId}`).value) || 0;
+      const badgeBadgeEl = document.getElementById(`discPercentBadge_${planId}`);
+      const badgeInput = document.getElementById(`badge_${planId}`);
+
+      if (origInr > inr && inr > 0) {
+        const pct = Math.round((1 - inr / origInr) * 100);
+        if (badgeBadgeEl) badgeBadgeEl.innerText = `${pct}% OFF`;
+        if (badgeInput && (!badgeInput.value || badgeInput.value.includes('%'))) {
+          badgeInput.value = `SAVE ${pct}%`;
+          onBadgeInput(planId);
+        }
+      } else {
+        if (badgeBadgeEl) badgeBadgeEl.innerText = '';
+      }
+      evaluateDateLive(planId);
+    }
+
+    function onDiscountToggle(planId) {
+      evaluateDateLive(planId);
+    }
+
+    function onBadgeInput(planId) {
+      const val = document.getElementById(`badge_${planId}`).value;
+      const pill = document.getElementById(`liveBadgePill_${planId}`);
+      if (pill) pill.innerText = val || 'ACTIVE';
+    }
+
+    function evaluateDateLive(planId) {
+      const chk = document.getElementById(`discActive_${planId}`);
+      const pill = document.getElementById(`discStatusPill_${planId}`);
+      if (!chk || !pill) return;
+
+      if (!chk.checked) {
+        pill.innerText = '⚪ INACTIVE';
+        pill.style.color = 'var(--text-muted)';
+        return;
+      }
+
+      const sVal = document.getElementById(`discStart_${planId}`).value;
+      const eVal = document.getElementById(`discEnd_${planId}`).value;
+      const now = Date.now();
+      const s = sVal ? new Date(sVal).getTime() : null;
+      const e = eVal ? new Date(eVal).getTime() : null;
+
+      let inRange = true;
+      if (s && now < s) inRange = false;
+      if (e && now > e) inRange = false;
+
+      if (inRange) {
+        pill.innerText = '🟢 LIVE NOW';
+        pill.style.color = 'var(--primary)';
+      } else if (s && now < s) {
+        pill.innerText = '⏳ SCHEDULED';
+        pill.style.color = 'var(--warning)';
+      } else if (e && now > e) {
+        pill.innerText = '🔴 EXPIRED';
+        pill.style.color = 'var(--danger)';
+      }
+    }
+
+    async function savePlan(planId) {
+      const discActiveEl = document.getElementById(`discActive_${planId}`);
+      const discStartEl = document.getElementById(`discStart_${planId}`);
+      const discEndEl = document.getElementById(`discEnd_${planId}`);
+      const countrySelect = document.getElementById(`countrySelect_${planId}`);
+
+      const updates = {
+        priceINR: Number(document.getElementById(`priceINR_${planId}`).value),
+        originalPriceINR: Number(document.getElementById(`origINR_${planId}`).value),
+        priceUSD: Number(document.getElementById(`priceUSD_${planId}`).value),
+        originalPriceUSD: Number(document.getElementById(`origUSD_${planId}`).value),
+        selectedCurrency: countrySelect ? countrySelect.value : 'USD',
+        minutes: Number(document.getElementById(`minutes_${planId}`).value),
+        badge: document.getElementById(`badge_${planId}`).value.trim(),
+        engine: document.getElementById(`engine_${planId}`).value,
+        discountActive: discActiveEl ? discActiveEl.checked : false,
+        discountStartDate: discStartEl && discStartEl.value ? new Date(discStartEl.value).toISOString() : null,
+        discountEndDate: discEndEl && discEndEl.value ? new Date(discEndEl.value).toISOString() : null,
+      };
+
+      try {
+        const res = await fetch(`/api/admin/plans/${planId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify(updates),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`✓ ${plansData[planId].name} updated live across all devices!`);
+          loadPlans();
+        } else {
+          showToast(data.error || 'Failed to update plan', true);
+        }
+      } catch (err) {
+        showToast('Error saving plan: ' + err.message, true);
+      }
+    }
+
+    async function loadUsers() {
+      const tbody = document.getElementById('usersTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 32px;">Loading accounts...</td></tr>';
+
+      try {
+        const res = await fetch('/api/admin/users', {
+          headers: { 'Authorization': `Bearer ${adminToken}` },
+        });
+        const data = await res.json();
+        if (data.ok && data.users) {
+          allUsersData = data.users;
+          updateStats(allUsersData);
+          renderUsersTable(allUsersData);
+        }
+      } catch (err) {
+        showToast('Failed to load users: ' + err.message, true);
+      }
+    }
+
+    let selectedTierFilter = 'all';     // 'all' | 'pro' | 'starter' | 'trial'
+    let selectedStatusFilter = 'all';   // 'all' | 'active' | 'depleted'
+
+    function applyQuickTierFilter(tier) {
+      selectedTierFilter = tier;
+      selectedStatusFilter = 'all';
+      const tierSelect = document.getElementById('tierFilterSelect');
+      const statusSelect = document.getElementById('statusFilterSelect');
+      if (tierSelect) tierSelect.value = tier;
+      if (statusSelect) statusSelect.value = 'all';
+
+      highlightActiveStatCard(tier === 'all' ? 'cardFilter_all' : `cardFilter_${tier}`);
+      filterUsers();
+    }
+
+    function applyQuickStatusFilter(status) {
+      selectedStatusFilter = status;
+      selectedTierFilter = 'all';
+      const tierSelect = document.getElementById('tierFilterSelect');
+      const statusSelect = document.getElementById('statusFilterSelect');
+      if (statusSelect) statusSelect.value = status;
+      if (tierSelect) tierSelect.value = 'all';
+
+      highlightActiveStatCard(`cardFilter_${status}`);
+      filterUsers();
+    }
+
+    function onFilterDropdownChange() {
+      const tierSelect = document.getElementById('tierFilterSelect');
+      const statusSelect = document.getElementById('statusFilterSelect');
+      if (tierSelect) selectedTierFilter = tierSelect.value;
+      if (statusSelect) selectedStatusFilter = statusSelect.value;
+
+      if (selectedTierFilter === 'pro' && selectedStatusFilter === 'all') {
+        highlightActiveStatCard('cardFilter_pro');
+      } else if (selectedTierFilter === 'trial' && selectedStatusFilter === 'all') {
+        highlightActiveStatCard('cardFilter_trial');
+      } else if (selectedStatusFilter === 'depleted' && selectedTierFilter === 'all') {
+        highlightActiveStatCard('cardFilter_depleted');
+      } else if (selectedTierFilter === 'all' && selectedStatusFilter === 'all') {
+        highlightActiveStatCard('cardFilter_all');
+      } else {
+        highlightActiveStatCard(null);
+      }
+
+      filterUsers();
+    }
+
+    function resetFilters() {
+      selectedTierFilter = 'all';
+      selectedStatusFilter = 'all';
+      const tierSelect = document.getElementById('tierFilterSelect');
+      const statusSelect = document.getElementById('statusFilterSelect');
+      const searchInput = document.getElementById('userSearchInput');
+      if (tierSelect) tierSelect.value = 'all';
+      if (statusSelect) statusSelect.value = 'all';
+      if (searchInput) searchInput.value = '';
+
+      highlightActiveStatCard('cardFilter_all');
+      filterUsers();
+      showToast('Filters reset to show all accounts.');
+    }
+
+    function highlightActiveStatCard(cardId) {
+      document.querySelectorAll('.stat-clickable').forEach(c => c.classList.remove('selected'));
+      if (cardId) {
+        const el = document.getElementById(cardId);
+        if (el) el.classList.add('selected');
+      }
+    }
+
+    function updateStats(users) {
+      const totalUsers = users.length;
+      const proUsers = users.filter(u => (u.plan || '').toLowerCase() === 'pro').length;
+      const trialUsers = users.filter(u => (u.plan || '').toLowerCase() === 'trial').length;
+      const depletedUsers = users.filter(u => (u.plan_seconds_left || 0) <= 0).length;
+      const totalSec = users.reduce((acc, u) => acc + (u.plan_seconds_left || 0), 0);
+
+      const elTotal = document.getElementById('statTotalUsers');
+      if (elTotal) elTotal.innerText = totalUsers;
+
+      const elPro = document.getElementById('statProUsers');
+      if (elPro) elPro.innerText = proUsers;
+
+      const elTrial = document.getElementById('statTrialUsers');
+      if (elTrial) elTrial.innerText = trialUsers;
+
+      const elDepleted = document.getElementById('statDepletedUsers');
+      if (elDepleted) elDepleted.innerText = depletedUsers;
+
+      const elMinutes = document.getElementById('statTotalMinutes');
+      if (elMinutes) elMinutes.innerText = Math.floor(totalSec / 60) + 'm';
+    }
+
+    function renderUsersTable(users) {
+      const tbody = document.getElementById('usersTableBody');
+      if (users.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 40px 20px;">
+          <div style="font-size: 32px; margin-bottom: 8px;">🔍</div>
+          <div style="font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px;">No matching subscriber accounts found</div>
+          <div style="font-size: 12.5px; margin-bottom: 16px;">Try adjusting your search terms or filters.</div>
+          <button class="btn btn-secondary btn-sm" onclick="resetFilters()">↺ Reset All Filters</button>
+        </td></tr>`;
+        return;
+      }
+      tbody.innerHTML = '';
+      users.forEach((u, index) => {
+        const minsLeft = Math.floor((u.plan_seconds_left || 0) / 60);
+        const periodEndStr = u.period_end ? new Date(u.period_end).toLocaleDateString('en-GB') : 'Trial / Lifetime';
+        const planLower = (u.plan || '').toLowerCase();
+        const tierClass = planLower === 'pro' ? 'tier-pro' : (planLower === 'trial' ? 'tier-trial' : 'tier-basic');
+        const initial = (u.email && u.email !== '—') ? u.email[0].toUpperCase() : 'U';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="index-col">#${index + 1}</td>
+          <td>
+            <div class="user-info-col">
+              <div class="user-avatar">${initial}</div>
+              <div>
+                <div class="user-email-text">${u.email || '—'}</div>
+                <div class="user-id-text">${u.user_id}</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="tier-badge ${tierClass}">${(u.plan || 'none').toUpperCase()}</span></td>
+          <td style="font-weight: 800; font-size: 14px; color: ${minsLeft > 0 ? 'var(--primary)' : 'var(--danger)'};">${minsLeft} mins</td>
+          <td style="color: var(--text-muted); font-size: 12.5px;">${periodEndStr}</td>
+          <td>
+            <span style="display: inline-flex; align-items: center; gap: 5px; font-weight: 700; font-size: 12px; color: ${minsLeft > 0 ? 'var(--success)' : 'var(--danger)'};">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: ${minsLeft > 0 ? 'var(--success)' : 'var(--danger)'};"></span>
+              ${minsLeft > 0 ? 'Active' : 'Depleted'}
+            </span>
+          </td>
+          <td style="text-align: right;">
+            <button class="btn btn-secondary btn-sm" onclick="quickTopup('${u.user_id}', '${u.email}')">+110m Pro</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterUsers() {
+      const q = (document.getElementById('userSearchInput')?.value || '').trim().toLowerCase();
+
+      const filtered = allUsersData.filter(u => {
+        // 1. Text search
+        const matchesQuery = !q || 
+          (u.email && u.email.toLowerCase().includes(q)) || 
+          (u.user_id && u.user_id.toLowerCase().includes(q)) ||
+          (u.plan && u.plan.toLowerCase().includes(q));
+
+        if (!matchesQuery) return false;
+
+        // 2. Tier filter
+        if (selectedTierFilter !== 'all') {
+          const userPlan = (u.plan || '').toLowerCase();
+          if (selectedTierFilter === 'pro' && userPlan !== 'pro') return false;
+          if (selectedTierFilter === 'starter' && userPlan !== 'starter' && userPlan !== 'basic') return false;
+          if (selectedTierFilter === 'trial' && userPlan !== 'trial') return false;
+        }
+
+        // 3. Status filter
+        if (selectedStatusFilter !== 'all') {
+          const secs = u.plan_seconds_left || 0;
+          if (selectedStatusFilter === 'active' && secs <= 0) return false;
+          if (selectedStatusFilter === 'depleted' && secs > 0) return false;
+        }
+
+        return true;
+      });
+
+      // Update Filter Summary Label
+      const summaryEl = document.getElementById('filterStatusSummary');
+      if (summaryEl) {
+        let parts = [];
+        if (selectedTierFilter !== 'all') {
+          const tierNames = { pro: 'Pro Tier', starter: 'Basic Tier', trial: 'Trial Tier' };
+          parts.push(tierNames[selectedTierFilter] || selectedTierFilter);
+        }
+        if (selectedStatusFilter !== 'all') {
+          parts.push(selectedStatusFilter === 'active' ? 'Active (>0m)' : 'Depleted (0m)');
+        }
+        if (q) {
+          parts.push(`Query: "${q}"`);
+        }
+
+        if (parts.length > 0) {
+          summaryEl.innerHTML = `Showing <strong>${filtered.length}</strong> of <strong>${allUsersData.length}</strong> accounts (Filtered by ${parts.join(', ')}).`;
+        } else {
+          summaryEl.innerHTML = `Showing all <strong>${allUsersData.length}</strong> registered subscriber accounts.`;
+        }
+      }
+
+      renderUsersTable(filtered);
+    }
+
+    async function quickTopup(userId, email) {
+      const displayLabel = (email && email !== '—') ? email : userId;
+      if (!confirm(`Upgrade/Reset ${displayLabel} to Pro Tier with 110 minutes?`)) return;
+      try {
+        const res = await fetch('/api/admin/grant-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ userId, planTier: 'pro', customMinutes: 110, note: 'Admin 1-Click Topup' }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`✓ ${displayLabel} upgraded to Pro (110 mins)!`);
+          loadUsers();
+        }
+      } catch (e) {
+        showToast('Failed: ' + e.message, true);
+      }
+    }
+
+    async function handleGrantUser(e) {
+      e.preventDefault();
+      const userId = document.getElementById('grantUserId').value.trim();
+      const planTier = document.getElementById('grantTier').value;
+      const customMinutes = Number(document.getElementById('grantMinutes').value);
+      const note = document.getElementById('grantNote').value.trim();
+
+      try {
+        const res = await fetch('/api/admin/grant-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${adminToken}`,
+          },
+          body: JSON.stringify({ userId, planTier, customMinutes, note }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(`✓ Account ${userId} elevated to ${planTier.toUpperCase()} (${customMinutes} mins)!`);
+          document.getElementById('grantUserId').value = '';
+          document.getElementById('grantNote').value = '';
+        } else {
+          showToast(data.error || 'Failed to grant user', true);
+        }
+      } catch (err) {
+        showToast('Error: ' + err.message, true);
+      }
+    }
+
+    function showToast(msg, isError = false) {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.className = isError ? 'show error' : 'show';
+      setTimeout(() => {
+        toast.className = '';
+      }, 3500);
+    }
+
+    // Initialize
+    checkAuth();
+  </script>
+</body>
+</html>

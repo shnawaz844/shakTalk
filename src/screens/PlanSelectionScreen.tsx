@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -111,9 +111,45 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
   const { getToken, signOut } = useAuth();
   const [selectedTier, setSelectedTier] = useState<PlanTier>('trial');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [bundles, setBundles] = useState<MonthlyBundle[]>(MONTHLY_BUNDLES);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch(`${API_URL}/api/plans`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!isMounted || !data?.ok || !data?.plans) return;
+        const p = data.plans;
+        setBundles((prev) =>
+          prev.map((b) => {
+            const live = p[b.id];
+            if (!live) return b;
+            const activePriceINR = live.effectivePriceINR !== undefined ? live.effectivePriceINR : live.priceINR;
+            const activePriceUSD = live.effectivePriceUSD !== undefined ? live.effectivePriceUSD : live.priceUSD;
+            const livePriceStr = isIndia
+              ? (activePriceINR === 0 ? 'Free' : `₹${Number(activePriceINR).toLocaleString('en-IN')}`)
+              : (activePriceUSD === 0 ? 'Free' : `$${Number(activePriceUSD).toFixed(2)}`);
+            const badge = live.activeBadge !== undefined ? live.activeBadge : (live.badge !== undefined ? live.badge : b.badge);
+            return {
+              ...b,
+              name: live.name || b.name,
+              subtitle: live.subtitle || b.subtitle,
+              price: livePriceStr,
+              badge: badge || '',
+              minutes: live.minutes || b.minutes,
+              minutesLabel: `${live.minutes || b.minutes} min ${b.id === 'trial' ? '(one-time trial)' : '/ month'}`,
+            };
+          })
+        );
+      })
+      .catch((err) => console.log('[PlanSelection] Live plans fallback notice:', err.message));
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const selectedBundle =
-    MONTHLY_BUNDLES.find((b) => b.id === selectedTier) || MONTHLY_BUNDLES[0];
+    bundles.find((b) => b.id === selectedTier) || bundles[0];
 
   const markPlanChosen = async (tier: PlanTier) => {
     if (user) {
@@ -317,7 +353,7 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
 
         {/* Monthly Bundles Cards */}
         <View style={styles.cardsContainer}>
-          {MONTHLY_BUNDLES.map((bundle) => {
+          {bundles.map((bundle) => {
             const isActive = selectedTier === bundle.id;
             return (
               <TouchableOpacity
