@@ -150,6 +150,57 @@ function evaluateDiscount(plan) {
   };
 }
 
+// ── Supabase <-> JS Plan Schema Mappings ─────────────────────────────────────
+function planToRow(p) {
+  return {
+    id: p.id,
+    name: p.name,
+    subtitle: p.subtitle || '',
+    model_name: p.modelName || '',
+    engine: p.engine || 'livekit',
+    currency: p.currency || 'INR',
+    price_inr: Number(p.priceINR !== undefined ? p.priceINR : 0),
+    original_price_inr: Number(p.originalPriceINR !== undefined ? p.originalPriceINR : p.priceINR || 0),
+    price_usd: Number(p.priceUSD !== undefined ? p.priceUSD : 0),
+    original_price_usd: Number(p.originalPriceUSD !== undefined ? p.originalPriceUSD : p.priceUSD || 0),
+    minutes: Number(p.minutes !== undefined ? p.minutes : 0),
+    badge: p.badge || '',
+    discount_active: !!p.discountActive,
+    discount_percentage: Number(p.discountPercentage || 0),
+    discount_start_date: p.discountStartDate || null,
+    discount_end_date: p.discountEndDate || null,
+    selected_currency: p.selectedCurrency || 'USD',
+    description: p.description || '',
+    is_active: p.isActive !== undefined ? !!p.isActive : true,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function rowToPlan(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    subtitle: r.subtitle || '',
+    modelName: r.model_name || '',
+    engine: r.engine || 'livekit',
+    currency: r.currency || 'INR',
+    priceINR: Number(r.price_inr || 0),
+    originalPriceINR: Number(r.original_price_inr || r.price_inr || 0),
+    priceUSD: Number(r.price_usd || 0),
+    originalPriceUSD: Number(r.original_price_usd || r.price_usd || 0),
+    minutes: Number(r.minutes || 0),
+    badge: r.badge || '',
+    discountActive: !!r.discount_active,
+    discountPercentage: Number(r.discount_percentage || 0),
+    discountStartDate: r.discount_start_date || null,
+    discountEndDate: r.discount_end_date || null,
+    selectedCurrency: r.selected_currency || 'USD',
+    description: r.description || '',
+    isActive: r.is_active !== undefined ? !!r.is_active : true,
+    updatedAt: r.updated_at || new Date().toISOString(),
+  };
+}
+
 // ── Plans Management ────────────────────────────────────────────────────────
 async function getPlans(raw = false) {
   let plansObj = {};
@@ -160,8 +211,8 @@ async function getPlans(raw = false) {
         .from('app_plans')
         .select('*');
       if (!error && data && data.length > 0) {
-        data.forEach(p => {
-          plansObj[p.id] = p;
+        data.forEach(r => {
+          plansObj[r.id] = rowToPlan(r);
         });
       }
     } catch (e) {
@@ -169,15 +220,13 @@ async function getPlans(raw = false) {
     }
   }
 
-  // 2. Fallback to Local JSON
-  if (Object.keys(plansObj).length === 0) {
-    let plans = readJsonSafe(PLANS_FILE, null);
-    if (!plans || Object.keys(plans).length === 0) {
-      plans = DEFAULT_PLANS;
-      writeJsonSafe(PLANS_FILE, plans);
-    }
-    plansObj = plans;
+  // 2. Fallback and merge with Local JSON / Defaults so no baseline plans are missing
+  let localPlans = readJsonSafe(PLANS_FILE, null);
+  if (!localPlans || Object.keys(localPlans).length === 0) {
+    localPlans = DEFAULT_PLANS;
+    writeJsonSafe(PLANS_FILE, localPlans);
   }
+  plansObj = { ...DEFAULT_PLANS, ...localPlans, ...plansObj };
 
   if (raw) return plansObj;
 
@@ -190,7 +239,7 @@ async function getPlans(raw = false) {
 }
 
 async function updatePlan(planId, updates) {
-  const currentPlans = await getPlans();
+  const currentPlans = await getPlans(true);
   if (!currentPlans[planId]) {
     throw new Error(`Plan "${planId}" not found.`);
   }
@@ -210,7 +259,7 @@ async function updatePlan(planId, updates) {
   // Sync Supabase if available
   if (supabase) {
     try {
-      await supabase.from('app_plans').upsert(updatedPlan, { onConflict: 'id' });
+      await supabase.from('app_plans').upsert(planToRow(updatedPlan), { onConflict: 'id' });
     } catch (e) {
       console.warn('[adminService] Supabase updatePlan fallback:', e.message);
     }
