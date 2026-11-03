@@ -98,10 +98,11 @@ export async function startRazorpayCheckout(
       // Enforce authoritative Build Plan PDF pricing:
       // Pro: ₹1,000 (100000 paise) / $14.99 (1499 cents)
       // Standard: ₹499 (49900 paise) / $4.99 (499 cents)
-      let targetAmount = options.amountCents || orderData.amount;
-      let targetCurrency = options.currency || orderData.currency || (isIndia ? 'INR' : 'USD');
+      // Prioritize authoritative dynamic pricing from server orderData:
+      let targetAmount = orderData.amount || options.amountCents;
+      let targetCurrency = orderData.currency || options.currency || (isIndia ? 'INR' : 'USD');
 
-      if (options.type === 'plan') {
+      if (!targetAmount && options.type === 'plan') {
         if (options.tier === 'pro') {
           targetAmount = isIndia ? 100000 : 1499;
           targetCurrency = isIndia ? 'INR' : 'USD';
