@@ -44,6 +44,7 @@ interface MonthlyBundle {
   modelId: string;
   subtitle: string;
   badge?: string;
+  originalPrice?: string;
   price: string;
   billingPeriod: string;
   minutes: number;
@@ -115,36 +116,56 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
 
   useEffect(() => {
     let isMounted = true;
-    fetch(`${API_URL}/api/plans`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!isMounted || !data?.ok || !data?.plans) return;
-        const p = data.plans;
-        setBundles((prev) =>
-          prev.map((b) => {
-            const live = p[b.id];
-            if (!live) return b;
-            const activePriceINR = live.effectivePriceINR !== undefined ? live.effectivePriceINR : live.priceINR;
-            const activePriceUSD = live.effectivePriceUSD !== undefined ? live.effectivePriceUSD : live.priceUSD;
-            const livePriceStr = isIndia
-              ? (activePriceINR === 0 ? 'Free' : `₹${Number(activePriceINR).toLocaleString('en-IN')}`)
-              : (activePriceUSD === 0 ? 'Free' : `$${Number(activePriceUSD).toFixed(2)}`);
-            const badge = live.activeBadge !== undefined ? live.activeBadge : (live.badge !== undefined ? live.badge : b.badge);
-            return {
-              ...b,
-              name: live.name || b.name,
-              subtitle: live.subtitle || b.subtitle,
-              price: livePriceStr,
-              badge: badge || '',
-              minutes: live.minutes || b.minutes,
-              minutesLabel: `${live.minutes || b.minutes} min ${b.id === 'trial' ? '(one-time trial)' : '/ month'}`,
-            };
-          })
-        );
-      })
-      .catch((err) => console.log('[PlanSelection] Live plans fallback notice:', err.message));
+    const fetchLivePlans = () => {
+      fetch(`${API_URL}/api/plans?_t=${Date.now()}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (!isMounted || !data?.ok || !data?.plans) return;
+          const p = data.plans;
+          setBundles((prev) =>
+            prev.map((b) => {
+              const live = p[b.id];
+              if (!live) return b;
+              const activePriceINR = live.effectivePriceINR !== undefined ? live.effectivePriceINR : live.priceINR;
+              const activePriceUSD = live.effectivePriceUSD !== undefined ? live.effectivePriceUSD : live.priceUSD;
+              const origPriceINR = live.originalPriceINR !== undefined ? live.originalPriceINR : live.priceINR;
+              const origPriceUSD = live.originalPriceUSD !== undefined ? live.originalPriceUSD : live.priceUSD;
+
+              const livePriceStr = isIndia
+                ? (activePriceINR === 0 ? 'Free' : `₹${Number(activePriceINR).toLocaleString('en-IN')}`)
+                : (activePriceUSD === 0 ? 'Free' : `$${Number(activePriceUSD).toFixed(2)}`);
+
+              const hasDiscount = isIndia
+                ? (Number(origPriceINR) > Number(activePriceINR) && Number(activePriceINR) > 0)
+                : (Number(origPriceUSD) > Number(activePriceUSD) && Number(activePriceUSD) > 0);
+
+              const origPriceStr = hasDiscount
+                ? (isIndia ? `₹${Number(origPriceINR).toLocaleString('en-IN')}` : `$${Number(origPriceUSD).toFixed(2)}`)
+                : undefined;
+
+              const badge = live.activeBadge !== undefined ? live.activeBadge : (live.badge !== undefined ? live.badge : b.badge);
+              return {
+                ...b,
+                name: live.name || b.name,
+                subtitle: live.subtitle || b.subtitle,
+                price: livePriceStr,
+                originalPrice: origPriceStr,
+                badge: badge || '',
+                minutes: live.minutes || b.minutes,
+                minutesLabel: `${live.minutes || b.minutes} min ${b.id === 'trial' ? '(one-time trial)' : '/ month'}`,
+              };
+            })
+          );
+        })
+        .catch((err) => console.log('[PlanSelection] Live plans fallback notice:', err.message));
+    };
+
+    fetchLivePlans();
+    // Live real-time sync with admin pricing: auto-polls every 3 seconds while screen is open
+    const interval = setInterval(fetchLivePlans, 3000);
     return () => {
       isMounted = false;
+      clearInterval(interval);
     };
   }, []);
 
@@ -442,14 +463,21 @@ export function PlanSelectionScreen({ onContinue, onLoginPress }: PlanSelectionS
                       },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.pricePillText,
-                        isActive && { color: bundle.accentColor },
-                      ]}
-                    >
-                      {bundle.price}{bundle.billingPeriod}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      {bundle.originalPrice && (
+                        <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.45)', textDecorationLine: 'line-through' }}>
+                          {bundle.originalPrice}
+                        </Text>
+                      )}
+                      <Text
+                        style={[
+                          styles.pricePillText,
+                          isActive && { color: bundle.accentColor },
+                        ]}
+                      >
+                        {bundle.price}{bundle.billingPeriod}
+                      </Text>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>

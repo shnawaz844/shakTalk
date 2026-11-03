@@ -109,42 +109,45 @@ function evaluateDiscount(plan) {
   const sellINR = Number(plan.priceINR);
   const sellUSD = Number(plan.priceUSD);
 
-  if (!plan.discountActive) {
-    return {
-      ...plan,
-      isCurrentlyDiscounted: false,
-      effectivePriceINR: origINR,
-      effectivePriceUSD: origUSD,
-      activeBadge: '',
-    };
+  // If a time-limited promotional schedule is active, verify date range
+  if (plan.discountActive) {
+    const now = Date.now();
+    const start = plan.discountStartDate ? new Date(plan.discountStartDate).getTime() : null;
+    const end = plan.discountEndDate ? new Date(plan.discountEndDate).getTime() : null;
+
+    let inRange = true;
+    if (start && !isNaN(start) && now < start) inRange = false;
+    if (end && !isNaN(end) && now > end) inRange = false;
+
+    if (inRange) {
+      return {
+        ...plan,
+        isCurrentlyDiscounted: true,
+        effectivePriceINR: sellINR,
+        effectivePriceUSD: sellUSD,
+        activeBadge: plan.badge || (origINR > sellINR ? `${Math.round((1 - sellINR / origINR) * 100)}% OFF` : 'SPECIAL DISCOUNT'),
+      };
+    } else {
+      // Promotion expired or not yet started: revert to base/strikethrough price
+      return {
+        ...plan,
+        isCurrentlyDiscounted: false,
+        effectivePriceINR: origINR,
+        effectivePriceUSD: origUSD,
+        activeBadge: '',
+      };
+    }
   }
 
-  const now = Date.now();
-  const start = plan.discountStartDate ? new Date(plan.discountStartDate).getTime() : null;
-  const end = plan.discountEndDate ? new Date(plan.discountEndDate).getTime() : null;
-
-  let inRange = true;
-  if (start && !isNaN(start) && now < start) inRange = false;
-  if (end && !isNaN(end) && now > end) inRange = false;
-
-  if (inRange) {
-    return {
-      ...plan,
-      isCurrentlyDiscounted: true,
-      effectivePriceINR: sellINR,
-      effectivePriceUSD: sellUSD,
-      activeBadge: plan.badge || 'SPECIAL DISCOUNT',
-    };
-  } else {
-    // Automatically expired or scheduled for future
-    return {
-      ...plan,
-      isCurrentlyDiscounted: false,
-      effectivePriceINR: origINR,
-      effectivePriceUSD: origUSD,
-      activeBadge: '',
-    };
-  }
+  // Standard pricing: Selling Price is always the effective customer price
+  const hasStrikethrough = origINR > sellINR && sellINR > 0;
+  return {
+    ...plan,
+    isCurrentlyDiscounted: hasStrikethrough,
+    effectivePriceINR: sellINR,
+    effectivePriceUSD: sellUSD,
+    activeBadge: hasStrikethrough ? (plan.badge || `${Math.round((1 - sellINR / origINR) * 100)}% OFF`) : (plan.badge || ''),
+  };
 }
 
 // ── Plans Management ────────────────────────────────────────────────────────
