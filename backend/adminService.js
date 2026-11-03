@@ -216,10 +216,7 @@ async function updatePlan(planId, updates) {
   return updatedPlan;
 }
 
-// ── Admin Auth ──────────────────────────────────────────────────────────────
 // ── Database-Backed Admin Authentication ──────────────────────────────────────
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'shaktalk2026admin';
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || 'shak_admin_secret_token_98765';
 
 /**
  * PBKDF2 Password Hashing (Cryptographically Secure)
@@ -235,8 +232,6 @@ function hashPassword(password, salt) {
  */
 function verifyPassword(password, storedHash, salt) {
   if (!storedHash || !password) return false;
-  // Fallback for plain text stored during test migrations without salt
-  if (!salt && storedHash === password) return true;
   if (!salt) return false;
   try {
     const hash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
@@ -247,17 +242,20 @@ function verifyPassword(password, storedHash, salt) {
 }
 
 /**
- * Authenticates admin via Supabase `admin_users` table with fallback
+ * Authenticates admin directly via Supabase `admin_users` table
  */
 async function loginAdmin({ identifier, password }) {
   if (!password) {
     return { ok: false, error: 'Password is required' };
   }
 
-  const ident = (identifier || 'admin').trim();
+  const ident = (identifier || '').trim();
+  if (!ident) {
+    return { ok: false, error: 'Username or email is required' };
+  }
 
   try {
-    // 1. Attempt query from Supabase admin_users table
+    // Query directly from Supabase admin_users table
     const { data: users, error } = await supabase
       .from('admin_users')
       .select('*')
@@ -265,74 +263,60 @@ async function loginAdmin({ identifier, password }) {
       .eq('is_active', true)
       .limit(1);
 
-    if (!error && users && users.length > 0) {
-      const user = users[0];
-      const isValid = verifyPassword(password, user.password_hash, user.password_salt);
-      if (!isValid) {
-        return { ok: false, error: 'Invalid admin username or password' };
-      }
-
-      // Generate cryptographically secure session token
-      const sessionToken = 'shak_adm_' + crypto.randomBytes(24).toString('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7 days
-
-      await supabase
-        .from('admin_users')
-        .update({
-          session_token: sessionToken,
-          token_expires_at: expiresAt,
-          last_login: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      return {
-        ok: true,
-        token: sessionToken,
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role || 'superadmin',
-        },
-      };
+    if (error) {
+      console.error('[adminService] Supabase admin_users query error:', error.message);
+      return { ok: false, error: 'Database authentication service unavailable' };
     }
-  } catch (dbErr) {
-    console.warn('[adminService] Supabase admin_users lookup note:', dbErr.message);
-  }
 
-  // 2. Fallback check (for bootstrap or before table migration is executed)
-  if (password === ADMIN_PASSWORD) {
+    if (!users || users.length === 0) {
+      return { ok: false, error: 'Invalid admin username or password' };
+    }
+
+    const user = users[0];
+    const isValid = verifyPassword(password, user.password_hash, user.password_salt);
+    if (!isValid) {
+      return { ok: false, error: 'Invalid admin username or password' };
+    }
+
+    // Generate cryptographically secure session token and persist to database
+    const sessionToken = 'shak_adm_' + crypto.randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(); // 7-day session
+
+    await supabase
+      .from('admin_users')
+      .update({
+        session_token: sessionToken,
+        token_expires_at: expiresAt,
+        last_login: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+
     return {
       ok: true,
-      token: ADMIN_TOKEN,
+      token: sessionToken,
       user: {
-        username: ident || 'admin',
-        email: 'admin@shaktalk.com',
-        role: 'superadmin',
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role || 'superadmin',
       },
     };
+  } catch (dbErr) {
+    console.error('[adminService] Supabase admin_users error:', dbErr.message);
+    return { ok: false, error: 'Authentication error' };
   }
-
-  return { ok: false, error: 'Invalid admin credentials' };
 }
 
 /**
- * Verifies admin session token or credentials
- * Returns user object if valid, false/null otherwise.
+ * Verifies admin session token directly against active sessions in Supabase
+ * Returns database user object if valid, false otherwise.
  */
-async function verifyAdmin(authHeader, password) {
-  // If direct password provided
-  if (password) {
-    const res = await loginAdmin({ identifier: 'admin', password });
-    return res.ok ? res.user : false;
-  }
-
+async function verifyAdmin(authHeader) {
   if (!authHeader) return false;
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!token) return false;
 
-  // 1. Check against active sessions in Supabase admin_users table
   try {
     const { data: users, error } = await supabase
       .from('admin_users')
@@ -344,21 +328,12 @@ async function verifyAdmin(authHeader, password) {
     if (!error && users && users.length > 0) {
       const u = users[0];
       if (u.token_expires_at && new Date(u.token_expires_at) < new Date()) {
-        return false; // Token expired
+        return false; // Session expired
       }
       return u;
     }
   } catch (err) {
-    // Database table may not exist yet
-  }
-
-  // 2. Fallback check for static admin token or password
-  if (token === ADMIN_TOKEN || token === ADMIN_PASSWORD) {
-    return {
-      username: 'admin',
-      email: 'admin@shaktalk.com',
-      role: 'superadmin',
-    };
+    console.warn('[adminService] Token verification database check warning:', err.message);
   }
 
   return false;
@@ -537,7 +512,5 @@ module.exports = {
   hashPassword,
   grantUserPlan,
   listUsers,
-  ADMIN_PASSWORD,
-  ADMIN_TOKEN,
 };
 
