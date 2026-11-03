@@ -60,7 +60,9 @@ export function AuthScreen() {
       setErrorMsg(null);
 
       const startFlow = strategy === 'google' ? startGoogleFlow : startAppleFlow;
-      const redirectUrl = Linking.createURL('oauth-callback', { scheme: APP_NAME_LOWER });
+      const redirectUrl = Platform.OS === 'web'
+        ? (typeof window !== 'undefined' ? (window.location.origin + '/oauth-callback') : Linking.createURL('oauth-callback'))
+        : Linking.createURL('oauth-callback', { scheme: APP_NAME_LOWER });
 
       const result = await startFlow({ redirectUrl });
       const { createdSessionId, setActive, signIn, signUp } = result;
@@ -73,8 +75,18 @@ export function AuthScreen() {
         setErrorMsg('Sign in was cancelled.');
       }
     } catch (err: any) {
-      const msg = err?.errors?.[0]?.message ?? err?.message ?? 'OAuth failed';
-      setErrorMsg(msg);
+      console.error('OAuth error:', JSON.stringify(err, null, 2));
+      const paramName = err?.errors?.[0]?.meta?.paramName;
+      const code = err?.errors?.[0]?.code;
+      const rawMsg = err?.errors?.[0]?.longMessage || err?.errors?.[0]?.message || err?.message || 'OAuth failed';
+
+      if (strategy === 'apple' && (paramName === 'strategy' || code === 'form_param_format_invalid' || rawMsg.toLowerCase().includes('invalid'))) {
+        setErrorMsg('Apple Sign-In is not enabled yet in your Clerk Dashboard. Go to Clerk Dashboard → Social Connections → Enable Apple.');
+      } else if (rawMsg === 'is invalid') {
+        setErrorMsg((paramName ? paramName + ' ' : '') + 'is invalid. Please check your Clerk authentication settings.');
+      } else {
+        setErrorMsg(rawMsg);
+      }
     } finally {
       setLoading(false);
     }

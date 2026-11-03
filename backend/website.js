@@ -179,6 +179,7 @@ function serveWebsite(req, res) {
     return true;
   }
   if (rendered[pathname]) return send(200, 'text/html; charset=utf-8', rendered[pathname], 'public, max-age=300');
+  if (pathname === '/favicon.ico') pathname = '/favicon.png';
   if (files[pathname]) return send(200, STATIC[pathname], files[pathname], 'public, max-age=86400');
   if (pathname === '/.well-known/apple-app-site-association' || pathname === '/apple-app-site-association') {
     return send(200, 'application/json', JSON.stringify(appleAppSiteAssociation()), 'public, max-age=3600');
