@@ -65,17 +65,19 @@ const HEAD = `  <meta charset="utf-8">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/site.css">`;
+  <link rel="stylesheet" href="/site.css?v=6">`;
 
 const HEADER = `<header class="site-header">
   <div class="wrap">
-    <a class="brand" href="/"><img src="/logo.png" alt="" width="36" height="36"><span>Shak<b>Talk</b></span></a>
+    <a class="brand" href="/"><img src="/logo.png" alt="ShakTalk" width="36" height="36"><span>Shak<b>Talk</b></span></a>
     <nav class="nav" aria-label="Main">
+      <a href="/#problem">Why ShakTalk</a>
       <a href="/#how">How it works</a>
-      <a href="/#languages">Languages</a>
-      <a href="/#faq">FAQ</a>
+      <a href="/#industries">Industries</a>
+      <a href="/#offerings">Offerings</a>
+      <a href="/#roadmap">Roadmap</a>
       <a href="/support">Support</a>
-      <a class="btn btn-primary" href="/#get">Get the app</a>
+      <a class="btn btn-primary" href="/#get">Try it now</a>
     </nav>
   </div>
 </header>`;
@@ -117,6 +119,8 @@ const STATIC = {
   '/og.png': 'image/png',
   '/favicon.png': 'image/png',
   '/apple-touch-icon.png': 'image/png',
+  '/hero-phones.png': 'image/png',
+  '/how-qr.png': 'image/png',
 };
 
 const rendered = {};
@@ -178,9 +182,30 @@ function serveWebsite(req, res) {
     res.end();
     return true;
   }
-  if (rendered[pathname]) return send(200, 'text/html; charset=utf-8', rendered[pathname], 'public, max-age=300');
+  const isDev = process.env.NODE_ENV !== 'production';
+
+  if (PAGES[pathname]) {
+    try {
+      const file = PAGES[pathname];
+      const html = isDev
+        ? render(fs.readFileSync(path.join(PUBLIC_DIR, file), 'utf8'))
+        : (rendered[pathname] || render(fs.readFileSync(path.join(PUBLIC_DIR, file), 'utf8')));
+      return send(200, 'text/html; charset=utf-8', html, isDev ? 'no-cache' : 'public, max-age=300');
+    } catch (e) {
+      if (rendered[pathname]) return send(200, 'text/html; charset=utf-8', rendered[pathname], 'public, max-age=300');
+    }
+  }
   if (pathname === '/favicon.ico') pathname = '/favicon.png';
-  if (files[pathname]) return send(200, STATIC[pathname], files[pathname], 'public, max-age=86400');
+  if (STATIC[pathname]) {
+    try {
+      const content = isDev
+        ? fs.readFileSync(path.join(PUBLIC_DIR, pathname.slice(1)))
+        : (files[pathname] || fs.readFileSync(path.join(PUBLIC_DIR, pathname.slice(1))));
+      return send(200, STATIC[pathname], content, isDev ? 'no-cache' : 'public, max-age=86400');
+    } catch (e) {
+      if (files[pathname]) return send(200, STATIC[pathname], files[pathname], 'public, max-age=86400');
+    }
+  }
   if (pathname === '/.well-known/apple-app-site-association' || pathname === '/apple-app-site-association') {
     return send(200, 'application/json', JSON.stringify(appleAppSiteAssociation()), 'public, max-age=3600');
   }
