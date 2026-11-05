@@ -2,218 +2,415 @@
 <html lang="en">
 <head>
 {{HEAD}}
-  <title>ShakTalk – Real-time voice translation for phone calls</title>
-  <meta name="description" content="Call anyone in another language. ShakTalk translates your voice live during the call, with subtitles, so you both speak your own language. Hindi, English, Arabic, Mandarin and more.">
+  <title>ShakTalk – Help understand better, Break the barrier</title>
+  <meta name="description" content="Speak your language, they hear theirs. Real-time two-way voice translation for business calls, international trade, travel, and meetings.">
   <meta property="og:title" content="ShakTalk – Speak your language. They hear theirs.">
-  <meta property="og:description" content="Live voice translation for phone calls between people who don't share a language.">
+  <meta property="og:description" content="Live two-way voice translation, on a call or across the table. No interpreter, no gadget, no typing.">
 </head>
 <body>
 {{HEADER}}
 
 <main>
+  <!-- HERO SECTION (Slide 1) -->
   <section class="hero">
     <div class="wrap">
-      <div>
-        <span class="eyebrow"><span class="dot"></span>Live voice translation for calls</span>
-        <h1>Speak your language.<br><em>They hear theirs.</em></h1>
-        <p class="tagline">Break the language barrier on every call, wherever in the world they are.</p>
-        <p class="lead">ShakTalk translates your call as you talk. You speak Hindi, your partner hears English, and both of you see live subtitles. No interpreter, no typing.</p>
-        {{STORE_BUTTONS}}
-        <p class="hero-note">Works between iPhone and Android. Both people use the ShakTalk app.</p>
+      <div class="hero-content">
+        <h1 class="hero-brand-name">ShakTalk</h1>
+        <div class="hero-tagline">
+          <span class="tagline-p1">Help understand better,</span><br>
+          <span class="accent-green">Break the barrier</span>
+        </div>
+        <p class="hero-subtext">Speak your language, they hear theirs</p>
+        <div class="hero-actions">
+          {{STORE_BUTTONS}}
+        </div>
+        <p class="hero-note">Works between iPhone and Android. Connect instantly with room code or QR scan.</p>
       </div>
 
-      <div class="phone" role="img" aria-label="A ShakTalk call: the partner's Hindi is shown and spoken in English">
-        <div class="screen">
-          <div class="notch"></div>
-          <div class="call-top">
-            <div class="who">Rahul · Supplier</div>
-            <div class="langs">Hindi ⇄ English</div>
-            <div class="timer">04:12</div>
-          </div>
-          <div class="wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span></div>
-          <div class="bubbles">
-            <div class="bubble partner">
-              <div class="orig">माल कल सुबह तक पहुँच जाएगा।</div>
-              The goods will arrive by tomorrow morning.
-            </div>
-            <div class="bubble me">
-              <div class="orig">Great. Can you send the invoice today?</div>
-              बढ़िया। क्या आप आज बिल भेज सकते हैं?
-            </div>
-            <div class="bubble partner">
-              <div class="orig">हाँ, एक घंटे में भेज देता हूँ।</div>
-              Yes, I'll send it within an hour.
-            </div>
-          </div>
-          <div class="controls" aria-hidden="true"><i></i><i class="end"></i><i></i></div>
+      <!-- Slide 1 Actual Presentation Phone Image -->
+      <div class="hero-visual">
+        <div class="hero-img-glow"></div>
+        <div class="hero-image-wrap">
+          <img src="/hero-phones.png" alt="ShakTalk Live Calling - Mr. Chen and Rahul live two-way translation call" class="hero-image" width="1050" height="940">
+          
+          <!-- Single animated dotted connecting call line with motion -->
+          <svg class="hero-call-anim" viewBox="0 0 1050 940" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <linearGradient id="beamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#2FE0A8"/>
+                <stop offset="50%" stop-color="#A5FFE4"/>
+                <stop offset="100%" stop-color="#2FE0A8"/>
+              </linearGradient>
+              <filter id="lineGlow" x="-20%" y="-40%" width="140%" height="180%">
+                <feGaussianBlur stdDeviation="3" result="glow"/>
+                <feMerge>
+                  <feMergeNode in="glow"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            </defs>
+
+            <!-- Strictly 1 single connecting dotted curved line with motion -->
+            <path d="M 303 218 C 390 0 660 0 747 218" class="anim-dotted-arch" stroke="url(#beamGrad)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="9 13" fill="none" filter="url(#lineGlow)" />
+
+            <!-- Avatar Concentric Ring Pulse Effect for Mr. Chen (303, 346) -->
+            <g filter="url(#lineGlow)">
+              <circle cx="303" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                <animate attributeName="r" values="44; 86" dur="2.4s" repeatCount="indefinite" />
+                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" repeatCount="indefinite" />
+                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="303" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                <animate attributeName="r" values="44; 86" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+              </circle>
+            </g>
+
+            <!-- Avatar Concentric Ring Pulse Effect for Rahul (747, 346) -->
+            <g filter="url(#lineGlow)">
+              <circle cx="747" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                <animate attributeName="r" values="44; 86" dur="2.4s" repeatCount="indefinite" />
+                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" repeatCount="indefinite" />
+                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="747" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                <animate attributeName="r" values="44; 86" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+              </circle>
+            </g>
+          </svg>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="how" class="section-alt">
+  <!-- SECTION 2: THE PROBLEM (Slide 2) -->
+  <section id="problem" class="section-problem">
     <div class="wrap">
-      <div class="section-head">
-        <div class="kicker">How it works</div>
-        <h2>A translated call in three steps</h2>
-        <p>As simple as a normal call. ShakTalk sits in the middle and translates both ways.</p>
+      <div class="section-head text-center">
+        <h2>Business across languages still runs on workarounds</h2>
+        <p class="sub-head">Every one of them slows the deal down</p>
       </div>
+
       <div class="grid grid-3">
-        <div class="card">
-          <div class="step-num">1</div>
-          <h3>Pick your language</h3>
-          <p>Choose the language you will speak. Your partner chooses theirs on their own phone.</p>
+        <div class="card problem-card">
+          <div class="problem-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+          </div>
+          <h3>Interpreters</h3>
+          <p>Costly, must be booked, rarely there at short notice</p>
         </div>
-        <div class="card">
-          <div class="step-num">2</div>
-          <h3>Share the invite</h3>
-          <p>Start a call and send the link on WhatsApp, or let your partner scan the QR code.</p>
+
+        <div class="card problem-card">
+          <div class="problem-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5l-9 5.2-9-5.2V7.5l9-5.2 9 5.2v9zm-9-13L4.5 8 12 12.3 19.5 8 12 3.5zM4 9.4v6.2l7 4v-6.2L4 9.4zm16 0l-7 4v6.2l7-4V9.4z"/></svg>
+          </div>
+          <h3>Translation gadgets</h3>
+          <p>An extra device that handles one sentence at a time</p>
         </div>
-        <div class="card">
-          <div class="step-num">3</div>
-          <h3>Just talk</h3>
-          <p>Each of you speaks normally and hears the other in your own language, with subtitles on screen.</p>
+
+        <div class="card problem-card">
+          <div class="problem-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/><circle cx="12" cy="17" r="1"/></svg>
+          </div>
+          <h3>Passing the phone</h3>
+          <p>Slow, awkward, and the conversation loses its flow</p>
+        </div>
+      </div>
+
+      <!-- Stat Callouts (Slide 2) -->
+      <div class="stats-banner">
+        <div class="stat-item">
+          <div class="stat-number">$79.4B</div>
+          <div class="stat-desc">India imports from China, Jan–Jun 2026</div>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <div class="stat-number">245,000</div>
+          <div class="stat-desc">foreign buyers at the spring 2026 Canton Fair, first two phases</div>
+        </div>
+      </div>
+      <div class="stats-source">Sources: India Sea Trade News (Aug 2026); China Daily (Apr 2026)</div>
+    </div>
+  </section>
+
+  <!-- SECTION 3: HOW IT WORKS (Slide 3) -->
+  <section id="how" class="section-solution">
+    <div class="wrap">
+      <div class="solution-grid">
+        <div class="solution-text">
+          <div class="kicker">How it works</div>
+          <h2>Each person speaks their language.<br><span class="accent-text">Both hear their own.</span></h2>
+          <p class="lead">Live two-way voice translation, on a call or across the table. No interpreter, no gadget, no typing.</p>
+
+          <div class="steps-list">
+            <div class="step-box">
+              <div class="step-badge">1</div>
+              <div>
+                <h3>Pick your language</h3>
+                <p>17 languages, including English, Hindi, Arabic, Mandarin, Spanish</p>
+              </div>
+            </div>
+
+            <div class="step-box">
+              <div class="step-badge">2</div>
+              <div>
+                <h3>Call, or show your QR</h3>
+                <p>Share the invite on WhatsApp, or let them scan face to face</p>
+              </div>
+            </div>
+
+            <div class="step-box">
+              <div class="step-badge">3</div>
+              <div>
+                <h3>Just talk</h3>
+                <p>Each side hears the other in their own language, with live subtitles</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 3 Actual Presentation QR Image -->
+        <div class="qr-mockup-wrapper">
+          <div class="qr-img-glow"></div>
+          <div class="solution-image-wrap">
+            <img src="/how-qr.png" alt="ShakTalk Session QR Code - Scan to join room code P8FYR6" class="solution-image" width="480" height="860">
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="features">
+  <!-- SECTION 4: 12 KEY INDUSTRIES (Slide 4) -->
+  <section id="industries" class="section-industries">
     <div class="wrap">
-      <div class="section-head">
-        <div class="kicker">Features</div>
-        <h2>Built for real conversations</h2>
-        <p>Made for calls where the details matter: prices, dates, directions, instructions.</p>
+      <div class="section-head text-center">
+        <div class="kicker">Who it's for</div>
+        <h2>Built for people who do business across languages</h2>
+        <p class="sub-head">Anyone who talks to customers, partners or staff in another language</p>
       </div>
-      <div class="grid grid-3 features">
-        <div class="card">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg></div>
-          <h3>Live voice translation</h3>
-          <p>Translation starts while you are still speaking, so the call keeps its natural pace.</p>
+
+      <div class="industry-grid">
+        <!-- 1 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></div>
+          <h3>Importers and traders</h3>
+          <p>Supplier calls, factory visits, trade fairs</p>
         </div>
-        <div class="card">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="7" y1="11" x2="13" y2="11"/><line x1="7" y1="15" x2="17" y2="15"/></svg></div>
-          <h3>Live subtitles</h3>
-          <p>See what was said and its translation on screen, so nothing is missed in a noisy place.</p>
+
+        <!-- 2 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>
+          <h3>Exporters</h3>
+          <p>Selling into the Gulf, India, China, Europe</p>
         </div>
-        <div class="card">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg></div>
-          <h3>A clear, steady voice</h3>
-          <p>Translations are spoken in one natural voice that matches the speaker's gender, for the whole call.</p>
+
+        <!-- 3 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg></div>
+          <h3>Gulf business</h3>
+          <p>Arab clients, partners and officials</p>
         </div>
-        <div class="card">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-          <h3>Conversation history</h3>
-          <p>Every call keeps a transcript in both languages, so you can check what was agreed.</p>
+
+        <!-- 4 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a9 9 0 0 0-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7a9 9 0 0 0-9-9z"/></svg></div>
+          <h3>Call centres and BPO</h3>
+          <p>Agents calling customers in any region</p>
         </div>
-        <div class="card">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></div>
-          <h3>iPhone and Android</h3>
-          <p>Call across platforms. Join with one tap from a WhatsApp link or a QR code.</p>
+
+        <!-- 5 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z"/></svg></div>
+          <h3>Hotels and tourism</h3>
+          <p>Guests, tour desks and airport counters</p>
         </div>
-        <div class="card">
-          <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
-          <h3>Private by design</h3>
-          <p>Only the two people in the call hear it. Calls are encrypted in transit, and you can delete your data at any time.</p>
+
+        <!-- 6 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z"/></svg></div>
+          <h3>Hospitals and clinics</h3>
+          <p>International patients and families</p>
+        </div>
+
+        <!-- 7 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>
+          <h3>Real estate</h3>
+          <p>Foreign buyers, tenants and investors</p>
+        </div>
+
+        <!-- 8 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 1c-2.76 0-5 2.24-5 5v3H7V6c0-2.76-2.24-5-5-5S-3 3.24-3 6v14h24V6c0-2.76-2.24-5-5-5zM4 18H2v-2h2v2zm0-4H2v-2h2v2zm0-4H2V8h2v2zm16 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V8h2v2z"/></svg></div>
+          <h3>Logistics and freight</h3>
+          <p>Drivers, ports and agents across borders</p>
+        </div>
+
+        <!-- 9 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></div>
+          <h3>Recruitment and HR</h3>
+          <p>Interviews with candidates abroad</p>
+        </div>
+
+        <!-- 10 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg></div>
+          <h3>Education</h3>
+          <p>International students and their parents</p>
+        </div>
+
+        <!-- 11 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L2 12h3v8h14v-8h3L12 3zm1 14h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></div>
+          <h3>Construction and factories</h3>
+          <p>Supervisors and multilingual crews</p>
+        </div>
+
+        <!-- 12 -->
+        <div class="card industry-card">
+          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>
+          <h3>Business travellers</h3>
+          <p>Meetings and daily needs abroad</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="languages" class="section-alt">
+  <!-- SECTION 5: START TODAY, GROW WITH US & ROADMAP (Slide 5) -->
+  <section id="offerings" class="section-roadmap">
     <div class="wrap">
-      <div class="section-head">
+      <div class="section-head text-center">
+        <div class="kicker">Programmes & Expansion</div>
+        <h2>Start today, grow with us</h2>
+        <p class="sub-head">Tailored for teams of any size — from standalone individuals to enterprise workflows</p>
+      </div>
+
+      <div class="grid grid-3">
+        <div id="pilot" class="card pilot-card">
+          <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></div>
+          <h3>Company pilot</h3>
+          <p>Your team on ShakTalk for a month, with onboarding and a usage review</p>
+        </div>
+
+        <div class="card pilot-card">
+          <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>
+          <h3>Industry programmes</h3>
+          <p>Trade fairs, sourcing desks, hotels, hospitals and call centres, set up with you</p>
+        </div>
+
+        <div class="card pilot-card">
+          <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
+          <h3>For individuals</h3>
+          <p>Anyone on your team can install it and start talking today</p>
+        </div>
+      </div>
+
+      <!-- Roadmap Pipeline (Slide 5) -->
+      <div id="roadmap" class="roadmap-block">
+        <div class="roadmap-kicker">WHERE WE ARE GOING</div>
+        <div class="roadmap-pipeline">
+          <div class="roadmap-node active">
+            <div class="node-badge">NOW</div>
+            <div class="node-title">Live voice</div>
+            <div class="node-desc">on calls and in person</div>
+          </div>
+          <div class="roadmap-arrow">→</div>
+          <div class="roadmap-node">
+            <div class="node-badge">NEXT</div>
+            <div class="node-title">Your own voice</div>
+            <div class="node-desc">team accounts</div>
+          </div>
+          <div class="roadmap-arrow">→</div>
+          <div class="roadmap-node">
+            <div class="node-badge">CHAT</div>
+            <div class="node-title">Chat</div>
+            <div class="node-desc">Translated messages and voice notes</div>
+          </div>
+          <div class="roadmap-arrow">→</div>
+          <div class="roadmap-node">
+            <div class="node-badge">MEETINGS</div>
+            <div class="node-title">Meetings</div>
+            <div class="node-desc">Group calls in everyone's language</div>
+          </div>
+          <div class="roadmap-arrow">→</div>
+          <div class="roadmap-node">
+            <div class="node-badge">PLATFORM</div>
+            <div class="node-title">Platform</div>
+            <div class="node-desc">File sharing and business integrations</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 6: SUPPORTED LANGUAGES -->
+  <section id="languages" class="section-languages">
+    <div class="wrap">
+      <div class="section-head text-center">
         <div class="kicker">Languages</div>
         <h2>Talk across 17 languages today</h2>
-        <p>Any language below can be paired with any other. More languages are being added.</p>
+        <p class="sub-head">Any language below can be paired with any other</p>
       </div>
       <div class="chips">
         <div class="chip">English</div>
         <div class="chip">Hindi<span>हिन्दी</span></div>
-        <div class="chip">Urdu<span>اردو</span></div>
         <div class="chip">Arabic<span>العربية</span></div>
         <div class="chip">Mandarin<span>中文</span></div>
-        <div class="chip">Cantonese<span>粵語</span></div>
-        <div class="chip">Russian<span>Русский</span></div>
-        <div class="chip">Ukrainian<span>Українська</span></div>
         <div class="chip">Spanish<span>Español</span></div>
         <div class="chip">French<span>Français</span></div>
         <div class="chip">German<span>Deutsch</span></div>
-        <div class="chip">Italian<span>Italiano</span></div>
-        <div class="chip">Romanian<span>Română</span></div>
-        <div class="chip">Turkish<span>Türkçe</span></div>
-        <div class="chip">Persian<span>فارسی</span></div>
         <div class="chip">Japanese<span>日本語</span></div>
         <div class="chip">Korean<span>한국어</span></div>
-        <div class="chip more">More coming soon</div>
+        <div class="chip">Urdu<span>اردو</span></div>
+        <div class="chip">Russian<span>Русский</span></div>
+        <div class="chip">Cantonese<span>粵語</span></div>
+        <div class="chip">Italian<span>Italiano</span></div>
+        <div class="chip">Portuguese<span>Português</span></div>
+        <div class="chip">Turkish<span>Türkçe</span></div>
+        <div class="chip">Romanian<span>Română</span></div>
+        <div class="chip">Persian<span>فارسی</span></div>
+        <div class="chip more">+ More coming soon</div>
       </div>
     </div>
   </section>
 
-  <section id="uses">
+  <!-- SECTION 7: LET'S TRY IT RIGHT NOW (Slide 6) -->
+  <section id="get" class="section-cta-final">
     <div class="wrap">
-      <div class="section-head">
-        <div class="kicker">Who it's for</div>
-        <h2>For every call that needs an interpreter</h2>
-      </div>
-      <div class="grid grid-3">
-        <div class="card">
-          <h3>Business and trade</h3>
-          <p>Talk to suppliers and buyers abroad: negotiate prices, confirm orders and delivery dates in your own language.</p>
-        </div>
-        <div class="card">
-          <h3>Teams and workplaces</h3>
-          <p>Give instructions to staff and colleagues who speak another language, and be sure they understood.</p>
-        </div>
-        <div class="card">
-          <h3>Family and travel</h3>
-          <p>Speak with relatives, landlords, drivers or doctors when you don't share a language.</p>
-        </div>
-      </div>
-    </div>
-  </section>
+      <div class="cta-banner">
+        <h2>Let's try it right now</h2>
+        <p class="cta-subtitle">Install ShakTalk, pick your language, and call us in yours.</p>
 
-  <section id="faq" class="section-alt">
-    <div class="wrap">
-      <div class="section-head">
-        <div class="kicker">FAQ</div>
-        <h2>Questions, answered</h2>
-      </div>
-      <div class="faq">
-        <details>
-          <summary>Does the other person need the app?</summary>
-          <p>Yes. Both people install ShakTalk. When you start a call, you can send the invite link on WhatsApp; tapping it opens the call in the app, or takes your partner to the store to install it first.</p>
-        </details>
-        <details>
-          <summary>How fast is the translation?</summary>
-          <p>Translation starts while the speaker is still talking, usually within one to two seconds, depending on the network and the languages.</p>
-        </details>
-        <details>
-          <summary>How accurate is it?</summary>
-          <p>ShakTalk uses advanced AI speech translation and is accurate for everyday and business conversation. Like any AI, it can make mistakes, so check important figures on screen and don't rely on it alone for medical, legal or emergency situations.</p>
-        </details>
-        <details>
-          <summary>Does it work with headphones and Bluetooth?</summary>
-          <p>Yes. Use the loudspeaker, the earpiece, wired earphones or a Bluetooth headset. Headphones give the clearest result in noisy places.</p>
-        </details>
-        <details>
-          <summary>What happens to my voice and transcripts?</summary>
-          <p>Your voice is processed live to produce the translation. Text transcripts are saved to your conversation history; in Turn-by-Turn mode, audio recordings are also saved so you can replay them. You can delete your account and data at any time. See our <a href="/privacy">Privacy Policy</a>.</p>
-        </details>
-        <details>
-          <summary>How much does it cost?</summary>
-          <p>You can download ShakTalk and start calling for free. Plans for heavier use are shown in the app.</p>
-        </details>
-      </div>
-    </div>
-  </section>
+        <div class="grid grid-3 cta-steps">
+          <div class="cta-step-item">
+            <div class="step-num-circle">1</div>
+            <h3>Live demo</h3>
+            <p>A real call in your language, here and now</p>
+          </div>
+          <div class="cta-step-item">
+            <div class="step-num-circle">2</div>
+            <h3>Company pilot</h3>
+            <p>One month for your team, with onboarding</p>
+          </div>
+          <div class="cta-step-item">
+            <div class="step-num-circle">3</div>
+            <h3>Roll out</h3>
+            <p>Across the teams that need it most</p>
+          </div>
+        </div>
 
-  <section id="get">
-    <div class="wrap">
-      <div class="cta">
-        <h2>Your next call, in any language</h2>
-        <p>Download ShakTalk and make your first translated call in under a minute.</p>
-        {{STORE_BUTTONS}}
+        <div class="cta-footer-actions">
+          {{STORE_BUTTONS}}
+          <div class="cta-contact-row">
+            <span>Website: <strong>shaktalk.com</strong></span>
+            <span class="sep">•</span>
+            <span>Support: <a href="mailto:support@shaktalk.com">support@shaktalk.com</a></span>
+          </div>
+        </div>
       </div>
     </div>
   </section>
