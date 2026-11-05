@@ -363,3 +363,130 @@ h2 { font-size: clamp(28px, 4vw, 42px); line-height: 1.2; letter-spacing: -0.8px
 .site-footer nav { display: flex; gap: 22px; flex-wrap: wrap; }
 .site-footer a { color: var(--muted); font-size: 14px; }
 .site-footer a:hover { color: var(--brand); text-decoration: none; }
+
+/* ── DOCUMENT & LEGAL PAGES (Privacy, Terms, Support, Delete Account) ── */
+main.doc {
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 50px 24px 90px;
+  min-height: 65vh;
+}
+
+main.doc h1 {
+  font-size: clamp(34px, 4.5vw, 48px);
+  font-weight: 800;
+  letter-spacing: -1.2px;
+  color: #FFFFFF;
+  margin: 0 0 10px 0;
+}
+
+main.doc .updated {
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+main.doc p {
+  color: #C5D2CD;
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 0 0 18px 0;
+}
+
+main.doc .note {
+  background: rgba(47, 224, 168, 0.08);
+  border-left: 3px solid var(--brand);
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #E2ECE8;
+  font-size: 15.5px;
+  line-height: 1.65;
+  margin: 28px 0 36px;
+}
+
+main.doc h2 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #FFFFFF;
+  margin: 44px 0 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+main.doc h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #FFFFFF;
+  margin: 28px 0 10px;
+}
+
+main.doc ul,
+main.doc ol {
+  color: #C5D2CD;
+  font-size: 16px;
+  line-height: 1.7;
+  padding-left: 24px;
+  margin: 0 0 24px 0;
+}
+
+main.doc li {
+  margin-bottom: 10px;
+}
+
+main.doc li strong {
+  color: #FFFFFF;
+}
+
+main.doc a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity .15s;
+}
+
+main.doc a:hover {
+  opacity: 0.85;
+}
+
+/* Document Tables (e.g. Privacy Policy Table) */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 24px 0 32px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+}
+
+main.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14.5px;
+}
+
+main.doc th {
+  background: rgba(255, 255, 255, 0.04);
+  color: #FFFFFF;
+  font-weight: 700;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+main.doc td {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+  color: #C5D2CD;
+  vertical-align: top;
+  line-height: 1.55;
+}
+
+main.doc tr:last-child td {
+  border-bottom: none;
+}
+
+main.doc tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
