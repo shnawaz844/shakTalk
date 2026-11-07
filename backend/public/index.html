@@ -656,15 +656,16 @@
             </div>
           </div>
 
+          <div class="demo-field">
+            <label for="dm-country">Country *</label>
+            <input id="dm-country" class="modal-input" type="text" required placeholder="e.g. India, UAE, UK">
+          </div>
+
           <div class="demo-grid-2">
             <div class="demo-field">
-              <label for="dm-country">Country *</label>
-              <input id="dm-country" class="modal-input" type="text" required placeholder="e.g. India, UAE, UK">
-            </div>
-            <div class="demo-field">
-              <label for="dm-lang">Language needed *</label>
-              <select id="dm-lang" class="modal-input modal-select" required>
-                <option value="" disabled selected>Select language needed...</option>
+              <label for="dm-my-lang">Your language *</label>
+              <select id="dm-my-lang" class="modal-input modal-select" required>
+                <option value="" disabled selected>Select your language...</option>
                 <option value="English">English</option>
                 <option value="Hindi (हिन्दी)">Hindi (हिन्दी)</option>
                 <option value="Arabic (العربية)">Arabic (العربية)</option>
@@ -682,7 +683,29 @@
                 <option value="Turkish (Türkçe)">Turkish (Türkçe)</option>
                 <option value="Romanian (Română)">Romanian (Română)</option>
                 <option value="Persian / Farsi (فارسی)">Persian / Farsi (فارسی)</option>
-                <option value="All 17 languages">All 17 languages</option>
+              </select>
+            </div>
+            <div class="demo-field">
+              <label for="dm-partner-lang">Opponent language *</label>
+              <select id="dm-partner-lang" class="modal-input modal-select" required>
+                <option value="" disabled selected>Select opponent language...</option>
+                <option value="English">English</option>
+                <option value="Hindi (हिन्दी)">Hindi (हिन्दी)</option>
+                <option value="Arabic (العربية)">Arabic (العربية)</option>
+                <option value="Mandarin Chinese (中文)">Mandarin Chinese (中文)</option>
+                <option value="Cantonese (粵語)">Cantonese (粵語)</option>
+                <option value="Spanish (Español)">Spanish (Español)</option>
+                <option value="French (Français)">French (Français)</option>
+                <option value="German (Deutsch)">German (Deutsch)</option>
+                <option value="Japanese (日本語)">Japanese (日本語)</option>
+                <option value="Korean (한국어)">Korean (한국어)</option>
+                <option value="Urdu (اردو)">Urdu (اردو)</option>
+                <option value="Russian (Русский)">Russian (Русский)</option>
+                <option value="Italian (Italiano)">Italian (Italiano)</option>
+                <option value="Portuguese (Português)">Portuguese (Português)</option>
+                <option value="Turkish (Türkçe)">Turkish (Türkçe)</option>
+                <option value="Romanian (Română)">Romanian (Română)</option>
+                <option value="Persian / Farsi (فارسی)">Persian / Farsi (فارسی)</option>
               </select>
             </div>
           </div>
@@ -902,11 +925,15 @@
           dmSubmitBtn.disabled = true;
           dmSubmitBtn.textContent = 'Scheduling…';
 
+          const myLang = document.getElementById('dm-my-lang').value;
+          const partnerLang = document.getElementById('dm-partner-lang').value;
+          const languagePair = `${myLang} to ${partnerLang}`;
+
           const payload = {
             name: document.getElementById('dm-name').value.trim(),
             company: document.getElementById('dm-company').value.trim(),
             country: document.getElementById('dm-country').value.trim(),
-            languagePair: document.getElementById('dm-lang').value,
+            languagePair: languagePair,
             email: document.getElementById('dm-email').value.trim(),
             phone: document.getElementById('dm-phone').value.trim(),
             date1: document.getElementById('dm-date1').value,
