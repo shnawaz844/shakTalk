@@ -45,7 +45,7 @@
   {{HEADER}}
 
   <main>
-    <!-- HERO SECTION (Slide 1) -->
+    <!-- HERO SECTION (Slide 1) ---->
     <section class="hero">
       <div class="wrap">
         <div class="hero-content">
@@ -599,10 +599,10 @@
         <span class="modal-badge-divider">+</span>
         <span class="modal-badge-icon play-icon" title="Google Play">
           <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path fill="#00D7FE" d="M3.6 2.3c-.3.3-.4.7-.4 1.2v17c0 .5.1.9.4 1.2l9.5-9.7z"/>
-            <path fill="#FFCE00" d="M16.3 15.2 13.1 12l3.2-3.2 3.8 2.2c1.1.6 1.1 1.6 0 2.2z"/>
-            <path fill="#FF3A44" d="M16.3 15.2 13.1 12l-9.5 9.7c.4.4 1 .4 1.7 0z"/>
-            <path fill="#00F076" d="M16.3 8.8 5.3 2.3c-.7-.4-1.3-.4-1.7 0l9.5 9.7z"/>
+            <path fill="#00D7FE" d="M3.6 2.3c-.3.3-.4.7-.4 1.2v17c0 .5.1.9.4 1.2l9.5-9.7z" />
+            <path fill="#FFCE00" d="M16.3 15.2 13.1 12l3.2-3.2 3.8 2.2c1.1.6 1.1 1.6 0 2.2z" />
+            <path fill="#FF3A44" d="M16.3 15.2 13.1 12l-9.5 9.7c.4.4 1 .4 1.7 0z" />
+            <path fill="#00F076" d="M16.3 8.8 5.3 2.3c-.7-.4-1.3-.4-1.7 0l9.5 9.7z" />
           </svg>
         </span>
       </div>
@@ -632,7 +632,8 @@
       <button type="button" class="modal-close" data-close-demo aria-label="Close dialog">✕</button>
       <div class="modal-demo-badge">
         <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" aria-hidden="true">
-          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
+          <path
+            d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
         </svg>
       </div>
       <div id="demo-content-default">
@@ -640,28 +641,31 @@
         <p>See ShakTalk in live action with your team. Pick up to 3 dates that work best for you.</p>
 
         <form class="modal-form demo-form-layout" id="live-demo-form">
-          <input type="text" name="demo_hp_website" id="demo_hp_website" class="sr-only" tabindex="-1" autocomplete="off">
+          <input type="text" name="demo_hp_website" id="demo_hp_website" class="sr-only" tabindex="-1"
+            autocomplete="off">
+
+          <div class="demo-field">
+            <label for="dm-name">Your name *</label>
+            <input id="dm-name" class="modal-input" type="text" required placeholder="e.g. Rahul Sharma"
+              autocomplete="name">
+          </div>
 
           <div class="demo-grid-2">
             <div class="demo-field">
-              <label for="dm-name">Your name *</label>
-              <input id="dm-name" class="modal-input" type="text" required placeholder="e.g. Rahul Sharma" autocomplete="name">
-            </div>
-            <div class="demo-field">
               <label for="dm-company">Company name *</label>
               <input id="dm-company" class="modal-input" type="text" required placeholder="e.g. Apex Global Trade">
+            </div>
+            <div class="demo-field">
+              <label for="dm-country">Country *</label>
+              <input id="dm-country" class="modal-input" type="text" required placeholder="e.g. India, UAE, UK">
             </div>
           </div>
 
           <div class="demo-grid-2">
             <div class="demo-field">
-              <label for="dm-country">Country *</label>
-              <input id="dm-country" class="modal-input" type="text" required placeholder="e.g. India, UAE, UK">
-            </div>
-            <div class="demo-field">
-              <label for="dm-lang">Language needed *</label>
-              <select id="dm-lang" class="modal-input modal-select" required>
-                <option value="" disabled selected>Select language needed...</option>
+              <label for="dm-my-lang">Your language *</label>
+              <select id="dm-my-lang" class="modal-input modal-select" required>
+                <option value="" disabled selected>Select your language...</option>
                 <option value="English">English</option>
                 <option value="Hindi (हिन्दी)">Hindi (हिन्दी)</option>
                 <option value="Arabic (العربية)">Arabic (العربية)</option>
@@ -679,7 +683,29 @@
                 <option value="Turkish (Türkçe)">Turkish (Türkçe)</option>
                 <option value="Romanian (Română)">Romanian (Română)</option>
                 <option value="Persian / Farsi (فارسی)">Persian / Farsi (فارسی)</option>
-                <option value="All 17 languages">All 17 languages</option>
+              </select>
+            </div>
+            <div class="demo-field">
+              <label for="dm-partner-lang">Opponent language *</label>
+              <select id="dm-partner-lang" class="modal-input modal-select" required>
+                <option value="" disabled selected>Select opponent language...</option>
+                <option value="English">English</option>
+                <option value="Hindi (हिन्दी)">Hindi (हिन्दी)</option>
+                <option value="Arabic (العربية)">Arabic (العربية)</option>
+                <option value="Mandarin Chinese (中文)">Mandarin Chinese (中文)</option>
+                <option value="Cantonese (粵語)">Cantonese (粵語)</option>
+                <option value="Spanish (Español)">Spanish (Español)</option>
+                <option value="French (Français)">French (Français)</option>
+                <option value="German (Deutsch)">German (Deutsch)</option>
+                <option value="Japanese (日本語)">Japanese (日本語)</option>
+                <option value="Korean (한국어)">Korean (한국어)</option>
+                <option value="Urdu (اردو)">Urdu (اردو)</option>
+                <option value="Russian (Русский)">Russian (Русский)</option>
+                <option value="Italian (Italiano)">Italian (Italiano)</option>
+                <option value="Portuguese (Português)">Portuguese (Português)</option>
+                <option value="Turkish (Türkçe)">Turkish (Türkçe)</option>
+                <option value="Romanian (Română)">Romanian (Română)</option>
+                <option value="Persian / Farsi (فارسی)">Persian / Farsi (فارسی)</option>
               </select>
             </div>
           </div>
@@ -687,11 +713,13 @@
           <div class="demo-grid-2">
             <div class="demo-field">
               <label for="dm-email">Work email *</label>
-              <input id="dm-email" class="modal-input" type="email" required placeholder="you@company.com" autocomplete="email">
+              <input id="dm-email" class="modal-input" type="email" required placeholder="you@company.com"
+                autocomplete="email">
             </div>
             <div class="demo-field">
               <label for="dm-phone">Phone / WhatsApp *</label>
-              <input id="dm-phone" class="modal-input" type="tel" required placeholder="+91 98765 43210" autocomplete="tel">
+              <input id="dm-phone" class="modal-input" type="tel" required placeholder="+91 98765 43210"
+                autocomplete="tel">
             </div>
           </div>
 
@@ -723,7 +751,8 @@
       <div class="modal-success-state" id="demo-content-success" hidden>
         <div class="modal-success-icon">✓</div>
         <h4>Demo request received!</h4>
-        <p>Thanks! We've received your details and will send a calendar invite for one of your chosen dates within 24 hours.</p>
+        <p>Thanks! We've received your details and will send a calendar invite for one of your chosen dates within 24
+          hours.</p>
       </div>
     </div>
   </div>
@@ -835,7 +864,7 @@
           const el = document.getElementById(id);
           if (el) el.min = minDateStr;
         });
-      } catch (err) {}
+      } catch (err) { }
 
       function openDemoModal() {
         if (!demoModal) return;
@@ -896,11 +925,15 @@
           dmSubmitBtn.disabled = true;
           dmSubmitBtn.textContent = 'Scheduling…';
 
+          const myLang = document.getElementById('dm-my-lang').value;
+          const partnerLang = document.getElementById('dm-partner-lang').value;
+          const languagePair = `${myLang} to ${partnerLang}`;
+
           const payload = {
             name: document.getElementById('dm-name').value.trim(),
             company: document.getElementById('dm-company').value.trim(),
             country: document.getElementById('dm-country').value.trim(),
-            languagePair: document.getElementById('dm-lang').value,
+            languagePair: languagePair,
             email: document.getElementById('dm-email').value.trim(),
             phone: document.getElementById('dm-phone').value.trim(),
             date1: document.getElementById('dm-date1').value,
