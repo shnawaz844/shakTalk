@@ -46,12 +46,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // No 0/O, 1/I/L: easy to read out over the phone. ~887 million combinations;
 // codes live only while the call exists.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const SAMPLE_CODES = new Set(['P8FYR6']); // Marketing sample code in how-qr.png must never join real session
 const shortCodes = new Map(); // code -> sessionId
 function newShortCode() {
   for (let attempt = 0; attempt < 20; attempt++) {
     let code = '';
     for (let i = 0; i < 6; i++) code += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
-    if (!shortCodes.has(code)) return code;
+    if (!shortCodes.has(code) && !SAMPLE_CODES.has(code)) return code;
   }
   return null;
 }
@@ -60,6 +61,7 @@ function resolveSessionId(input) {
   if (typeof input !== 'string') return null;
   if (UUID_RE.test(input)) return input;
   const code = input.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (SAMPLE_CODES.has(code)) return null;
   return shortCodes.get(code) || null;
 }
 const MAX_BODY_BYTES = 64 * 1024;
@@ -141,6 +143,285 @@ const httpServer = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
+
+  // ── POST /api/waitlist — iOS waitlist email capture ────────────────────────
+  if (req.method === 'POST' && req.url === '/api/waitlist') {
+    try {
+      const body = await readJsonBody(req);
+      const email = (body.email || '').toString().trim().toLowerCase();
+      const source = (body.source || 'ios-waitlist').toString().trim().slice(0, 50);
+      // Basic email format check
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Valid email required.' }));
+        return;
+      }
+
+      // Save to Supabase database (primary)
+      try {
+        await supabase
+          .from('waitlist_leads')
+          .upsert({ email, source }, { onConflict: 'email' });
+      } catch (dbErr) {
+        console.warn('[waitlist] Supabase insert note:', dbErr.message);
+      }
+
+      // Fallback local file backup
+      try {
+        const FILE = path.join(__dirname, 'data', 'waitlist.json');
+        let list = [];
+        try { list = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+        if (!list.some(e => e.email === email)) {
+          list.push({ email, source, ts: new Date().toISOString() });
+          fs.writeFileSync(FILE, JSON.stringify(list, null, 2), 'utf8');
+        }
+      } catch {}
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message: "You're on the list! We'll notify you when ShakTalk launches on iPhone." }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Server error. Please try again.' }));
+    }
+    return;
+  }
+
+  // ── GET /api/waitlist/export — download waitlist CSV (admin only) ──────────
+  if (req.method === 'GET' && req.url === '/api/waitlist/export') {
+    try {
+      let list = [];
+      try {
+        const { data } = await supabase.from('waitlist_leads').select('*').order('created_at', { ascending: false });
+        if (data && data.length) list = data;
+      } catch {}
+      if (!list.length) {
+        try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'waitlist.json'), 'utf8')); } catch {}
+      }
+      const csv = 'email,source,timestamp\n' + list.map(e => `${e.email},${e.source},${e.created_at || e.ts}`).join('\n');
+      res.writeHead(200, { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="shaktalk-ios-waitlist.csv"' });
+      res.end(csv);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Could not export waitlist.' }));
+    }
+    return;
+  }
+
+  // ── POST /api/pilot — Company & Industry Pilot lead generation ─────────────
+  if (req.method === 'POST' && req.url === '/api/pilot') {
+    try {
+      const body = await readJsonBody(req);
+      // Honeypot spam check: if filled by bot, silently return 200 without saving
+      if (body.pilot_hp_website) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, message: "Thanks, we'll contact you within one working day." }));
+        return;
+      }
+      const name = (body.name || '').toString().trim().slice(0, 100);
+      const company = (body.company || '').toString().trim().slice(0, 120);
+      const country = (body.country || '').toString().trim().slice(0, 80);
+      const languagePair = (body.languagePair || '').toString().trim().slice(0, 120);
+      const teamSize = (body.teamSize || '1–10').toString().trim().slice(0, 30);
+      const contact = (body.contact || '').toString().trim().slice(0, 120);
+
+      if (!name || !company || !contact) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Name, Company, and Contact info (Email or WhatsApp) are required.' }));
+        return;
+      }
+
+      // Save to Supabase database (primary)
+      try {
+        await supabase.from('pilot_requests').insert({
+          name,
+          company,
+          country,
+          language_pair: languagePair,
+          team_size: teamSize,
+          contact,
+          assigned_to: 'sales@shaktalk.com'
+        });
+      } catch (dbErr) {
+        console.warn('[pilot] Supabase insert note:', dbErr.message);
+      }
+
+      // Fallback local file backup
+      try {
+        const FILE = path.join(__dirname, 'data', 'pilots.json');
+        let list = [];
+        try { list = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+        list.push({
+          name,
+          company,
+          country,
+          languagePair,
+          teamSize,
+          contact,
+          assignedTo: 'sales@shaktalk.com',
+          ts: new Date().toISOString()
+        });
+        fs.writeFileSync(FILE, JSON.stringify(list, null, 2), 'utf8');
+      } catch {}
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message: "Thanks, we'll contact you within one working day." }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Server error. Please try again or email sales@shaktalk.com directly.' }));
+    }
+    return;
+  }
+
+  // ── GET /api/pilot/export — download pilot requests CSV (sales only) ────────
+  if (req.method === 'GET' && req.url === '/api/pilot/export') {
+    try {
+      let list = [];
+      try {
+        const { data } = await supabase.from('pilot_requests').select('*').order('created_at', { ascending: false });
+        if (data && data.length) {
+          list = data.map(p => ({
+            name: p.name,
+            company: p.company,
+            country: p.country,
+            languagePair: p.language_pair,
+            teamSize: p.team_size,
+            contact: p.contact,
+            ts: p.created_at
+          }));
+        }
+      } catch {}
+      if (!list.length) {
+        try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'pilots.json'), 'utf8')); } catch {}
+      }
+      const header = 'Name,Company,Country,Language Pair,Team Size,Contact,Timestamp\n';
+      const rows = list.map(p => `"${(p.name||'').replace(/"/g, '""')}","${(p.company||'').replace(/"/g, '""')}","${(p.country||'').replace(/"/g, '""')}","${(p.languagePair||'').replace(/"/g, '""')}","${p.teamSize||''}","${(p.contact||'').replace(/"/g, '""')}",${p.ts}`).join('\n');
+      res.writeHead(200, { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="shaktalk-pilot-requests.csv"' });
+      res.end(header + rows);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Could not export pilot requests.' }));
+    }
+    return;
+  }
+
+  // ── POST /api/demo — Book a Live Demo lead generation ──────────────────────
+  if (req.method === 'POST' && req.url === '/api/demo') {
+    try {
+      const body = await readJsonBody(req);
+      // Honeypot spam check: if filled by bot, silently return 200 without saving
+      if (body.demo_hp_website) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, message: "Thanks, we'll contact you within one working day to confirm your live demo." }));
+        return;
+      }
+      const name = (body.name || '').toString().trim().slice(0, 100);
+      const company = (body.company || '').toString().trim().slice(0, 120);
+      const country = (body.country || '').toString().trim().slice(0, 80);
+      const languagePair = (body.languagePair || '').toString().trim().slice(0, 120);
+      const email = (body.email || '').toString().trim().toLowerCase().slice(0, 120);
+      const phone = (body.phone || '').toString().trim().slice(0, 60);
+      const date1 = (body.date1 || '').toString().trim().slice(0, 30);
+      const date2 = (body.date2 || '').toString().trim().slice(0, 30);
+      const date3 = (body.date3 || '').toString().trim().slice(0, 30);
+
+      if (!name || !company || !email || !date1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Name, Company, Work Email, and Preferred Demo Date 1 are required.' }));
+        return;
+      }
+
+      // Basic email validation
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Valid email address required.' }));
+        return;
+      }
+
+      // Save to Supabase database (primary)
+      let savedToDb = false;
+      try {
+        const { error } = await supabase.from('demo_requests').insert({
+          name,
+          company,
+          country,
+          language_pair: languagePair,
+          email,
+          phone,
+          demo_date_1: date1,
+          demo_date_2: date2 || null,
+          demo_date_3: date3 || null,
+          assigned_to: 'sales@shaktalk.com'
+        });
+        if (!error) savedToDb = true;
+        else console.warn('[demo] Supabase insert warning:', error.message);
+      } catch (dbErr) {
+        console.warn('[demo] Supabase insert note:', dbErr.message);
+      }
+
+      // Fallback local file backup
+      try {
+        const FILE = path.join(__dirname, 'data', 'demos.json');
+        let list = [];
+        try { list = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch {}
+        list.push({
+          name,
+          company,
+          country,
+          languagePair,
+          email,
+          phone,
+          demo_date_1: date1,
+          demo_date_2: date2,
+          demo_date_3: date3,
+          savedToDb,
+          ts: new Date().toISOString()
+        });
+        fs.writeFileSync(FILE, JSON.stringify(list, null, 2), 'utf8');
+      } catch {}
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, message: "Thanks! We'll contact you within one working day to confirm your live demo slot." }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Server error. Please try again or email sales@shaktalk.com directly.' }));
+    }
+    return;
+  }
+
+  // ── GET /api/demo/export — download demo requests CSV (sales only) ──────────
+  if (req.method === 'GET' && req.url === '/api/demo/export') {
+    try {
+      let list = [];
+      try {
+        const { data } = await supabase.from('demo_requests').select('*').order('created_at', { ascending: false });
+        if (data && data.length) {
+          list = data.map(d => ({
+            name: d.name,
+            company: d.company,
+            country: d.country,
+            languagePair: d.language_pair,
+            email: d.email,
+            phone: d.phone,
+            date1: d.demo_date_1,
+            date2: d.demo_date_2,
+            date3: d.demo_date_3,
+            ts: d.created_at
+          }));
+        }
+      } catch {}
+      if (!list.length) {
+        try { list = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'demos.json'), 'utf8')); } catch {}
+      }
+      const header = 'Name,Company,Country,Language Pair,Email,Phone,Date 1,Date 2,Date 3,Timestamp\n';
+      const rows = list.map(d => `"${(d.name||'').replace(/"/g, '""')}","${(d.company||'').replace(/"/g, '""')}","${(d.country||'').replace(/"/g, '""')}","${(d.languagePair||'').replace(/"/g, '""')}","${(d.email||'').replace(/"/g, '""')}","${(d.phone||'').replace(/"/g, '""')}","${d.date1||d.demo_date_1||''}","${d.date2||d.demo_date_2||''}","${d.date3||d.demo_date_3||''}",${d.ts}`).join('\n');
+      res.writeHead(200, { 'Content-Type': 'text/csv', 'Content-Disposition': 'attachment; filename="shaktalk-demo-requests.csv"' });
+      res.end(header + rows);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Could not export demo requests.' }));
+    }
+    return;
+  }
 
   // ── POST /clerk/update-profile ─────────────────────────────────────────────
   if (req.method === 'POST' && req.url === '/clerk/update-profile') {
@@ -1411,18 +1692,12 @@ function makeSessionCallbacks(session, sessionId, role) {
 
       const senderUserId = role === 'host' ? session.hostUserId : session.guestUserId;
       if (senderUserId && (result.originalText || result.translatedText)) {
-        const messageId = `${sessionId}-${role}-${Date.now()}`;
-
-        Promise.all([
-          uploadAudio(sessionId, messageId, 'original', result.originalAudioBase64),
-          uploadAudio(sessionId, messageId, 'translated', result.translatedAudioBase64),
-        ]).then(([originalAudioUrl, translatedAudioUrl]) => {
-          return dbInsertMessage(
-            sessionId, senderUserId, role,
-            result.originalText, result.translatedText,
-            originalAudioUrl, translatedAudioUrl
-          );
-        }).catch(e => console.error('[db] insertMessage+upload failed:', e.message));
+        // Voice recording disabled: save text translation only, no audio files
+        dbInsertMessage(
+          sessionId, senderUserId, role,
+          result.originalText, result.translatedText,
+          null, null
+        ).catch(e => console.error('[db] insertMessage failed:', e.message));
       }
     },
 
