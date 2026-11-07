@@ -697,7 +697,6 @@ ABSOLUTE RULES (MANDATORY):
             if (this.turnSuppressed) break;
 
             const pcmBuffer = Buffer.from(part.inlineData.data, 'base64');
-            this.outputAudioBuffers.push(pcmBuffer);
 
             const now = Date.now();
             if (!this.turnId) {
@@ -774,19 +773,9 @@ ABSOLUTE RULES (MANDATORY):
 
         const wasSuppressed = this.turnSuppressed;
 
-        let translatedAudioBase64 = null;
-        if (!wasSuppressed && this.outputAudioBuffers.length > 0) {
-          translatedAudioBase64 = wrapPcmInWav(
-            Buffer.concat(this.outputAudioBuffers), OUTPUT_SAMPLE_RATE
-          ).toString('base64');
-        }
-
-        let originalAudioBase64 = null;
-        if (this.inputAudioBuffers.length > 0) {
-          originalAudioBase64 = wrapPcmInWav(
-            Buffer.concat(this.inputAudioBuffers), INPUT_SAMPLE_RATE
-          ).toString('base64');
-        }
+        // Voice recording disabled: call audio is ephemeral and not persisted
+        const translatedAudioBase64 = null;
+        const originalAudioBase64 = null;
 
         if (this.turnId) {
           const streamDurationMs = this.turnFirstChunkAt ? Date.now() - this.turnFirstChunkAt : null;
@@ -950,16 +939,11 @@ ABSOLUTE RULES (MANDATORY):
    * (in order, capped at ~3s) and kicks off a reconnect.
    */
   feedAudio(audioBase64, mimeType) {
-    // Keep the most recent ~30s of input for the per-turn recording.
-    const MAX_INPUT_BUFFERS = 200;
     // ~3s of audio at 150ms chunks — older queued audio is dropped first.
     const MAX_PENDING = 20;
 
     this.lastFeedAudioAt = Date.now();
     this._lastFeedAt = Date.now(); // update idle timer for keepalive
-
-    this.inputAudioBuffers.push(Buffer.from(audioBase64, 'base64'));
-    if (this.inputAudioBuffers.length > MAX_INPUT_BUFFERS) this.inputAudioBuffers.shift();
 
     if (this.session && typeof this.session.sendRealtimeInput === 'function') {
       try {

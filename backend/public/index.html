@@ -1,421 +1,1025 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-{{HEAD}}
-  <title>ShakTalk – Help understand better, Break the barrier</title>
-  <meta name="description" content="Speak your language, they hear theirs. Real-time two-way voice translation for business calls, international trade, travel, and meetings.">
+  {{HEAD}}
+  <title>ShakTalk – Real-Time Voice Translator for Business Calls &amp; Meetings</title>
+  <meta name="description"
+    content="Speak your language, they hear theirs. Live two-way voice translation for business calls, trade fairs, travel and in-person meetings in 17 languages.">
   <meta property="og:title" content="ShakTalk – Speak your language. They hear theirs.">
-  <meta property="og:description" content="Live two-way voice translation, on a call or across the table. No interpreter, no gadget, no typing.">
+  <meta property="og:description"
+    content="Speak your language, they hear theirs. Live two-way voice translation for business calls, trade fairs, travel and in-person meetings in 17 languages.">
+  <meta property="og:url" content="https://www.shaktalk.com/">
+  <link rel="canonical" href="https://www.shaktalk.com/">
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://www.shaktalk.com/#org",
+      "name": "ShakTalk",
+      "url": "https://www.shaktalk.com/",
+      "logo": "https://www.shaktalk.com/logo.png",
+      "email": "support@shaktalk.com"
+    },
+    {
+      "@type": "MobileApplication",
+      "name": "ShakTalk",
+      "operatingSystem": "Android",
+      "applicationCategory": "CommunicationApplication",
+      "description": "Live two-way voice translation for business calls and in-person meetings in 17 languages.",
+      "downloadUrl": "https://play.google.com/store/apps/details?id=com.cis.shaktranslate",
+      "publisher": { "@id": "https://www.shaktalk.com/#org" },
+      "offers": [
+        { "@type": "Offer", "name": "Standard", "price": "5.00", "priceCurrency": "USD" },
+        { "@type": "Offer", "name": "Pro", "price": "10.00", "priceCurrency": "USD" }
+      ]
+    }
+  ]
+}
+  </script>
 </head>
+
 <body>
-{{HEADER}}
+  {{HEADER}}
 
-<main>
-  <!-- HERO SECTION (Slide 1) -->
-  <section class="hero">
-    <div class="wrap">
-      <div class="hero-content">
-        <h1 class="hero-brand-name">ShakTalk</h1>
-        <div class="hero-tagline">
-          <span class="tagline-p1">Help understand better,</span><br>
-          <span class="accent-green">Break the barrier</span>
-        </div>
-        <p class="hero-subtext">Speak your language, they hear theirs</p>
-        <div class="hero-actions">
-          {{STORE_BUTTONS}}
-        </div>
-        <p class="hero-note">Works between iPhone and Android. Connect instantly with room code or QR scan.</p>
-      </div>
-
-      <!-- Slide 1 Actual Presentation Phone Image -->
-      <div class="hero-visual">
-        <div class="hero-img-glow"></div>
-        <div class="hero-image-wrap">
-          <img src="/hero-phones.png" alt="ShakTalk Live Calling - Mr. Chen and Rahul live two-way translation call" class="hero-image" width="1050" height="940">
-          
-          <!-- Single animated dotted connecting call line with motion -->
-          <svg class="hero-call-anim" viewBox="0 0 1050 940" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <linearGradient id="beamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stop-color="#2FE0A8"/>
-                <stop offset="50%" stop-color="#A5FFE4"/>
-                <stop offset="100%" stop-color="#2FE0A8"/>
-              </linearGradient>
-              <filter id="lineGlow" x="-20%" y="-40%" width="140%" height="180%">
-                <feGaussianBlur stdDeviation="3" result="glow"/>
-                <feMerge>
-                  <feMergeNode in="glow"/>
-                  <feMergeNode in="SourceGraphic"/>
-                </feMerge>
-              </filter>
-            </defs>
-
-            <!-- Strictly 1 single connecting dotted curved line with motion -->
-            <path d="M 303 218 C 390 0 660 0 747 218" class="anim-dotted-arch" stroke="url(#beamGrad)" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="9 13" fill="none" filter="url(#lineGlow)" />
-
-            <!-- Avatar Concentric Ring Pulse Effect for Mr. Chen (303, 346) -->
-            <g filter="url(#lineGlow)">
-              <circle cx="303" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
-                <animate attributeName="r" values="44; 86" dur="2.4s" repeatCount="indefinite" />
-                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" repeatCount="indefinite" />
-                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="303" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
-                <animate attributeName="r" values="44; 86" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
-                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
-                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
-              </circle>
-            </g>
-
-            <!-- Avatar Concentric Ring Pulse Effect for Rahul (747, 346) -->
-            <g filter="url(#lineGlow)">
-              <circle cx="747" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
-                <animate attributeName="r" values="44; 86" dur="2.4s" repeatCount="indefinite" />
-                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" repeatCount="indefinite" />
-                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="747" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
-                <animate attributeName="r" values="44; 86" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
-                <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
-                <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
-              </circle>
-            </g>
-          </svg>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 2: THE PROBLEM (Slide 2) -->
-  <section id="problem" class="section-problem">
-    <div class="wrap">
-      <div class="section-head text-center">
-        <h2>Business across languages still runs on workarounds</h2>
-        <p class="sub-head">Every one of them slows the deal down</p>
-      </div>
-
-      <div class="grid grid-3">
-        <div class="card problem-card">
-          <div class="problem-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+  <main>
+    <!-- HERO SECTION (Slide 1) -->
+    <section class="hero">
+      <div class="wrap">
+        <div class="hero-content">
+          <h1 class="hero-title">Speak your language. They hear theirs.</h1>
+          <p class="hero-tagline">Understand each other. Break the language barrier.</p>
+          <div class="hero-actions">
+            {{STORE_BUTTONS}}
           </div>
-          <h3>Interpreters</h3>
-          <p>Costly, must be booked, rarely there at short notice</p>
+          <p class="hero-note">iPhone &amp; Android coming soon. Connect with a room code or QR scan.</p>
         </div>
 
-        <div class="card problem-card">
-          <div class="problem-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16.5l-9 5.2-9-5.2V7.5l9-5.2 9 5.2v9zm-9-13L4.5 8 12 12.3 19.5 8 12 3.5zM4 9.4v6.2l7 4v-6.2L4 9.4zm16 0l-7 4v6.2l7-4V9.4z"/></svg>
-          </div>
-          <h3>Translation gadgets</h3>
-          <p>An extra device that handles one sentence at a time</p>
-        </div>
+        <!-- Slide 1 Actual Presentation Phone Image -->
+        <div class="hero-visual">
+          <div class="hero-img-glow"></div>
+          <div class="hero-image-wrap">
+            <picture>
+              <source srcset="/hero-phones.webp" type="image/webp">
+              <img src="/hero-phones.png" alt="ShakTalk Live Calling - Mr. Chen and Rahul live two-way translation call"
+                class="hero-image" width="1050" height="940" fetchpriority="high">
+            </picture>
 
-        <div class="card problem-card">
-          <div class="problem-icon">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/><circle cx="12" cy="17" r="1"/></svg>
+            <!-- Single animated dotted connecting call line with motion -->
+            <svg class="hero-call-anim" viewBox="0 0 1050 940" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="beamGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#2FE0A8" />
+                  <stop offset="50%" stop-color="#A5FFE4" />
+                  <stop offset="100%" stop-color="#2FE0A8" />
+                </linearGradient>
+                <filter id="lineGlow" x="-20%" y="-40%" width="140%" height="180%">
+                  <feGaussianBlur stdDeviation="3" result="glow" />
+                  <feMerge>
+                    <feMergeNode in="glow" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+
+              <!-- Strictly 1 single connecting dotted curved line with motion -->
+              <path d="M 303 218 C 390 0 660 0 747 218" class="anim-dotted-arch" stroke="url(#beamGrad)"
+                stroke-width="3.5" stroke-linecap="round" stroke-dasharray="9 13" fill="none" filter="url(#lineGlow)" />
+
+              <!-- Avatar Concentric Ring Pulse Effect for Mr. Chen (303, 346) -->
+              <g filter="url(#lineGlow)">
+                <circle cx="303" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                  <animate attributeName="r" values="44; 86" dur="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="303" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                  <animate attributeName="r" values="44; 86" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" begin="-1.2s"
+                    repeatCount="indefinite" />
+                  <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" begin="-1.2s"
+                    repeatCount="indefinite" />
+                </circle>
+              </g>
+
+              <!-- Avatar Concentric Ring Pulse Effect for Rahul (747, 346) -->
+              <g filter="url(#lineGlow)">
+                <circle cx="747" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                  <animate attributeName="r" values="44; 86" dur="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="747" cy="346" r="44" fill="none" stroke="#2FE0A8" stroke-width="2">
+                  <animate attributeName="r" values="44; 86" dur="2.4s" begin="-1.2s" repeatCount="indefinite" />
+                  <animate attributeName="stroke-opacity" values="0.75; 0.35; 0" dur="2.4s" begin="-1.2s"
+                    repeatCount="indefinite" />
+                  <animate attributeName="stroke-width" values="2.5; 1" dur="2.4s" begin="-1.2s"
+                    repeatCount="indefinite" />
+                </circle>
+              </g>
+            </svg>
           </div>
-          <h3>Passing the phone</h3>
-          <p>Slow, awkward, and the conversation loses its flow</p>
         </div>
       </div>
+    </section>
 
-      <!-- Stat Callouts (Slide 2) -->
-      <div class="stats-banner">
-        <div class="stat-item">
-          <div class="stat-number">$79.4B</div>
-          <div class="stat-desc">India imports from China, Jan–Jun 2026</div>
+    <!-- SECTION 2: WHY SHAKTALK (Slide 2) -->
+    <section id="why-shaktalk" class="section-problem">
+      <span id="problem" class="anchor-target" aria-hidden="true"></span>
+      <div class="wrap">
+        <div class="section-head text-center">
+          <h2>Business across languages still runs on workarounds</h2>
+          <p class="sub-head">Every one of them slows the deal down</p>
         </div>
-        <div class="stat-divider"></div>
-        <div class="stat-item">
-          <div class="stat-number">245,000</div>
-          <div class="stat-desc">foreign buyers at the spring 2026 Canton Fair, first two phases</div>
+
+        <div class="grid grid-3">
+          <div class="card problem-card">
+            <div class="problem-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+              </svg>
+            </div>
+            <h3>Interpreters</h3>
+            <p>Costly, must be booked, rarely there at short notice</p>
+          </div>
+
+          <div class="card problem-card">
+            <div class="problem-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M21 16.5l-9 5.2-9-5.2V7.5l9-5.2 9 5.2v9zm-9-13L4.5 8 12 12.3 19.5 8 12 3.5zM4 9.4v6.2l7 4v-6.2L4 9.4zm16 0l-7 4v6.2l7-4V9.4z" />
+              </svg>
+            </div>
+            <h3>Translation gadgets</h3>
+            <p>An extra device that handles one sentence at a time</p>
+          </div>
+
+          <div class="card problem-card">
+            <div class="problem-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z" />
+                <circle cx="12" cy="17" r="1" />
+              </svg>
+            </div>
+            <h3>Passing the phone</h3>
+            <p>Slow, awkward, and the conversation loses its flow</p>
+          </div>
         </div>
+
+        <!-- Stat Callouts (Slide 2) -->
+        <div class="stats-banner">
+          <div class="stat-item">
+            <div class="stat-number">$79.4B</div>
+            <div class="stat-desc">India imports from China, Jan–Jun 2026</div>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <div class="stat-number">245,000</div>
+            <div class="stat-desc">foreign buyers at the spring 2026 Canton Fair, first two phases</div>
+          </div>
+        </div>
+        <div class="stats-source">Sources: India Sea Trade News (Aug 2026); China Daily (Apr 2026)</div>
       </div>
-      <div class="stats-source">Sources: India Sea Trade News (Aug 2026); China Daily (Apr 2026)</div>
-    </div>
-  </section>
+    </section>
 
-  <!-- SECTION 3: HOW IT WORKS (Slide 3) -->
-  <section id="how" class="section-solution">
-    <div class="wrap">
-      <div class="solution-grid">
-        <div class="solution-text">
-          <div class="kicker">How it works</div>
-          <h2>Each person speaks their language.<br><span class="accent-text">Both hear their own.</span></h2>
-          <p class="lead">Live two-way voice translation, on a call or across the table. No interpreter, no gadget, no typing.</p>
+    <!-- SECTION 3: HOW IT WORKS (Slide 3) -->
+    <section id="how-it-works" class="section-solution">
+      <span id="how" class="anchor-target" aria-hidden="true"></span>
+      <div class="wrap">
+        <div class="solution-grid">
+          <div class="solution-text">
+            <div class="kicker">How it works</div>
+            <h2>Each person speaks their language.<br><span class="accent-text">Both hear their own.</span></h2>
+            <p class="lead">Live two-way voice translation, on a call or across the table. No interpreter, no gadget, no
+              typing.</p>
 
-          <div class="steps-list">
-            <div class="step-box">
-              <div class="step-badge">1</div>
-              <div>
-                <h3>Pick your language</h3>
-                <p>17 languages, including English, Hindi, Arabic, Mandarin, Spanish</p>
+            <div class="steps-list">
+              <div class="step-box">
+                <div class="step-badge">1</div>
+                <div>
+                  <h3>Pick your language</h3>
+                  <p>17 languages, including English, Hindi, Arabic, Mandarin, Spanish</p>
+                </div>
+              </div>
+
+              <div class="step-box">
+                <div class="step-badge">2</div>
+                <div>
+                  <h3>Call, or show your QR</h3>
+                  <p>Share the invite on WhatsApp, or let them scan face to face</p>
+                </div>
+              </div>
+
+              <div class="step-box">
+                <div class="step-badge">3</div>
+                <div>
+                  <h3>Just talk</h3>
+                  <p>Each side hears the other in their own language, with live subtitles</p>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div class="step-box">
-              <div class="step-badge">2</div>
-              <div>
-                <h3>Call, or show your QR</h3>
-                <p>Share the invite on WhatsApp, or let them scan face to face</p>
-              </div>
-            </div>
-
-            <div class="step-box">
-              <div class="step-badge">3</div>
-              <div>
-                <h3>Just talk</h3>
-                <p>Each side hears the other in their own language, with live subtitles</p>
-              </div>
+          <!-- Slide 3 Actual Presentation QR Image -->
+          <div class="qr-mockup-wrapper">
+            <div class="qr-img-glow"></div>
+            <div class="solution-image-wrap">
+              <picture>
+                <source srcset="/how-qr.webp" type="image/webp">
+                <img src="/how-qr.png" alt="ShakTalk Session QR Code - Scan to join room code P8FYR6"
+                  class="solution-image" width="480" height="860" loading="lazy">
+              </picture>
             </div>
           </div>
         </div>
+      </div>
+    </section>
 
-        <!-- Slide 3 Actual Presentation QR Image -->
-        <div class="qr-mockup-wrapper">
-          <div class="qr-img-glow"></div>
-          <div class="solution-image-wrap">
-            <img src="/how-qr.png" alt="ShakTalk Session QR Code - Scan to join room code P8FYR6" class="solution-image" width="480" height="860">
+    <!-- SECTION 4: 12 KEY INDUSTRIES (Slide 4) -->
+    <section id="industries" class="section-industries">
+      <span id="use-cases" class="anchor-target" aria-hidden="true"></span>
+      <div class="wrap">
+        <div class="section-head text-center">
+          <div class="kicker">Who it's for</div>
+          <h2>Built for people who do business across languages</h2>
+          <p class="sub-head">Anyone who talks to customers, partners or staff in another language</p>
+        </div>
+
+        <div class="industry-grid">
+          <!-- 1 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+              </svg></div>
+            <h3>Importers and traders</h3>
+            <p>Supplier calls, factory visits, trade fairs</p>
+          </div>
+
+          <!-- 2 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg></div>
+            <h3>Exporters</h3>
+            <p>Selling into the Gulf, India, China, Europe</p>
+          </div>
+
+          <!-- 3 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z" />
+              </svg></div>
+            <h3>Gulf business</h3>
+            <p>Arab clients, partners and officials</p>
+          </div>
+
+          <!-- 4 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12 1a9 9 0 0 0-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7a9 9 0 0 0-9-9z" />
+              </svg></div>
+            <h3>Call centres and BPO</h3>
+            <p>Agents calling customers in any region</p>
+          </div>
+
+          <!-- 5 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z" />
+              </svg></div>
+            <h3>Hotels and tourism</h3>
+            <p>Guests, tour desks and airport counters</p>
+          </div>
+
+          <!-- 6 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z" />
+              </svg></div>
+            <h3>Hospitals and clinics</h3>
+            <p>International patients and families</p>
+          </div>
+
+          <!-- 7 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+              </svg></div>
+            <h3>Real estate</h3>
+            <p>Foreign buyers, tenants and investors</p>
+          </div>
+
+          <!-- 8 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M18 1c-2.76 0-5 2.24-5 5v3H7V6c0-2.76-2.24-5-5-5S-3 3.24-3 6v14h24V6c0-2.76-2.24-5-5-5zM4 18H2v-2h2v2zm0-4H2v-2h2v2zm0-4H2V8h2v2zm16 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V8h2v2z" />
+              </svg></div>
+            <h3>Logistics and freight</h3>
+            <p>Drivers, ports and agents across borders</p>
+          </div>
+
+          <!-- 9 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z" />
+              </svg></div>
+            <h3>Recruitment and HR</h3>
+            <p>Interviews with candidates abroad</p>
+          </div>
+
+          <!-- 10 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z" />
+              </svg></div>
+            <h3>Education</h3>
+            <p>International students and their parents</p>
+          </div>
+
+          <!-- 11 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3L2 12h3v8h14v-8h3L12 3zm1 14h-2v-2h2v2zm0-4h-2V7h2v6z" />
+              </svg></div>
+            <h3>Construction and factories</h3>
+            <p>Supervisors and multilingual crews</p>
+          </div>
+
+          <!-- 12 -->
+          <div class="card industry-card">
+            <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
+              </svg></div>
+            <h3>Business travellers</h3>
+            <p>Meetings and daily needs abroad</p>
           </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- SECTION 4: 12 KEY INDUSTRIES (Slide 4) -->
-  <section id="industries" class="section-industries">
-    <div class="wrap">
-      <div class="section-head text-center">
-        <div class="kicker">Who it's for</div>
-        <h2>Built for people who do business across languages</h2>
-        <p class="sub-head">Anyone who talks to customers, partners or staff in another language</p>
-      </div>
-
-      <div class="industry-grid">
-        <!-- 1 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></div>
-          <h3>Importers and traders</h3>
-          <p>Supplier calls, factory visits, trade fairs</p>
+    <!-- SECTION 5: START TODAY, GROW WITH US & ROADMAP (Slide 5) -->
+    <section id="offerings" class="section-roadmap">
+      <div class="wrap">
+        <div class="section-head text-center">
+          <div class="kicker">Programmes & Expansion</div>
+          <h2>Start today, grow with us</h2>
+          <p class="sub-head">Tailored for teams of any size — from standalone individuals to enterprise workflows</p>
         </div>
 
-        <!-- 2 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>
-          <h3>Exporters</h3>
-          <p>Selling into the Gulf, India, China, Europe</p>
-        </div>
-
-        <!-- 3 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/></svg></div>
-          <h3>Gulf business</h3>
-          <p>Arab clients, partners and officials</p>
-        </div>
-
-        <!-- 4 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1a9 9 0 0 0-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7a9 9 0 0 0-9-9z"/></svg></div>
-          <h3>Call centres and BPO</h3>
-          <p>Agents calling customers in any region</p>
-        </div>
-
-        <!-- 5 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z"/></svg></div>
-          <h3>Hotels and tourism</h3>
-          <p>Guests, tour desks and airport counters</p>
-        </div>
-
-        <!-- 6 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-1.99.9-1.99 2L3 19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z"/></svg></div>
-          <h3>Hospitals and clinics</h3>
-          <p>International patients and families</p>
-        </div>
-
-        <!-- 7 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg></div>
-          <h3>Real estate</h3>
-          <p>Foreign buyers, tenants and investors</p>
-        </div>
-
-        <!-- 8 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 1c-2.76 0-5 2.24-5 5v3H7V6c0-2.76-2.24-5-5-5S-3 3.24-3 6v14h24V6c0-2.76-2.24-5-5-5zM4 18H2v-2h2v2zm0-4H2v-2h2v2zm0-4H2V8h2v2zm16 8h-2v-2h2v2zm0-4h-2v-2h2v2zm0-4h-2V8h2v2z"/></svg></div>
-          <h3>Logistics and freight</h3>
-          <p>Drivers, ports and agents across borders</p>
-        </div>
-
-        <!-- 9 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg></div>
-          <h3>Recruitment and HR</h3>
-          <p>Interviews with candidates abroad</p>
-        </div>
-
-        <!-- 10 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82zM12 3L1 9l11 6 9-4.91V17h2V9L12 3z"/></svg></div>
-          <h3>Education</h3>
-          <p>International students and their parents</p>
-        </div>
-
-        <!-- 11 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3L2 12h3v8h14v-8h3L12 3zm1 14h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></div>
-          <h3>Construction and factories</h3>
-          <p>Supervisors and multilingual crews</p>
-        </div>
-
-        <!-- 12 -->
-        <div class="card industry-card">
-          <div class="ind-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/></svg></div>
-          <h3>Business travellers</h3>
-          <p>Meetings and daily needs abroad</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 5: START TODAY, GROW WITH US & ROADMAP (Slide 5) -->
-  <section id="offerings" class="section-roadmap">
-    <div class="wrap">
-      <div class="section-head text-center">
-        <div class="kicker">Programmes & Expansion</div>
-        <h2>Start today, grow with us</h2>
-        <p class="sub-head">Tailored for teams of any size — from standalone individuals to enterprise workflows</p>
-      </div>
-
-      <div class="grid grid-3">
-        <div id="pilot" class="card pilot-card">
-          <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg></div>
-          <h3>Company pilot</h3>
-          <p>Your team on ShakTalk for a month, with onboarding and a usage review</p>
-        </div>
-
-        <div class="card pilot-card">
-          <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg></div>
-          <h3>Industry programmes</h3>
-          <p>Trade fairs, sourcing desks, hotels, hospitals and call centres, set up with you</p>
-        </div>
-
-        <div class="card pilot-card">
-          <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>
-          <h3>For individuals</h3>
-          <p>Anyone on your team can install it and start talking today</p>
-        </div>
-      </div>
-
-      <!-- Roadmap Pipeline (Slide 5) -->
-      <div id="roadmap" class="roadmap-block">
-        <div class="roadmap-kicker">WHERE WE ARE GOING</div>
-        <div class="roadmap-pipeline">
-          <div class="roadmap-node active">
-            <div class="node-badge">NOW</div>
-            <div class="node-title">Live voice</div>
-            <div class="node-desc">on calls and in person</div>
-          </div>
-          <div class="roadmap-arrow">→</div>
-          <div class="roadmap-node">
-            <div class="node-badge">NEXT</div>
-            <div class="node-title">Your own voice</div>
-            <div class="node-desc">team accounts</div>
-          </div>
-          <div class="roadmap-arrow">→</div>
-          <div class="roadmap-node">
-            <div class="node-badge">CHAT</div>
-            <div class="node-title">Chat</div>
-            <div class="node-desc">Translated messages and voice notes</div>
-          </div>
-          <div class="roadmap-arrow">→</div>
-          <div class="roadmap-node">
-            <div class="node-badge">MEETINGS</div>
-            <div class="node-title">Meetings</div>
-            <div class="node-desc">Group calls in everyone's language</div>
-          </div>
-          <div class="roadmap-arrow">→</div>
-          <div class="roadmap-node">
-            <div class="node-badge">PLATFORM</div>
-            <div class="node-title">Platform</div>
-            <div class="node-desc">File sharing and business integrations</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 6: SUPPORTED LANGUAGES -->
-  <section id="languages" class="section-languages">
-    <div class="wrap">
-      <div class="section-head text-center">
-        <div class="kicker">Languages</div>
-        <h2>Talk across 17 languages today</h2>
-        <p class="sub-head">Any language below can be paired with any other</p>
-      </div>
-      <div class="chips">
-        <div class="chip">English</div>
-        <div class="chip">Hindi<span>हिन्दी</span></div>
-        <div class="chip">Arabic<span>العربية</span></div>
-        <div class="chip">Mandarin<span>中文</span></div>
-        <div class="chip">Spanish<span>Español</span></div>
-        <div class="chip">French<span>Français</span></div>
-        <div class="chip">German<span>Deutsch</span></div>
-        <div class="chip">Japanese<span>日本語</span></div>
-        <div class="chip">Korean<span>한국어</span></div>
-        <div class="chip">Urdu<span>اردو</span></div>
-        <div class="chip">Russian<span>Русский</span></div>
-        <div class="chip">Cantonese<span>粵語</span></div>
-        <div class="chip">Italian<span>Italiano</span></div>
-        <div class="chip">Portuguese<span>Português</span></div>
-        <div class="chip">Turkish<span>Türkçe</span></div>
-        <div class="chip">Romanian<span>Română</span></div>
-        <div class="chip">Persian<span>فارسی</span></div>
-        <div class="chip more">+ More coming soon</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECTION 7: LET'S TRY IT RIGHT NOW (Slide 6) -->
-  <section id="get" class="section-cta-final">
-    <div class="wrap">
-      <div class="cta-banner">
-        <h2>Let's try it right now</h2>
-        <p class="cta-subtitle">Install ShakTalk, pick your language, and call us in yours.</p>
-
-        <div class="grid grid-3 cta-steps">
-          <div class="cta-step-item">
-            <div class="step-num-circle">1</div>
-            <h3>Live demo</h3>
-            <p>A real call in your language, here and now</p>
-          </div>
-          <div class="cta-step-item">
-            <div class="step-num-circle">2</div>
+        <div class="grid grid-3">
+          <div id="pilot" class="card pilot-card">
+            <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+              </svg></div>
             <h3>Company pilot</h3>
-            <p>One month for your team, with onboarding</p>
+            <p>Your team on ShakTalk for a month, with onboarding and a usage review</p>
+            <a href="#demo-modal" class="btn-pilot-card" data-open-demo>Request a pilot →</a>
           </div>
-          <div class="cta-step-item">
-            <div class="step-num-circle">3</div>
-            <h3>Roll out</h3>
-            <p>Across the teams that need it most</p>
+
+          <div class="card pilot-card">
+            <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg></div>
+            <h3>Industry programmes</h3>
+            <p>Trade fairs, sourcing desks, hotels, hospitals and call centres, set up with you</p>
+            <a href="#demo-modal" class="btn-pilot-card" data-open-demo>Request a pilot →</a>
+          </div>
+
+          <div class="card pilot-card">
+            <div class="pilot-icon"><svg viewBox="0 0 24 24" fill="currentColor">
+                <path
+                  d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+              </svg></div>
+            <h3>For individuals</h3>
+            <p>Anyone on your team can install it and start talking today</p>
+            <a href="#get" class="btn-pilot-card">Get the app →</a>
           </div>
         </div>
 
-        <div class="cta-footer-actions">
-          {{STORE_BUTTONS}}
-          <div class="cta-contact-row">
-            <span>Website: <strong>shaktalk.com</strong></span>
-            <span class="sep">•</span>
-            <span>Support: <a href="mailto:support@shaktalk.com">support@shaktalk.com</a></span>
+        <!-- Roadmap Pipeline (Slide 5) -->
+        <div id="roadmap" class="roadmap-block">
+          <div class="roadmap-kicker">WHERE WE ARE GOING</div>
+          <div class="roadmap-pipeline">
+            <div class="roadmap-node active">
+              <div class="node-badge">NOW</div>
+              <div class="node-title">Live voice</div>
+              <div class="node-desc">on calls and in person</div>
+            </div>
+            <div class="roadmap-arrow">→</div>
+            <div class="roadmap-node">
+              <div class="node-badge">NEXT</div>
+              <div class="node-title">Your own voice</div>
+              <div class="node-desc">team accounts</div>
+            </div>
+            <div class="roadmap-arrow">→</div>
+            <div class="roadmap-node">
+              <div class="node-badge">CHAT</div>
+              <div class="node-title">Chat</div>
+              <div class="node-desc">Translated messages and voice notes</div>
+            </div>
+            <div class="roadmap-arrow">→</div>
+            <div class="roadmap-node">
+              <div class="node-badge">MEETINGS</div>
+              <div class="node-title">Meetings</div>
+              <div class="node-desc">Group calls in everyone's language</div>
+            </div>
+            <div class="roadmap-arrow">→</div>
+            <div class="roadmap-node">
+              <div class="node-badge">PLATFORM</div>
+              <div class="node-title">Platform</div>
+              <div class="node-desc">File sharing and business integrations</div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </section>
-</main>
+    </section>
 
-{{FOOTER}}
+    <!-- SECTION 6: SUPPORTED LANGUAGES -->
+    <section id="languages" class="section-languages">
+      <div class="wrap">
+        <div class="section-head text-center">
+          <div class="kicker">Languages</div>
+          <h2>Talk across 17 languages today</h2>
+          <p class="sub-head">Any language below can be paired with any other — English to Hindi, Arabic to Mandarin,
+            Spanish to French, and beyond</p>
+        </div>
+        <div class="chips">
+          <div class="chip">English</div>
+          <div class="chip">Hindi<span>हिन्दी</span></div>
+          <div class="chip">Arabic<span>العربية</span></div>
+          <div class="chip">Mandarin<span>中文</span></div>
+          <div class="chip">Spanish<span>Español</span></div>
+          <div class="chip">French<span>Français</span></div>
+          <div class="chip">German<span>Deutsch</span></div>
+          <div class="chip">Japanese<span>日本語</span></div>
+          <div class="chip">Korean<span>한국어</span></div>
+          <div class="chip">Urdu<span>اردو</span></div>
+          <div class="chip">Russian<span>Русский</span></div>
+          <div class="chip">Cantonese<span>粵語</span></div>
+          <div class="chip">Italian<span>Italiano</span></div>
+          <div class="chip">Portuguese<span>Português</span></div>
+          <div class="chip">Turkish<span>Türkçe</span></div>
+          <div class="chip">Romanian<span>Română</span></div>
+          <div class="chip">Persian<span>فارسی</span></div>
+          <div class="chip more">+ More coming soon</div>
+        </div>
+        <p class="lang-note">Popular pairs: <a href="/languages/hindi-to-chinese">Hindi ↔ Mandarin</a> for India–China
+          trade · <a href="/languages/arabic-to-hindi">Arabic ↔ Hindi</a> for Gulf business</p>
+      </div>
+    </section>
+
+    <!-- FAQ SECTION — AEO: answers common translation questions for AI search engines -->
+    <section id="faq" class="section-faq">
+      <div class="wrap">
+        <div class="section-head text-center">
+          <div class="kicker">FAQ</div>
+          <h2>Common questions</h2>
+        </div>
+        <div class="faq-list">
+          <details class="faq-item" open>
+            <summary>How does real-time voice translation work in ShakTalk?</summary>
+            <div class="faq-body">
+              <p>ShakTalk uses AI speech recognition to convert what you say into text, then translates it instantly,
+                and plays it as speech in the other person's language — all within a fraction of a second. Both people
+                speak naturally in their own language and hear the other in theirs, with live subtitles on screen.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>What languages does ShakTalk support?</summary>
+            <div class="faq-body">
+              <p>ShakTalk currently supports 17 languages: English, Hindi, Arabic, Mandarin, Cantonese, Spanish, French,
+                German, Japanese, Korean, Urdu, Russian, Italian, Portuguese, Turkish, Romanian, and Persian. More
+                languages are being added regularly.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Does ShakTalk work without internet?</summary>
+            <div class="faq-body">
+              <p>ShakTalk requires an internet connection (Wi-Fi or mobile data) to perform AI translation in real time.
+                It is not currently available offline. A stable connection ensures the best translation quality and
+                lowest delay.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>How do two people connect on ShakTalk?</summary>
+            <div class="faq-body">
+              <p>There are two easy ways to connect: share a 6-character room code by WhatsApp, SMS, or email, or let
+                the other person scan your QR code face to face. No account is required for the person joining — they
+                can enter the room instantly.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Is ShakTalk suitable for business use?</summary>
+            <div class="faq-body">
+              <p>Yes. ShakTalk is designed for real-world business communication — importers talking to overseas
+                suppliers, hotels serving international guests, hospitals communicating with foreign patients, real
+                estate agents dealing with foreign buyers, and call centres handling multilingual customers. AI
+                translation. Check important details before finalising agreements.</p>
+            </div>
+          </details>
+          <details class="faq-item">
+            <summary>Is ShakTalk available on iPhone and Android?</summary>
+            <div class="faq-body">
+              <p>ShakTalk is available on Android via Google Play. The iOS version for iPhone is coming soon. The two
+                apps are fully compatible — an Android user and an iPhone user can call each other without any issue.
+              </p>
+            </div>
+          </details>
+        </div>
+        <div class="faq-cta"><a href="/faq" class="btn btn-outline">See all FAQs →</a></div>
+      </div>
+    </section>
+
+    <!-- SECTION 7: LET'S TRY IT RIGHT NOW (Slide 6) -->
+    <section id="get" class="section-cta-final">
+      <div class="wrap">
+        <div class="cta-banner">
+          <h2>Let's try it right now</h2>
+          <p class="cta-subtitle">Install ShakTalk, pick your language, and we'll call you in yours.</p>
+
+          <div class="grid grid-3 cta-steps">
+            <div class="cta-step-item">
+              <div class="step-num-circle">1</div>
+              <h3>Live demo</h3>
+              <p>A real call in your language, here and now</p>
+            </div>
+            <div class="cta-step-item">
+              <div class="step-num-circle">2</div>
+              <h3>Company pilot</h3>
+              <p>One month for your team, with onboarding</p>
+            </div>
+            <div class="cta-step-item">
+              <div class="step-num-circle">3</div>
+              <h3>Roll out</h3>
+              <p>Across the teams that need it most</p>
+            </div>
+          </div>
+
+          <div class="cta-footer-actions">
+            {{STORE_BUTTONS}}
+            <div class="cta-contact-row">
+              <span>Website: <strong>shaktalk.com</strong></span>
+              <span class="sep">•</span>
+              <span>Support: <a href="mailto:support@shaktalk.com">support@shaktalk.com</a></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  {{FOOTER}}
+
+  <!-- Apps Waitlist Modal (Both Platforms) -->
+  <div class="modal-backdrop" id="waitlist-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <div class="modal-card">
+      <button type="button" class="modal-close" data-close-waitlist aria-label="Close dialog">✕</button>
+      <div class="modal-dual-badge">
+        <span class="modal-badge-icon apple-icon" title="iOS App Store">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path
+              d="M16.37 12.6c-.02-2.27 1.86-3.36 1.94-3.41-1.06-1.55-2.7-1.76-3.28-1.78-1.4-.14-2.73.82-3.44.82-.71 0-1.8-.8-2.96-.78-1.52.02-2.93.89-3.71 2.25-1.59 2.75-.41 6.81 1.13 9.04.76 1.09 1.65 2.31 2.82 2.27 1.14-.05 1.57-.73 2.94-.73 1.37 0 1.76.73 2.96.71 1.22-.02 1.99-1.11 2.73-2.21.87-1.27 1.22-2.5 1.24-2.56-.03-.01-2.38-.91-2.4-3.62zM14.12 5.94c.62-.76 1.05-1.8.93-2.85-.9.04-2 .6-2.64 1.35-.57.66-1.08 1.73-.94 2.75 1 .08 2.02-.51 2.65-1.25z" />
+          </svg>
+        </span>
+        <span class="modal-badge-divider">+</span>
+        <span class="modal-badge-icon play-icon" title="Google Play">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#00D7FE" d="M3.6 2.3c-.3.3-.4.7-.4 1.2v17c0 .5.1.9.4 1.2l9.5-9.7z"/>
+            <path fill="#FFCE00" d="M16.3 15.2 13.1 12l3.2-3.2 3.8 2.2c1.1.6 1.1 1.6 0 2.2z"/>
+            <path fill="#FF3A44" d="M16.3 15.2 13.1 12l-9.5 9.7c.4.4 1 .4 1.7 0z"/>
+            <path fill="#00F076" d="M16.3 8.8 5.3 2.3c-.7-.4-1.3-.4-1.7 0l9.5 9.7z"/>
+          </svg>
+        </span>
+      </div>
+      <div id="modal-content-default">
+        <h3 id="modal-title">Get notified when ShakTalk launches</h3>
+        <p>Enter your email and we'll notify you the moment the Both apps are ready to download.</p>
+        <form class="modal-form" id="waitlist-modal-form">
+          <label for="modal-wl-email" class="sr-only">Email address</label>
+          <input id="modal-wl-email" class="modal-input" type="email" name="email" required
+            placeholder="you@company.com" autocomplete="email">
+          <input type="hidden" name="source" value="both-apps-modal">
+          <button type="submit" class="modal-btn-submit" id="modal-submit-btn">Notify me</button>
+        </form>
+        <p class="modal-note">No spam. Only a notification when both apps are live.</p>
+      </div>
+      <div class="modal-success-state" id="modal-content-success" hidden>
+        <div class="modal-success-icon">✓</div>
+        <h4>You're on the list!</h4>
+        <p>We'll notify you the moment ShakTalk is ready to download on iOS &amp; Android.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Demo Modal -->
+  <div class="modal-backdrop" id="demo-modal" role="dialog" aria-modal="true" aria-labelledby="demo-modal-title" hidden>
+    <div class="modal-card demo-modal-card">
+      <button type="button" class="modal-close" data-close-demo aria-label="Close dialog">✕</button>
+      <div class="modal-demo-badge">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" aria-hidden="true">
+          <path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
+        </svg>
+      </div>
+      <div id="demo-content-default">
+        <h3 id="demo-modal-title">Book a live demo</h3>
+        <p>See ShakTalk in live action with your team. Pick up to 3 dates that work best for you.</p>
+
+        <form class="modal-form demo-form-layout" id="live-demo-form">
+          <input type="text" name="demo_hp_website" id="demo_hp_website" class="sr-only" tabindex="-1" autocomplete="off">
+
+          <div class="demo-grid-2">
+            <div class="demo-field">
+              <label for="dm-name">Your name *</label>
+              <input id="dm-name" class="modal-input" type="text" required placeholder="e.g. Rahul Sharma" autocomplete="name">
+            </div>
+            <div class="demo-field">
+              <label for="dm-company">Company name *</label>
+              <input id="dm-company" class="modal-input" type="text" required placeholder="e.g. Apex Global Trade">
+            </div>
+          </div>
+
+          <div class="demo-grid-2">
+            <div class="demo-field">
+              <label for="dm-country">Country *</label>
+              <input id="dm-country" class="modal-input" type="text" required placeholder="e.g. India, UAE, UK">
+            </div>
+            <div class="demo-field">
+              <label for="dm-lang">Language needed *</label>
+              <select id="dm-lang" class="modal-input modal-select" required>
+                <option value="" disabled selected>Select language needed...</option>
+                <option value="English">English</option>
+                <option value="Hindi (हिन्दी)">Hindi (हिन्दी)</option>
+                <option value="Arabic (العربية)">Arabic (العربية)</option>
+                <option value="Mandarin Chinese (中文)">Mandarin Chinese (中文)</option>
+                <option value="Cantonese (粵語)">Cantonese (粵語)</option>
+                <option value="Spanish (Español)">Spanish (Español)</option>
+                <option value="French (Français)">French (Français)</option>
+                <option value="German (Deutsch)">German (Deutsch)</option>
+                <option value="Japanese (日本語)">Japanese (日本語)</option>
+                <option value="Korean (한국어)">Korean (한국어)</option>
+                <option value="Urdu (اردو)">Urdu (اردو)</option>
+                <option value="Russian (Русский)">Russian (Русский)</option>
+                <option value="Italian (Italiano)">Italian (Italiano)</option>
+                <option value="Portuguese (Português)">Portuguese (Português)</option>
+                <option value="Turkish (Türkçe)">Turkish (Türkçe)</option>
+                <option value="Romanian (Română)">Romanian (Română)</option>
+                <option value="Persian / Farsi (فارسی)">Persian / Farsi (فارسی)</option>
+                <option value="All 17 languages">All 17 languages</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="demo-grid-2">
+            <div class="demo-field">
+              <label for="dm-email">Work email *</label>
+              <input id="dm-email" class="modal-input" type="email" required placeholder="you@company.com" autocomplete="email">
+            </div>
+            <div class="demo-field">
+              <label for="dm-phone">Phone / WhatsApp *</label>
+              <input id="dm-phone" class="modal-input" type="tel" required placeholder="+91 98765 43210" autocomplete="tel">
+            </div>
+          </div>
+
+          <div class="demo-dates-block">
+            <label class="demo-section-label">Demo dates (give up to 3 preferred dates) *</label>
+            <div class="demo-dates-grid">
+              <div class="date-slot">
+                <span class="slot-tag">Option 1 (Preferred) *</span>
+                <input id="dm-date1" class="modal-input date-input" type="date" required>
+              </div>
+              <div class="date-slot">
+                <span class="slot-tag">Option 2 (Alternative)</span>
+                <input id="dm-date2" class="modal-input date-input" type="date">
+              </div>
+              <div class="date-slot">
+                <span class="slot-tag">Option 3 (Alternative)</span>
+                <input id="dm-date3" class="modal-input date-input" type="date">
+              </div>
+            </div>
+          </div>
+
+          <div id="dm-result-box" class="pilot-result-box" style="display:none;"></div>
+
+          <button type="submit" class="modal-btn-submit" id="dm-submit-btn">Schedule live demo →</button>
+        </form>
+        <p class="modal-note">Our team will confirm your meeting link within one working day.</p>
+      </div>
+
+      <div class="modal-success-state" id="demo-content-success" hidden>
+        <div class="modal-success-icon">✓</div>
+        <h4>Demo request received!</h4>
+        <p>Thanks! We've received your details and will send a calendar invite for one of your chosen dates within 24 hours.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      // Apps Waitlist Modal
+      const waitlistModal = document.getElementById('waitlist-modal');
+      const waitlistForm = document.getElementById('waitlist-modal-form');
+      const wlEmailInput = document.getElementById('modal-wl-email');
+      const wlSubmitBtn = document.getElementById('modal-submit-btn');
+      const wlContentDefault = document.getElementById('modal-content-default');
+      const wlContentSuccess = document.getElementById('modal-content-success');
+
+      function openWaitlistModal() {
+        if (!waitlistModal) return;
+        waitlistModal.hidden = false;
+        waitlistModal.offsetHeight;
+        waitlistModal.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        document.body.classList.add('modal-open');
+        setTimeout(function () { if (wlEmailInput) wlEmailInput.focus(); }, 100);
+      }
+
+      function closeWaitlistModal() {
+        if (!waitlistModal) return;
+        waitlistModal.classList.remove('is-open');
+        document.body.style.overflow = '';
+        document.body.classList.remove('modal-open');
+        setTimeout(function () {
+          waitlistModal.hidden = true;
+          if (wlContentDefault) wlContentDefault.style.display = 'block';
+          if (wlContentSuccess) wlContentSuccess.hidden = true;
+          if (waitlistForm) waitlistForm.reset();
+          if (wlSubmitBtn) { wlSubmitBtn.disabled = false; wlSubmitBtn.textContent = 'Notify me'; }
+        }, 220);
+      }
+
+      document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-open-waitlist]')) {
+          e.preventDefault();
+          openWaitlistModal();
+          return;
+        }
+        if (e.target.closest('[data-close-waitlist]')) {
+          e.preventDefault();
+          closeWaitlistModal();
+          return;
+        }
+        if (e.target === waitlistModal) {
+          closeWaitlistModal();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && waitlistModal && !waitlistModal.hidden) {
+          closeWaitlistModal();
+        }
+      });
+
+      if (waitlistForm) {
+        waitlistForm.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          const email = wlEmailInput ? wlEmailInput.value.trim() : '';
+          if (!email) return;
+
+          wlSubmitBtn.disabled = true;
+          wlSubmitBtn.textContent = 'Submitting…';
+
+          try {
+            const res = await fetch('/api/waitlist', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: email, source: 'both-apps-modal' })
+            });
+            if (res.ok) {
+              if (typeof trackEvent === 'function') {
+                trackEvent('ios_waitlist_submit', { source: 'ios-waitlist' });
+              }
+              if (wlContentDefault) wlContentDefault.style.display = 'none';
+              if (wlContentSuccess) wlContentSuccess.hidden = false;
+              setTimeout(closeWaitlistModal, 2600);
+            } else {
+              alert('Could not submit. Please try again.');
+              wlSubmitBtn.disabled = false;
+              wlSubmitBtn.textContent = 'Notify me';
+            }
+          } catch (err) {
+            alert('Network error. Please try again.');
+            wlSubmitBtn.disabled = false;
+            wlSubmitBtn.textContent = 'Notify me';
+          }
+        });
+      }
+
+      // Demo Modal Handlers
+      const demoModal = document.getElementById('demo-modal');
+      const demoForm = document.getElementById('live-demo-form');
+      const dmSubmitBtn = document.getElementById('dm-submit-btn');
+      const dmResultBox = document.getElementById('dm-result-box');
+      const demoContentDefault = document.getElementById('demo-content-default');
+      const demoContentSuccess = document.getElementById('demo-content-success');
+
+      try {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const minDateStr = tomorrow.toISOString().split('T')[0];
+        ['dm-date1', 'dm-date2', 'dm-date3'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (el) el.min = minDateStr;
+        });
+      } catch (err) {}
+
+      function openDemoModal() {
+        if (!demoModal) return;
+        demoModal.hidden = false;
+        demoModal.offsetHeight;
+        demoModal.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+        document.body.classList.add('modal-open');
+        setTimeout(function () {
+          const firstInput = document.getElementById('dm-name');
+          if (firstInput) firstInput.focus();
+        }, 100);
+      }
+
+      function closeDemoModal() {
+        if (!demoModal) return;
+        demoModal.classList.remove('is-open');
+        document.body.style.overflow = '';
+        document.body.classList.remove('modal-open');
+        setTimeout(function () {
+          demoModal.hidden = true;
+          if (demoContentDefault) demoContentDefault.style.display = 'block';
+          if (demoContentSuccess) demoContentSuccess.hidden = true;
+          if (dmResultBox) dmResultBox.style.display = 'none';
+          if (demoForm) demoForm.reset();
+          if (dmSubmitBtn) { dmSubmitBtn.disabled = false; dmSubmitBtn.textContent = 'Schedule live demo →'; }
+        }, 220);
+      }
+
+      document.addEventListener('click', function (e) {
+        if (e.target.closest('[data-open-demo]')) {
+          e.preventDefault();
+          openDemoModal();
+          return;
+        }
+        if (e.target.closest('[data-close-demo]')) {
+          e.preventDefault();
+          closeDemoModal();
+          return;
+        }
+        if (e.target === demoModal) {
+          closeDemoModal();
+        }
+      });
+
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && demoModal && !demoModal.hidden) {
+          closeDemoModal();
+        }
+      });
+
+      if (demoForm) {
+        demoForm.addEventListener('submit', async function (e) {
+          e.preventDefault();
+          const hp = document.getElementById('demo_hp_website');
+          if (hp && hp.value) return; // Honeypot spam block
+
+          dmSubmitBtn.disabled = true;
+          dmSubmitBtn.textContent = 'Scheduling…';
+
+          const payload = {
+            name: document.getElementById('dm-name').value.trim(),
+            company: document.getElementById('dm-company').value.trim(),
+            country: document.getElementById('dm-country').value.trim(),
+            languagePair: document.getElementById('dm-lang').value,
+            email: document.getElementById('dm-email').value.trim(),
+            phone: document.getElementById('dm-phone').value.trim(),
+            date1: document.getElementById('dm-date1').value,
+            date2: document.getElementById('dm-date2').value,
+            date3: document.getElementById('dm-date3').value,
+            demo_hp_website: hp ? hp.value : ''
+          };
+
+          try {
+            const res = await fetch('/api/demo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (res.ok) {
+              if (typeof trackEvent === 'function') {
+                trackEvent('pilot_submit', {
+                  company: payload.company || '',
+                  language_pair: payload.languagePair || ''
+                });
+              }
+              if (demoContentDefault) demoContentDefault.style.display = 'none';
+              if (demoContentSuccess) demoContentSuccess.hidden = false;
+              demoContentSuccess.style.display = 'block';
+              setTimeout(closeDemoModal, 3500);
+            } else {
+              dmResultBox.style.display = 'block';
+              dmResultBox.className = 'pilot-result-box error';
+              dmResultBox.textContent = data.error || 'Something went wrong. Please check your entries and try again.';
+              dmSubmitBtn.disabled = false;
+              dmSubmitBtn.textContent = 'Schedule live demo →';
+            }
+          } catch (err) {
+            dmResultBox.style.display = 'block';
+            dmResultBox.className = 'pilot-result-box error';
+            dmResultBox.textContent = 'Network error. Please try again or email support@shaktalk.com.';
+            dmSubmitBtn.disabled = false;
+            dmSubmitBtn.textContent = 'Schedule live demo →';
+          }
+        });
+      }
+
+      // Clean URL smooth-scroll & History API (No '#' in URL bar)
+      const SECTION_ROUTES = {
+        '/why-shaktalk': 'why-shaktalk',
+        '/how-it-works': 'how-it-works',
+        '/industries': 'industries'
+      };
+
+      // 1. Initial direct URL load: e.g. opening /how-it-works directly in the address bar
+      const curPath = window.location.pathname.replace(/\/$/, '');
+      const initialTargetId = SECTION_ROUTES[curPath] || (window.location.hash ? window.location.hash.slice(1) : null);
+      if (initialTargetId) {
+        setTimeout(function () {
+          const el = document.getElementById(initialTargetId);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      }
+
+      // 2. Click handler: smooth scroll & update URL without '#'
+      document.addEventListener('click', function (e) {
+        const link = e.target.closest('a[href="/why-shaktalk"], a[href="/how-it-works"], a[href="/industries"]');
+        if (!link) return;
+
+        const path = window.location.pathname.replace(/\/$/, '');
+        const isLandingPage = path === '' || path in SECTION_ROUTES;
+        if (isLandingPage) {
+          e.preventDefault();
+          const targetPath = link.getAttribute('href');
+          const targetId = SECTION_ROUTES[targetPath];
+          if (targetId) {
+            const el = document.getElementById(targetId);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              history.pushState(null, '', targetPath);
+            }
+          }
+        }
+      });
+
+      // 3. Scroll spy: update address bar cleanly as user scrolls
+      if ('IntersectionObserver' in window) {
+        const sectionObserver = new IntersectionObserver(function (entries) {
+          entries.forEach(function (entry) {
+            if (entry.isIntersecting && entry.intersectionRatio >= 0.35) {
+              const id = entry.target.id;
+              for (const [route, secId] of Object.entries(SECTION_ROUTES)) {
+                if (secId === id) {
+                  if (window.location.pathname !== route) {
+                    history.replaceState(null, '', route);
+                  }
+                  break;
+                }
+              }
+            }
+          });
+        }, { threshold: [0.35] });
+
+        ['why-shaktalk', 'how-it-works', 'industries'].forEach(function (id) {
+          const el = document.getElementById(id);
+          if (el) sectionObserver.observe(el);
+        });
+
+        // Reset back to '/' when scrolling up to the hero
+        const heroEl = document.querySelector('.hero');
+        if (heroEl) {
+          const heroObserver = new IntersectionObserver(function (entries) {
+            if (entries[0] && entries[0].isIntersecting && entries[0].intersectionRatio >= 0.5) {
+              if (window.location.pathname !== '/') {
+                history.replaceState(null, '', '/');
+              }
+            }
+          }, { threshold: [0.5] });
+          heroObserver.observe(heroEl);
+        }
+      }
+    })();
+  </script>
 </body>
+
 </html>
