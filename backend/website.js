@@ -14,6 +14,7 @@
  * Fill in the company details before launch.
  */
 
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 
@@ -34,7 +35,7 @@ const SITE = {
   // app: until APP_STORE_URL is set, the button shows "Coming soon".
   PLAY_STORE_URL: process.env.PLAY_STORE_URL || `https://play.google.com/store/apps/details?id=${ANDROID_PACKAGE}`,
   APP_STORE_URL: process.env.APP_STORE_URL || '',
-  GA_MEASUREMENT_ID: process.env.GA_MEASUREMENT_ID || 'G-XXXXXXXXXX',
+  GA_MEASUREMENT_ID: process.env.GA_MEASUREMENT_ID || '',
 };
 // App links: Apple Team ID (developer.apple.com → Membership) and the SHA-256
 // fingerprint(s) of the Android signing key (Play Console → App integrity →
@@ -111,7 +112,7 @@ const HEAD = `  <meta charset="utf-8">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/site.css?v=21">
-  <!-- Google Analytics 4 (GA4) -->
+  ${SITE.GA_MEASUREMENT_ID ? `<!-- Google Analytics 4 (GA4) -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=${esc(SITE.GA_MEASUREMENT_ID)}"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -123,7 +124,7 @@ const HEAD = `  <meta charset="utf-8">
         window.gtag('event', name, params || {});
       }
     }
-  </script>`;
+  </script>` : `<script>function trackEvent(name, params) {}</script>`}`;
 
 const HEADER = `<header class="site-header">
   <div class="wrap">

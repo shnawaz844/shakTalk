@@ -1072,6 +1072,7 @@ const httpServer = http.createServer(async (req, res) => {
       const userId = await requireUser(req, url.searchParams.get('userId'));
       if (!isValidUserId(userId)) throw new AuthError('Login required.');
 
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: conversations, error } = await supabase
         .from('conversations')
         .select(`
@@ -1079,6 +1080,7 @@ const httpServer = http.createServer(async (req, res) => {
           messages(id, sender_user_id, role, original_text, translated_text, sent_at)
         `)
         .or(`host_user_id.eq.${userId},guest_user_id.eq.${userId}`)
+        .gte('started_at', thirtyDaysAgo)
         .order('started_at', { ascending: false })
         .limit(20);
 
@@ -1124,10 +1126,12 @@ const httpServer = http.createServer(async (req, res) => {
       const convId = decodeURIComponent(req.url.split('/')[2]);
       // Only people who were on this call may read it.
       await requireConversationMember(convId, await callerOrLegacy(req));
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       const { data: messages, error } = await supabase
         .from('messages')
         .select('id, conversation_id, sender_user_id, role, original_text, translated_text, sent_at')
         .eq('conversation_id', convId)
+        .gte('sent_at', thirtyDaysAgo)
         .order('sent_at', { ascending: true });
 
       if (error) throw error;
@@ -2311,6 +2315,49 @@ setInterval(() => {
     console.warn('[billing] Periodic autopay renewal notice:', err.message);
   });
 }, 30 * 60 * 1000);
+
+// ── Automated 30-day conversation retention cleanup ─────────────────────────
+// Automatically purges conversation transcripts and records older than 30 days.
+async function cleanupOldConversations() {
+  try {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    // 1. Fetch conversations older than 30 days
+    const { data: oldConvs, error: findErr } = await supabase
+      .from('conversations')
+      .select('id')
+      .lt('started_at', cutoff);
+
+    if (findErr) throw findErr;
+
+    if (oldConvs && oldConvs.length > 0) {
+      const ids = oldConvs.map(c => c.id);
+      // 2. Delete messages belonging to old conversations
+      const { error: msgErr } = await supabase
+        .from('messages')
+        .delete()
+        .in('conversation_id', ids);
+      if (msgErr) console.warn('[retention] Delete old messages warning:', msgErr.message);
+
+      // 3. Delete old conversations
+      const { error: convErr } = await supabase
+        .from('conversations')
+        .delete()
+        .in('id', ids);
+      if (convErr) console.warn('[retention] Delete old conversations warning:', convErr.message);
+      else console.log(`[retention] Auto-deleted ${ids.length} conversation log(s) older than 30 days.`);
+    }
+
+    // 4. Also clean up any lingering message logs where sent_at is older than 30 days
+    await supabase.from('messages').delete().lt('sent_at', cutoff);
+  } catch (err) {
+    console.warn('[retention] Auto-cleanup notice:', err.message);
+  }
+}
+
+// Run 10 seconds after server startup, then periodically every 24 hours
+setTimeout(() => { cleanupOldConversations(); }, 10000);
+setInterval(() => { cleanupOldConversations(); }, 24 * 60 * 60 * 1000);
 
 httpServer.listen(PORT, () => {
   console.log(`[server] HTTP + WebSocket server listening on port ${PORT}`);
